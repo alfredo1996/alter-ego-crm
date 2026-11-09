@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ns3:FatturaElettronica versione="FPR12" xmlns:ns3="http://ivaservizi.agenziaentrate.gov.it/docs/xsd/fatture/v1.2">
+  <FatturaElettronicaHeader>
+    <CedentePrestatore>
+      <DatiAnagrafici>
+        <IdFiscaleIVA><IdPaese>IT</IdPaese><IdCodice>09999999990</IdCodice></IdFiscaleIVA>
+        <Anagrafica><Denominazione>Studio Esempio S.r.l.</Denominazione></Anagrafica>
+      </DatiAnagrafici>
+    </CedentePrestatore>
+    <CessionarioCommittente>
+      <DatiAnagrafici>
+        <IdFiscaleIVA><IdPaese>IT</IdPaese><IdCodice>09999999991</IdCodice></IdFiscaleIVA>
+        <Anagrafica><Denominazione>Cliente Prova S.r.l.</Denominazione></Anagrafica>
+      </DatiAnagrafici>
+    </CessionarioCommittente>
+  </FatturaElettronicaHeader>
+  <FatturaElettronicaBody>
+    <DatiGenerali>
+      <DatiGeneraliDocumento>
+        <TipoDocumento>TD04</TipoDocumento>
+        <Divisa>EUR</Divisa>
+        <Data>2026-10-05</Data>
+        <Numero>NC-7</Numero>
+        <DatiRitenuta><TipoRitenuta>RT01</TipoRitenuta><ImportoRitenuta>40.00</ImportoRitenuta><AliquotaRitenuta>20.00</AliquotaRitenuta><CausalePagamento>A</CausalePagamento></DatiRitenuta>
+        <DatiBollo><BolloVirtuale>SI</BolloVirtuale><ImportoBollo>2.00</ImportoBollo></DatiBollo>
+        <DatiCassaPrevidenziale><TipoCassa>TC22</TipoCassa><AlCassa>4.00</AlCassa><ImportoContributoCassa>8.00</ImportoContributoCassa><ImponibileCassa>200.00</ImponibileCassa><AliquotaIVA>22.00</AliquotaIVA></DatiCassaPrevidenziale>
+        <ImportoTotaleDocumento>254.00</ImportoTotaleDocumento>
+        <Arrotondamento>0.01</Arrotondamento>
+        <Causale>Storno parziale</Causale>
+      </DatiGeneraliDocumento>
+      <DatiFattureCollegate><IdDocumento>112/2026</IdDocumento><Data>2026-09-30</Data></DatiFattureCollegate>
+      <DatiFattureCollegate><IdDocumento>113/2026</IdDocumento></DatiFattureCollegate>
+    </DatiGenerali>
+    <DatiBeniServizi>
+      <DettaglioLinee>
+        <NumeroLinea>1</NumeroLinea>
+        <Descrizione>Storno consulenza</Descrizione>
+        <PrezzoUnitario>200.00</PrezzoUnitario>
+        <PrezzoTotale>200.00</PrezzoTotale>
+        <AliquotaIVA>22.00</AliquotaIVA>
+      </DettaglioLinee>
+      <DatiRiepilogo>
+        <AliquotaIVA>22.00</AliquotaIVA>
+        <ImponibileImporto>208.00</ImponibileImporto>
+        <Imposta>45.76</Imposta>
+        <Arrotondamento>-0.01</Arrotondamento>
+        <EsigibilitaIVA>I</EsigibilitaIVA>
+      </DatiRiepilogo>
+    </DatiBeniServizi>
+    <Allegati>
+      <NomeAttachment>../nota:1.txt</NomeAttachment>
+      <FormatoAttachment>TXT</FormatoAttachment>
+      <DescrizioneAttachment>Dettaglio</DescrizioneAttachment>
+      <Attachment>aGVsbG8gYXR0YWNobWVudA==</Attachment>
+    </Allegati>
+    <Allegati>
+      <NomeAttachment>conferma.pdf</NomeAttachment>
+      <Attachment>JVBERi0xLjQK
+JSVFT0YK</Attachment>
+    </Allegati>
+  </FatturaElettronicaBody>
+</ns3:FatturaElettronica>

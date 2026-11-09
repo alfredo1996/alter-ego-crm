@@ -1,0 +1,5 @@
+{
+  "//": "Only so ESLint (run from the repo root) resolves the app's @/ alias; the real config is apps/web/tsconfig.json.",
+  "compilerOptions": { "paths": { "@/*": ["./apps/web/src/*"] } },
+  "files": []
+}

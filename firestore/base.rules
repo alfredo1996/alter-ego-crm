@@ -1,0 +1,140 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ── Helpers ────────────────────────────────────────────────────────────────
+
+    // The app is single-user (#389): one uid, an opaque id and never an email.
+    // The emulator suite opens this one function up (rules-source.ts); the
+    // production rules are tested in firestore-rules-owner.test.ts.
+    function isAllowedUser() {
+      return request.auth.uid in ['AF95t2LVcpYfm9iecrisGyaM2mC2'];
+    }
+
+    // Every rule that admits "a signed-in user" goes through here, so a stranger
+    // with an account reaches nothing.
+    function isSignedIn() {
+      return request.auth != null && isAllowedUser();
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    // Incoming document data shorthand
+    function incoming() {
+      return request.resource.data;
+    }
+
+    // String length guards
+    function isShortString(s, max) {
+      return s is string && s.size() > 0 && s.size() <= max;
+    }
+
+    function isOptionalString(s, max) {
+      return s == null || (s is string && s.size() <= max);
+    }
+
+    // A number the app could have written: not NaN (x == x is false for it), not
+    // ±Infinity, and under a trillion either way.
+    function isNum(n) {
+      return n is number && n == n && n > -1000000000000 && n < 1000000000000;
+    }
+
+    // "YYYY-MM" and "YYYY-MM-DD", a real month and day-of-month.
+    function isYearMonth(s) {
+      return s is string && s.matches('[0-9]{4}-(0[1-9]|1[0-2])');
+    }
+
+    function isIsoDate(s) {
+      return s is string && s.matches('[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])');
+    }
+
+    // Server-stamped bookkeeping fields, when present.
+    function isStamped(d) {
+      return d.get('createdAt', request.time) is timestamp
+        && d.get('updatedAt', request.time) is timestamp;
+    }
+
+    // The two halves of a closed schema (see the note above the collections).
+    // keys: every field the app writes. required: the ones that must always be there.
+    function isClosedCreate(userId, keys, required) {
+      return incoming().get('userId', null) == userId
+        && incoming().keys().hasOnly(keys)
+        && incoming().keys().hasAll(required);
+    }
+
+    function isClosedUpdate(userId, keys, required) {
+      return incoming().get('userId', null) == userId
+        && incoming().diff(resource.data).affectedKeys().hasOnly(keys)
+        && incoming().keys().hasAll(required);
+    }
+
+    // ── User data — scoped to owner ───────────────────────────────────────────
+
+    match /users/{userId} {
+
+      // Every collection below has a closed schema:
+      //   create  - the keys are only the ones the app writes (K), the required ones are
+      //             all there (R), and valid*() passes;
+      //   update  - the keys that CHANGE are in K (a legacy document with an old extra
+      //             field stays editable), R is still all there, and valid*() passes over
+      //             incoming(), which is the merged document;
+      //   always  - userId is the owner's and can't be removed.
+      // valid*() reads each field with get() and a harmless default, so one function
+      // covers both; R, not valid*(), is what makes a field required. Numbers go
+      // through isNum (finite, bounded), months and days through their regexes. List
+      // caps limit how many elements a list holds, not how big each one is; the 1 MiB
+      // document limit still applies.
+
+      // @@CRM_COLLECTIONS@@
+
+      // ── MCP-only collections (server-only, Admin SDK) ─────────────────────
+      // Written and read exclusively by the MCP tools through the Admin SDK,
+      // which bypasses rules. Spelled out so a future broad rule cannot quietly
+      // expose the audit trail to clients.
+
+      match /mcp_audit/{entryId} {
+        allow read, write: if false;
+      }
+
+      // ── API Keys (user subcollection) ─────────────────────────────────────
+
+      match /api_keys/{keyId} {
+        // Created and revoked through /api/keys (Admin SDK, one batch with the
+        // index row). A client delete would only revoke, so it stays.
+        allow read, delete: if isOwner(userId);
+      }
+    }
+
+    // ── OAuth 2.1 authorization server (server-only) ───────────────────────
+    // Registered clients, authorization codes and token hashes. Every read and
+    // write goes through the Admin SDK, which bypasses rules, so no client ever
+    // needs access. Firestore denies unmatched paths already; this is written out
+    // so a future broad rule cannot quietly expose token hashes.
+
+    match /oauth_clients/{clientId} {
+      allow read, write: if false;
+    }
+
+    match /oauth_codes/{codeHash} {
+      allow read, write: if false;
+    }
+
+    match /oauth_tokens/{tokenHash} {
+      allow read, write: if false;
+    }
+
+    // ── API Keys Index (top-level, for server-side key validation) ─────────
+    // The document id is the key's SHA-256 hash (not the raw key). A world-readable
+    // hash set lets an attacker confirm guessed keys offline, with no rate limit and
+    // no trace, so a client reads only its own rows. Server-side validation uses the
+    // Admin SDK, which bypasses rules.
+
+    match /api_keys_index/{docId} {
+      allow read: if isSignedIn() && resource.data.userId == request.auth.uid;
+      // Writes are server-only: a client-made row was a working key Settings
+      // never listed (#342).
+    }
+  }
+}

@@ -1,0 +1,94 @@
+name: E2E Tests
+
+# Feature branches are tested through their PR, not on every push: a push
+# trigger on them ran each workflow twice per commit. pull_request has no
+# branch filter, so a PR stacked on another feature branch is tested too.
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+
+# One run per PR (or branch): a new push to a PR cancels its superseded run.
+# A running main/dev run is never cancelled; GitHub keeps one queued run per
+# group, so in a burst of merges the newest queued one replaces the older.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  e2e:
+    name: Playwright E2E
+    # Pinned: on public runners ubuntu-latest is 26.04, which Playwright 1.58 cannot install browsers on.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+
+      - name: Install Node.js
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version: 24
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4.4.0
+
+      - name: Get pnpm store directory
+        id: pnpm-cache
+        run: echo "STORE_PATH=$(pnpm store path)" >> $GITHUB_OUTPUT
+
+      - name: Cache pnpm store
+        uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5.1.0
+        with:
+          path: ${{ steps.pnpm-cache.outputs.STORE_PATH }}
+          key: ${{ runner.os }}-pnpm-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: ${{ runner.os }}-pnpm-
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Generate Fumadocs source
+        run: pnpm --filter @alter-ego/web exec fumadocs-mdx
+
+      # Keyed on the Playwright version: a bumped version needs different
+      # browser builds, and a stale cache would hand back the old ones.
+      - name: Resolve Playwright version
+        id: pw
+        run: echo "VERSION=$(node -p "require('./apps/web/node_modules/@playwright/test/package.json').version")" >> $GITHUB_OUTPUT
+
+      - name: Cache Playwright browsers
+        id: pw-cache
+        uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5.1.0
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-${{ steps.pw.outputs.VERSION }}
+
+      - name: Install Playwright browsers
+        if: steps.pw-cache.outputs.cache-hit != 'true'
+        run: pnpm --filter @alter-ego/web exec playwright install --with-deps chromium
+
+      # The cache restores the browsers but not the system libraries they link
+      # against, so those are installed even on a hit.
+      - name: Install browser system dependencies
+        if: steps.pw-cache.outputs.cache-hit == 'true'
+        run: pnpm --filter @alter-ego/web exec playwright install-deps chromium
+
+      - name: Run E2E tests
+        run: pnpm --filter @alter-ego/web exec playwright test
+
+      # NEXT_PUBLIC_* is inlined at build time: a deployment without Invoicing and Solutions
+      # is a build of its own (about one extra build per run).
+      - name: Run modules E2E tests
+        run: pnpm test:e2e:modules
+
+      - name: Upload report on failure
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: playwright-report
+          path: apps/web/playwright-report/
+          retention-days: 7

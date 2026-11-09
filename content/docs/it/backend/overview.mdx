@@ -1,0 +1,55 @@
+---
+title: Panoramica Backend
+description: Il pattern adapter che alimenta il livello dati di Alter Ego CRM
+---
+
+## Pattern Adapter
+
+Alter Ego CRM usa un pattern adapter per tutte le operazioni backend. Il codice delle funzionalità non importa mai Firebase direttamente — tutto passa attraverso l'interfaccia `BackendAdapter`.
+
+```typescript
+// Importa sempre da @/lib/backend
+import { getBackend } from "@/lib/backend"
+
+const backend = getBackend()
+const clients = await backend.db.getClients(userId)
+```
+
+## Interfaccia
+
+L'adapter ha tre sotto-interfacce:
+
+```typescript
+interface BackendAdapter {
+  auth: AuthAdapter       // Accesso, disconnessione, onAuthStateChanged
+  db: DatabaseAdapter     // Il lato aziendale, gli affitti e le chiavi API
+  files: FilesAdapter     // File delle fatture (Storage)
+}
+```
+
+### DatabaseAdapter
+
+Le operazioni sono raggruppate per dominio:
+
+- **Clienti, Opportunità, Contratti** — la pipeline e i contratti, con gli addendum
+- **Attività, Riunioni, Ore, Assegnazioni, Collaboratori** — il lavoro dietro un contratto
+- **Allocazioni, Capacità** — il piano
+- **Fatture** — fatture e note di credito
+- **Costi, Finanziamenti, Conti, Movimenti, Impostazioni aziendali** — costi e prima nota
+- **Scadenze** — le scadenze
+- **Soluzioni** — il catalogo delle soluzioni
+- **Inquilini, Contratti di affitto** — il modulo Affitti (`packages/modules/rent`)
+- **Chiavi API** — creazione, elenco e revoca
+
+### Superfici solo server
+
+Il server MCP raggiunge il database tramite `getServerDb()`, che aggiunge `AuditAdapter` (la collezione `mcp_audit`, chiusa ai client dalle regole) e `CrmServerAdapter` (scritture che devono essere atomiche sul server).
+
+## Backend Disponibili
+
+| Backend | Descrizione | Caso d'uso |
+|---------|-------------|------------|
+| `mock` | Store in memoria | Sviluppo, test |
+| `firebase` | Firestore + Firebase Auth + Storage | Produzione (Google Cloud) |
+
+Si cambia con la variabile d'ambiente `NEXT_PUBLIC_BACKEND`.

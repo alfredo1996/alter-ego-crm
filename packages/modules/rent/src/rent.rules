@@ -1,0 +1,65 @@
+
+      // ── Rent (the rent module's collections) ──────────────────────────────
+      //
+      // Tenants and yearly leases. Neither is ever deleted: a lease ends with End Tenancy
+      // or is renewed, so there is no delete rule and the default denies it. Dates are
+      // "YYYY-MM-DD" strings, so an end before its start compares as strings. The caps are
+      // the constants in the module's schemas.ts; the rules tests pin the two.
+
+      match /tenants/{tenantId} {
+        function tenantKeys() {
+          return ['userId', 'firstName', 'surname', 'taxId', 'street', 'postcode', 'city', 'province', 'country', 'createdAt', 'updatedAt'];
+        }
+        function tenantRequired() {
+          return ['userId', 'firstName', 'surname', 'taxId', 'street', 'postcode', 'city', 'province', 'country'];
+        }
+        function validTenant(d) {
+          return isShortString(d.firstName, 100)
+            && isShortString(d.surname, 100)
+            && (d.taxId == null || isShortString(d.taxId, 50))
+            && (d.street == null || isShortString(d.street, 200))
+            && (d.postcode == null || isShortString(d.postcode, 20))
+            && (d.city == null || isShortString(d.city, 100))
+            && isOptionalString(d.province, 50)
+            && (d.country == null || isShortString(d.country, 100))
+            && isStamped(d);
+        }
+        allow read: if isOwner(userId);
+        allow create: if isOwner(userId)
+          && isClosedCreate(userId, tenantKeys(), tenantRequired())
+          && validTenant(incoming());
+        allow update: if isOwner(userId)
+          && isClosedUpdate(userId, tenantKeys(), tenantRequired())
+          && validTenant(incoming());
+      }
+
+      match /leases/{leaseId} {
+        function leaseKeys() {
+          return ['userId', 'tenantId', 'property', 'room', 'rent', 'contribution', 'startDate', 'endDate', 'paidBy', 'agreedMonths', 'createdAt', 'updatedAt'];
+        }
+        function leaseRequired() {
+          return ['userId', 'tenantId', 'property', 'room', 'rent', 'contribution', 'startDate', 'endDate', 'paidBy'];
+        }
+        function validLease(d) {
+          return isShortString(d.tenantId, 200)
+            && isShortString(d.property, 60)
+            && (d.room == null || isShortString(d.room, 100))
+            && isNum(d.rent) && d.rent >= 0 && d.rent <= 1000000
+            && (d.contribution == null || (isNum(d.contribution) && d.contribution >= 0 && d.contribution <= 1000000))
+            && isIsoDate(d.startDate)
+            && isIsoDate(d.endDate)
+            && d.endDate >= d.startDate
+            && isOptionalString(d.paidBy, 100)
+            // { "YYYY-MM": { amount, note } }, a month's agreed amount in place of rent + contribution. The rules cannot
+            // walk a map, so the entries are checked by zod on write (schemas.ts) and mended on read.
+            && (d.get('agreedMonths', {}) is map && d.get('agreedMonths', {}).size() <= 24)
+            && isStamped(d);
+        }
+        allow read: if isOwner(userId);
+        allow create: if isOwner(userId)
+          && isClosedCreate(userId, leaseKeys(), leaseRequired())
+          && validLease(incoming());
+        allow update: if isOwner(userId)
+          && isClosedUpdate(userId, leaseKeys(), leaseRequired())
+          && validLease(incoming());
+      }

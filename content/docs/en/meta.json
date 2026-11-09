@@ -1,0 +1,15 @@
+{
+  "title": "Alter Ego",
+  "pages": [
+    "index",
+    "architecture",
+    "---User Guide---",
+    "...guide",
+    "---Backend---",
+    "...backend",
+    "---Deployment---",
+    "...deployment",
+    "---Contributing---",
+    "...contributing"
+  ]
+}

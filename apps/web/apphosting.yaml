@@ -1,0 +1,44 @@
+# Firebase App Hosting configuration
+# Docs: https://firebase.google.com/docs/app-hosting/configure
+# The values below are placeholders: replace demo-alter-ego and your-domain.example with your own project and origin.
+
+runConfig:
+  minInstances: 0
+  maxInstances: 10
+  cpu: 1
+  memoryMiB: 512
+  concurrency: 80
+
+env:
+  # ─── Backend selector ──────────────────────────────────────────────────────
+  - variable: NEXT_PUBLIC_BACKEND
+    value: firebase
+
+  # ─── Modules ───────────────────────────────────────────────────────────────
+  # Modules this deployment leaves out, comma-separated (crm, invoicing, books,
+  # solutions, rent). Inlined at build time, so each backend builds its own bundle:
+  # this is not a runtime toggle. Empty: every module is on.
+  - variable: NEXT_PUBLIC_DISABLED_MODULES
+    value: ""
+
+  # ─── Firebase config (non-sensitive) ───────────────────────────────────────
+  # The canonical public origin of this backend. RFC 9728 requires the PRM
+  # `resource` to match the connector URL byte for byte, and it is also the OAuth
+  # issuer, so it is pinned here rather than inferred from forwarded headers.
+  - variable: MCP_PUBLIC_ORIGIN
+    value: https://your-domain.example
+
+  - variable: NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN
+    value: demo-alter-ego.firebaseapp.com
+  - variable: NEXT_PUBLIC_FIREBASE_PROJECT_ID
+    value: demo-alter-ego
+  - variable: NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET
+    value: demo-alter-ego.firebasestorage.app
+
+  # ─── Firebase config (sensitive — stored in Secret Manager) ────────────────
+  - variable: NEXT_PUBLIC_FIREBASE_API_KEY
+    secret: FIREBASE_API_KEY
+  - variable: NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID
+    secret: FIREBASE_MESSAGING_SENDER_ID
+  - variable: NEXT_PUBLIC_FIREBASE_APP_ID
+    secret: FIREBASE_APP_ID

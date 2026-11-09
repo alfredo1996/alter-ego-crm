@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<FatturaElettronica versione="FPR12">
+  <FatturaElettronicaHeader>
+    <CedentePrestatore>
+      <DatiAnagrafici>
+        <IdFiscaleIVA><IdPaese>IT</IdPaese><IdCodice>09999999994</IdCodice></IdFiscaleIVA>
+        <Anagrafica><Denominazione>&lt;img src=x onerror=alert(1)&gt; Evil S.r.l.</Denominazione></Anagrafica>
+      </DatiAnagrafici>
+    </CedentePrestatore>
+    <CessionarioCommittente>
+      <DatiAnagrafici>
+        <Anagrafica><Denominazione>Cliente Prova S.r.l.</Denominazione></Anagrafica>
+      </DatiAnagrafici>
+    </CessionarioCommittente>
+  </FatturaElettronicaHeader>
+  <FatturaElettronicaBody>
+    <DatiGenerali>
+      <DatiGeneraliDocumento>
+        <TipoDocumento>TD01</TipoDocumento>
+        <Divisa>EUR</Divisa>
+        <Data>2026-09-01</Data>
+        <Numero>1</Numero>
+        <ImportoTotaleDocumento>10.00</ImportoTotaleDocumento>
+      </DatiGeneraliDocumento>
+    </DatiGenerali>
+    <DatiBeniServizi>
+      <DettaglioLinee>
+        <NumeroLinea>1</NumeroLinea>
+        <Descrizione>&lt;script&gt;window.__pwned = true&lt;/script&gt;&lt;b&gt;bold&lt;/b&gt;</Descrizione>
+        <PrezzoUnitario>10.00</PrezzoUnitario>
+        <PrezzoTotale>10.00</PrezzoTotale>
+        <AliquotaIVA>0.00</AliquotaIVA>
+      </DettaglioLinee>
+    </DatiBeniServizi>
+  </FatturaElettronicaBody>
+</FatturaElettronica>

@@ -1,0 +1,37 @@
+---
+title: Firebase Setup
+description: Set up Firebase for production
+---
+
+## Create a Firebase Project
+
+1. Go to the [Firebase Console](https://console.firebase.google.com)
+2. Enable **Firestore Database** in production mode
+3. Enable **Authentication** with the Email/Password provider
+4. Enable **Storage** (invoice files)
+
+## Security Rules
+
+Build and deploy the rules, which `pnpm rules:build` assembles from `firestore/base.rules`, `firestore/crm.rules` and the modules' rules:
+
+```bash
+pnpm rules:build
+firebase deploy --only firestore:rules,firestore:indexes,storage --project YOUR_PROJECT_ID
+```
+
+Sign-up is closed: put your user's uid in `firestore/base.rules`, `storage.rules` and `apps/web/src/lib/owner-uid.ts`.
+
+## Environment Variables
+
+Set the `NEXT_PUBLIC_FIREBASE_*` variables (see the Getting Started page) and `NEXT_PUBLIC_BACKEND=firebase`.
+
+## Local Emulator
+
+For local development with Firebase emulators:
+
+```bash
+pnpm emulator:start
+pnpm dev:emulator
+```
+
+See `docs/DEPLOYMENT.md` in the repository for the full App Hosting steps.

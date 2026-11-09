@@ -1,0 +1,7 @@
+@import "tailwindcss";
+@import "fumadocs-ui/css/neutral.css";
+@import "fumadocs-ui/css/preset.css";
+
+/* fumadocs scans its own components plus this app's, both outside the CSS file. */
+@source "../node_modules/fumadocs-ui/dist/**/*.js";
+@source "./**/*.{ts,tsx}";

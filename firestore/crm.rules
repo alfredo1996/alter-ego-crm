@@ -1,0 +1,698 @@
+      // The company side's collections follow the closed-schema scheme described above
+      // the accounting ones in base.rules: isClosedCreate / isClosedUpdate for the keys,
+      // one valid*() over incoming() for the values. The caps are the constants in
+      // schemas.ts; the rules tests pin the two.
+
+      // The invoice file a cost or an invoice keeps: a pointer to its object in Storage
+      // (storage.rules guards the object). The path must be this user's own, one level
+      // under company-files; the 10 MB cap is the one storage.rules and schemas.ts hold.
+      function isInvoiceFile(f) {
+        return f is map
+          && f.keys().hasOnly(['path', 'name', 'kind', 'size', 'uploadedAt'])
+          && f.keys().hasAll(['path', 'name', 'kind', 'size', 'uploadedAt'])
+          && f.path is string && f.path.matches('users/' + userId + '/company-files/[^/]+')
+          && isShortString(f.name, 255)
+          && f.kind in ['xml', 'p7m', 'pdf']
+          && f.size is int && f.size >= 0 && f.size <= 10485760
+          && f.uploadedAt is timestamp;
+      }
+
+      // ── CRM Clients ───────────────────────────────────────────────────────
+
+      match /clients/{clientId} {
+        function clientKeys() {
+          return ['userId', 'name', 'vatNumber', 'email', 'contactName', 'contactPhone', 'notes', 'isActive',
+                  'createdAt', 'updatedAt'];
+        }
+        function validClientDoc(d) {
+          return isShortString(d.get('name', 'x'), 200)
+            && isOptionalString(d.get('vatNumber', null), 20)
+            && isOptionalString(d.get('email', null), 200)
+            && isOptionalString(d.get('contactName', null), 200)
+            && isOptionalString(d.get('contactPhone', null), 40)
+            && isOptionalString(d.get('notes', null), 1000)
+            && d.get('isActive', true) is bool
+            && isStamped(d);
+        }
+        allow read, delete: if isOwner(userId);
+        allow create: if isOwner(userId)
+          && isClosedCreate(userId, clientKeys(), ['userId', 'name', 'isActive'])
+          && validClientDoc(incoming());
+        allow update: if isOwner(userId)
+          && isClosedUpdate(userId, clientKeys(), ['userId', 'name', 'isActive'])
+          && validClientDoc(incoming());
+      }
+
+      // ── CRM Opportunities (the pipeline) ──────────────────────────────────
+
+      match /opportunities/{opportunityId} {
+        function opportunityKeys() {
+          return ['userId', 'clientId', 'title', 'stage', 'probability', 'dailyRate', 'estimatedDaysPerMonth', 'unit',
+                  'estimatedDurationMonths', 'expectedStartMonth', 'vatApplicable', 'nextActionDate', 'nextActionNote',
+                  'notes', 'lostReason', 'closedAt', 'engagementId', 'createdAt', 'updatedAt'];
+        }
+        function opportunityRequired() {
+          return ['userId', 'clientId', 'title', 'stage', 'probability', 'dailyRate', 'estimatedDaysPerMonth',
+                  'estimatedDurationMonths', 'vatApplicable'];
+        }
+        function validOpportunityDoc(d) {
+          return isShortString(d.get('clientId', 'x'), 200)
+            && isShortString(d.get('title', 'x'), 200)
+            && d.get('stage', 'lead') in ['lead', 'proposal', 'negotiation', 'won', 'lost']
+            && isNum(d.get('probability', 0))
+            && d.get('probability', 0) >= 0
+            && d.get('probability', 0) <= 100
+            && isNum(d.get('dailyRate', 1))
+            && d.get('dailyRate', 1) > 0
+            && isNum(d.get('estimatedDaysPerMonth', 0))
+            && d.get('estimatedDaysPerMonth', 0) >= 0
+            && d.get('estimatedDaysPerMonth', 0) <= 31
+            && d.get('unit', 'day') in ['day', 'hour']
+            && isNum(d.get('estimatedDurationMonths', 1))
+            && d.get('estimatedDurationMonths', 1) > 0
+            && (d.get('expectedStartMonth', null) == null || isYearMonth(d.expectedStartMonth))
+            && d.get('vatApplicable', true) is bool
+            && (d.get('nextActionDate', null) == null || d.nextActionDate is timestamp)
+            && isOptionalString(d.get('nextActionNote', null), 1000)
+            && isOptionalString(d.get('notes', null), 5000)
+            && isOptionalString(d.get('lostReason', null), 500)
+            && (d.get('closedAt', null) == null || d.closedAt is timestamp)
+            && (d.get('engagementId', null) == null || isShortString(d.engagementId, 200))
+            && isStamped(d);
+        }
+        allow read, delete: if isOwner(userId);
+        allow create: if isOwner(userId)
+          && isClosedCreate(userId, opportunityKeys(), opportunityRequired())
+          && validOpportunityDoc(incoming());
+        allow update: if isOwner(userId)
+          && isClosedUpdate(userId, opportunityKeys(), opportunityRequired())
+          && validOpportunityDoc(incoming());
+      }
+
+      // ── Engagements (signed contracts) ────────────────────────────────────
+      //
+      // amendments is checked for shape and size only, like tasks.labels: incoming()
+      // is the merged document on update, so an element rule tightened later would
+      // lock contracts holding older entries. zod checks each entry on write and read.
+
+      match /engagements/{engagementId} {
+        function engagementKeys() {
+          return ['userId', 'clientId', 'name', 'opportunityId', 'dailyRate', 'unit', 'vatApplicable', 'contractedDays',
+                  'defaultDaysPerMonth', 'startMonth', 'endMonth', 'endDate', 'isActive', 'notes', 'amendments',
+                  'createdAt', 'updatedAt'];
+        }
+        function engagementRequired() {
+          return ['userId', 'clientId', 'dailyRate', 'vatApplicable', 'defaultDaysPerMonth', 'isActive'];
+        }
+        function validEngagementDoc(d) {
+          return isShortString(d.get('clientId', 'x'), 200)
+            && isOptionalString(d.get('name', null), 120)
+            && (d.get('opportunityId', null) == null || isShortString(d.opportunityId, 200))
+            && isNum(d.get('dailyRate', 1))
+            && d.get('dailyRate', 1) > 0
+            && d.get('unit', 'day') in ['day', 'hour']
+            && d.get('vatApplicable', true) is bool
+            && (d.get('contractedDays', null) == null || (isNum(d.contractedDays) && d.contractedDays > 0))
+            && isNum(d.get('defaultDaysPerMonth', 0))
+            && d.get('defaultDaysPerMonth', 0) >= 0
+            && d.get('defaultDaysPerMonth', 0) <= 31
+            && (d.get('startMonth', null) == null || isYearMonth(d.startMonth))
+            && (d.get('endMonth', null) == null || isYearMonth(d.endMonth))
+            && (d.get('endDate', null) == null || isIsoDate(d.endDate))
+            && d.get('isActive', true) is bool
+            && isOptionalString(d.get('notes', null), 5000)
+            && d.get('amendments', []) is list
+            && d.get('amendments', []).size() <= 24
+            && isStamped(d);
+        }
+        allow read, delete: if isOwner(userId);
+        allow create: if isOwner(userId)
+          && isClosedCreate(userId, engagementKeys(), engagementRequired())
+          && validEngagementDoc(incoming());
+        allow update: if isOwner(userId)
+          && isClosedUpdate(userId, engagementKeys(), engagementRequired())
+          && validEngagementDoc(incoming());
+      }
+
+      // ── Tasks (a client's to-dos, optionally on one of its contracts) ─────
+      //
+      // clientId is guarded rather than required so the app bundle from before
+      // #164, which writes engagementId alone, keeps creating tasks while rules and
+      // app deploy separately. Either way a task must name a client or a contract,
+      // on update too: incoming() is the whole merged document there.
+
+      match /tasks/{taskId} {
+        function taskKeys() {
+          return ['userId', 'clientId', 'engagementId', 'title', 'dueDate', 'notes', 'isDone', 'startedAt', 'labels',
+                  'createdAt', 'updatedAt'];
+        }
+        function validTaskDoc(d) {
+          return (!('clientId' in d) || isShortString(d.clientId, 200))
+            && (d.get('engagementId', null) == null || isShortString(d.engagementId, 200))
+            && ('clientId' in d || d.get('engagementId', null) != null)
+            && isShortString(d.get('title', 'x'), 200)
+            && (d.get('dueDate', null) == null || d.dueDate is timestamp)
+            && isOptionalString(d.get('notes', null), 1000)
+            && (d.get('startedAt', null) == null || d.startedAt is timestamp)
+            && d.get('labels', []) is list
+            && d.get('labels', []).size() <= 10
+            && d.get('isDone', false) is bool
+            && isStamped(d);
+        }
+        allow read, delete: if isOwner(userId);
+        allow create: if isOwner(userId)
+          && isClosedCreate(userId, taskKeys(), ['userId', 'title', 'isDone'])
+          && validTaskDoc(incoming());
+        allow update: if isOwner(userId)
+          && isClosedUpdate(userId, taskKeys(), ['userId', 'title', 'isDone'])
+          && validTaskDoc(incoming());
+      }
+
+      // ── Timecards (hours per contract per day) ────────────────────────────
+      //
+      // Written as a merge-set, so incoming() is the whole merged document and one
+      // function covers create and update. The id check keeps (contract, day) unique:
+      // saving the same day twice can only overwrite, never add a second document.
+      // collaboratorId is whose hours: null or absent = the owner's, whose id stays
+      // contract_day; a collaborator's adds _<id>, so two people never share a document.
+
+      match /timecards/{timecardId} {
+        function timecardKeys() {
+          return ['userId', 'engagementId', 'collaboratorId', 'date', 'hours', 'notes', 'createdAt', 'updatedAt'];
+        }
+        function validTimecardDoc(d) {
+          return isShortString(d.engagementId, 200)
+            && isIsoDate(d.date)
+            && (d.get('collaboratorId', null) == null
+              ? timecardId == d.engagementId + '_' + d.date
+              : isShortString(d.collaboratorId, 200)
+                && timecardId == d.engagementId + '_' + d.date + '_' + d.collaboratorId)
+            && isNum(d.hours)
+            && d.hours > 0
+            && d.hours <= 24
+            && isOptionalString(d.get('notes', null), 1000)
+            && isStamped(d);
+        }
+        allow read, delete: if isOwner(userId);
+        allow create: if isOwner(userId)
+          && isClosedCreate(userId, timecardKeys(), ['userId', 'engagementId', 'date', 'hours'])
+          && validTimecardDoc(incoming());
+        allow update: if isOwner(userId)
+          && isClosedUpdate(userId, timecardKeys(), ['userId', 'engagementId', 'date', 'hours'])
+          && validTimecardDoc(incoming());
+      }
+
+      // ── Meetings (verbali: calls and status updates on a client or one of its contracts) ──
+      //
+      // A new collection whose every writer writes every field, so incoming() —
+      // the merged document on update — always has them all: one clause covers
+      // both. A missing field is a rules error, so the write is denied. The text
+      // cap is MEETING_TEXT_MAX in schemas.ts; a rules test pins the two.
+
+      match /meetings/{meetingId} {
+        function meetingKeys() {
+          return ['userId', 'clientId', 'engagementId', 'date', 'time', 'health', 'text', 'createdAt', 'updatedAt'];
+        }
+        function meetingRequired() {
+          return ['userId', 'clientId', 'engagementId', 'date', 'time', 'health', 'text'];
+        }
+        function validMeetingDoc(d) {
+          return isShortString(d.clientId, 200)
+            && (d.engagementId == null || isShortString(d.engagementId, 200))
+            && isIsoDate(d.date)
+            && (d.time == null || (d.time is string && d.time.matches('([01][0-9]|2[0-3]):[0-5][0-9]')))
+            && (d.health == null || d.health in ['green', 'yellow', 'red'])
+            && isShortString(d.text, 5000)
+            && isStamped(d);
+        }
+        allow read, delete: if isOwner(userId);
+        allow create: if isOwner(userId)
+          && isClosedCreate(userId, meetingKeys(), meetingRequired())
+          && validMeetingDoc(incoming());
+        allow update: if isOwner(userId)
+          && isClosedUpdate(userId, meetingKeys(), meetingRequired())
+          && validMeetingDoc(incoming());
+      }
+
+      // ── Collaborators (freelancers and companies paid on invoice) ─────────
+      //
+      // Every writer writes every field, so one function covers create and
+      // update. fee is null or a map: amount > 0 and <= MAX_FEE, from and until
+      // "YYYY-MM" (until may be null, not before from), and changes a list of at
+      // most MAX_FEE_CHANGES. The elements of changes are checked by zod on write
+      // and mended on read by normalizeCollaboratorFee, like engagements.amendments. The caps are the
+      // constants in schemas.ts; the rules tests pin the two.
+
+      match /collaborators/{collaboratorId} {
+        function isFeeAmount(a) {
+          return isNum(a) && a > 0 && a <= 1000000;
+        }
+        function validFee(f) {
+          return f is map
+            && f.keys().hasOnly(['amount', 'from', 'until', 'changes'])
+            && isFeeAmount(f.get('amount', null))
+            && isYearMonth(f.get('from', null))
+            && (f.get('until', null) == null || (isYearMonth(f.get('until', null)) && f.until >= f.from))
+            && f.get('changes', null) is list && f.changes.size() <= 24;
+        }
+        function collaboratorKeys() {
+          return ['userId', 'name', 'type', 'notes', 'isActive', 'fee', 'createdAt', 'updatedAt'];
+        }
+        function collaboratorRequired() {
+          return ['userId', 'name', 'type', 'notes', 'isActive', 'fee'];
+        }
+        function validCollaborator(d) {
+          return isShortString(d.name, 200)
+            && d.type in ['freelancer', 'company']
+            && isOptionalString(d.notes, 2000)
+            && d.isActive is bool
+            && (d.fee == null || validFee(d.fee))
+            && isStamped(d);
+        }
+        allow read, delete: if isOwner(userId);
+        allow create: if isOwner(userId)
+          && isClosedCreate(userId, collaboratorKeys(), collaboratorRequired())
+          && validCollaborator(incoming());
+        allow update: if isOwner(userId)
+          && isClosedUpdate(userId, collaboratorKeys(), collaboratorRequired())
+          && validCollaborator(incoming());
+      }
+
+      // ── Assignments (a collaborator's days on a contract) ─────────────────
+      //
+      // Every writer writes every field, so one function covers create and update.
+      // dailyRate > 0 and <= 1000000, from and until "YYYY-MM" (until may be null, not
+      // before from), defaultDays 0..31, monthDays a map of at most 120 months. The
+      // elements of monthDays are checked by zod on write and mended on read by
+      // normalizeMonthDays, like fee.changes. The caps are the constants in
+      // schemas.ts; the rules tests pin the two.
+      //
+      // The document id is the pair, collaboratorId_engagementId: a second assignment
+      // for the pair can only overwrite the first.
+
+      match /collaborator_assignments/{assignmentId} {
+        function assignmentKeys() {
+          return ['userId', 'collaboratorId', 'engagementId', 'dailyRate', 'from', 'until', 'defaultDays', 'monthDays',
+                  'createdAt', 'updatedAt'];
+        }
+        function assignmentRequired() {
+          return ['userId', 'collaboratorId', 'engagementId', 'dailyRate', 'from', 'until', 'defaultDays', 'monthDays'];
+        }
+        function validAssignment(d) {
+          return isShortString(d.collaboratorId, 200)
+            && isShortString(d.engagementId, 200)
+            && assignmentId == d.collaboratorId + '_' + d.engagementId
+            && isNum(d.dailyRate) && d.dailyRate > 0 && d.dailyRate <= 1000000
+            && isYearMonth(d.from)
+            && (d.until == null || (isYearMonth(d.until) && d.until >= d.from))
+            && isNum(d.defaultDays) && d.defaultDays >= 0 && d.defaultDays <= 31
+            && d.monthDays is map && d.monthDays.size() <= 120
+            && isStamped(d);
+        }
+        allow read, delete: if isOwner(userId);
+        allow create: if isOwner(userId)
+          && isClosedCreate(userId, assignmentKeys(), assignmentRequired())
+          && validAssignment(incoming());
+        // Who and which contract never change: the document id is the pair.
+        allow update: if isOwner(userId)
+          && isClosedUpdate(userId, assignmentKeys(), assignmentRequired())
+          && validAssignment(incoming())
+          && incoming().collaboratorId == resource.data.collaboratorId
+          && incoming().engagementId == resource.data.engagementId;
+      }
+
+      // ── Solutions (what was built for a client, kept for pre-sales) ───────
+      //
+      // Shaped like meetings: a new collection whose every writer writes every
+      // field, so one function covers create and update (incoming() is the merged
+      // document) and a missing field is a rules error, so the write is denied.
+      // stack, entities and relations are checked for type and size only, like
+      // engagements.amendments: zod checks each element on write and drops a
+      // malformed one on read. sections may hold only the nine keys of
+      // SOLUTION_SECTIONS, each text or null. The caps are the constants in
+      // schemas.ts; the rules tests pin the two.
+
+      match /solutions/{solutionId} {
+        function validSections(s) {
+          return s is map
+            && s.keys().hasOnly(['purpose', 'requirements', 'kpis', 'sources', 'model', 'architecture', 'steps', 'history', 'results'])
+            && isOptionalString(s.get('purpose', null), 20000)
+            && isOptionalString(s.get('requirements', null), 20000)
+            && isOptionalString(s.get('kpis', null), 20000)
+            && isOptionalString(s.get('sources', null), 20000)
+            && isOptionalString(s.get('model', null), 20000)
+            && isOptionalString(s.get('architecture', null), 20000)
+            && isOptionalString(s.get('steps', null), 20000)
+            && isOptionalString(s.get('history', null), 20000)
+            && isOptionalString(s.get('results', null), 20000);
+        }
+        function solutionKeys() {
+          return ['userId', 'clientId', 'engagementId', 'name', 'status', 'domain', 'stack', 'sections', 'entities',
+                  'relations', 'createdAt', 'updatedAt'];
+        }
+        function solutionRequired() {
+          return ['userId', 'clientId', 'engagementId', 'name', 'status', 'domain', 'stack', 'sections', 'entities',
+                  'relations'];
+        }
+        function validSolution(d) {
+          return isShortString(d.clientId, 200)
+            && (d.engagementId == null || isShortString(d.engagementId, 200))
+            && isShortString(d.name, 200)
+            && d.status in ['proposed', 'building', 'delivered', 'retired']
+            && (d.domain == null || isShortString(d.domain, 60))
+            && d.stack is list && d.stack.size() <= 30
+            && validSections(d.sections)
+            && d.entities is list && d.entities.size() <= 100
+            && d.relations is list && d.relations.size() <= 300
+            && isStamped(d);
+        }
+        allow read, delete: if isOwner(userId);
+        allow create: if isOwner(userId)
+          && isClosedCreate(userId, solutionKeys(), solutionRequired())
+          && validSolution(incoming());
+        allow update: if isOwner(userId)
+          && isClosedUpdate(userId, solutionKeys(), solutionRequired())
+          && validSolution(incoming());
+      }
+
+      // ── Invoices (a customer's record of issued paper) ────────────────────
+      //
+      // amount and vat are deliberately unconstrained in sign: a nota di credito
+      // is a negative invoice. Do not "fix" this into a > 0 check.
+      //
+      // An invoice names its client. clientId is guarded rather than required, as
+      // on tasks, because the app bundle from before it writes engagementId alone
+      // and rules and app deploy separately: either way one of the two is set. On
+      // update incoming() is the whole merged document, so the contract-delete
+      // re-point {engagementId: null, clientId} passes and a bare engagementId: null
+      // does not. fromMonth (the first month of an invoice covering several) is
+      // checked for shape only: its order and 12-month cap are the app's, the same
+      // way endMonth is not compared with startMonth here.
+      //
+      // paidAccountId (the company account the payment landed on) is guarded, never
+      // tied to paidDate: Invoices and Deadlines untick with {paidDate: null} alone.
+
+      match /invoices/{invoiceId} {
+        function invoiceKeys() {
+          return ['userId', 'clientId', 'engagementId', 'number', 'fromMonth', 'yearMonth', 'amount', 'vat', 'dueDate',
+                  'paidDate', 'paidAccountId', 'file', 'createdAt', 'updatedAt'];
+        }
+        function invoiceRequired() {
+          return ['userId', 'number', 'yearMonth', 'amount', 'vat'];
+        }
+        function validInvoiceDoc(d) {
+          return (!('clientId' in d) || isShortString(d.clientId, 200))
+            && (d.get('engagementId', null) == null || isShortString(d.engagementId, 200))
+            && ('clientId' in d || d.get('engagementId', null) != null)
+            && (d.get('fromMonth', null) == null || isYearMonth(d.fromMonth))
+            && isShortString(d.get('number', 'x'), 50)
+            && isYearMonth(d.get('yearMonth', '2000-01'))
+            && isNum(d.get('amount', 0))
+            && isNum(d.get('vat', 0))
+            && (d.get('dueDate', null) == null || d.dueDate is timestamp)
+            && (d.get('paidDate', null) == null || d.paidDate is timestamp)
+            && (d.get('paidAccountId', null) == null || isShortString(d.paidAccountId, 200))
+            && (d.get('file', null) == null || isInvoiceFile(d.file))
+            && isStamped(d);
+        }
+        allow read, delete: if isOwner(userId);
+        allow create: if isOwner(userId)
+          && isClosedCreate(userId, invoiceKeys(), invoiceRequired())
+          && validInvoiceDoc(incoming());
+        allow update: if isOwner(userId)
+          && isClosedUpdate(userId, invoiceKeys(), invoiceRequired())
+          && validInvoiceDoc(incoming());
+      }
+
+      // ── Timesheet Settings and Tax Regime Settings ────────────────────────
+      //
+      // No code reads or writes either since the app stopped estimating taxes (the
+      // accountant's job). The blocks stay so a stored document is still its owner's
+      // to read or delete; nothing can create or change one.
+
+      match /timesheet_settings/{docId} {
+        allow read, delete: if isOwner(userId);
+      }
+
+      match /tax_regime_settings/{docId} {
+        allow read, delete: if isOwner(userId);
+      }
+
+      // ── Company Expenses ─────────────────────────────────────────────────
+      //
+      // One function per collection for create and update: incoming() is the
+      // merged document on update. Fields added with the cash book are read with
+      // get(), so a cost or loan written before them still passes on edit; the
+      // same checks are the zod schemas in schemas.ts, which the mock parses.
+
+      match /company_expenses/{expenseId} {
+        function expenseKeys() {
+          return ['userId', 'description', 'category', 'amount', 'date', 'isRecurring', 'recurrenceMonths', 'notes',
+                  'accountId', 'paidByOwner', 'vat', 'documentRef', 'project', 'recurringExpenseId', 'dateEstimated',
+                  'importRef', 'collaboratorId', 'engagementId', 'forMonth', 'leaseId', 'endMonth', 'priceChanges', 'countedWhenPaid', 'file',
+                  'createdAt', 'updatedAt'];
+        }
+        function validExpense(d) {
+          return isShortString(d.description, 300)
+            && d.category in ['rent', 'software', 'accountant', 'insurance', 'office_supplies', 'travel', 'marketing', 'legal', 'bank_fees', 'collaborators', 'other']
+            && isNum(d.amount)
+            && d.amount != 0
+            // Negative only on a refund: a one-off paid back into an account.
+            && (d.amount > 0 || (!d.get('isRecurring', false) && d.get('accountId', null) is string))
+            && d.date is timestamp
+            && d.get('isRecurring', false) is bool
+            && (d.get('recurrenceMonths', null) == null || isNum(d.recurrenceMonths))
+            && isOptionalString(d.get('notes', null), 500)
+            && (d.get('accountId', null) == null || isShortString(d.accountId, 200))
+            && d.get('paidByOwner', false) is bool
+            && (d.get('vat', null) == null
+                  || (isNum(d.vat) && (d.vat == 0 || (d.vat > 0) == (d.amount > 0))))
+            && isOptionalString(d.get('documentRef', null), 100)
+            && isOptionalString(d.get('project', null), 60)
+            && (d.get('recurringExpenseId', null) == null || isShortString(d.recurringExpenseId, 200))
+            && d.get('dateEstimated', false) is bool
+            && isOptionalString(d.get('importRef', null), 40)
+            && (d.get('collaboratorId', null) == null || isShortString(d.collaboratorId, 200))
+            && (d.get('engagementId', null) == null || isShortString(d.engagementId, 200))
+            && (d.get('forMonth', null) == null || isYearMonth(d.forMonth))
+            // A rent offset: the lease it is netted against.
+            && (d.get('leaseId', null) == null || isShortString(d.leaseId, 200))
+            // A recurring estimate's last month, dated price changes and timing. The elements of
+            // priceChanges are checked by zod on write and mended on read (normalizePriceChanges), like fee.changes.
+            && (d.get('endMonth', null) == null || isYearMonth(d.endMonth))
+            && (d.get('priceChanges', []) is list && d.get('priceChanges', []).size() <= 24)
+            && d.get('countedWhenPaid', false) is bool
+            && (d.get('file', null) == null || isInvoiceFile(d.file))
+            // A recurring estimate is never paid: each payment is a one-off.
+            && !(d.get('isRecurring', false)
+                  && (d.get('accountId', null) != null || d.get('paidByOwner', false) || d.get('recurringExpenseId', null) != null))
+            && !(d.get('accountId', null) != null && d.get('paidByOwner', false))
+            && isStamped(d);
+        }
+        allow read, delete: if isOwner(userId);
+        allow create: if isOwner(userId)
+          && isClosedCreate(userId, expenseKeys(), ['userId', 'description', 'category', 'amount', 'date'])
+          && validExpense(incoming());
+        allow update: if isOwner(userId)
+          && isClosedUpdate(userId, expenseKeys(), ['userId', 'description', 'category', 'amount', 'date'])
+          && validExpense(incoming());
+      }
+
+      // ── Company Loans (finanziamento soci) ─────────────────────────────
+
+      match /company_loans/{loanId} {
+        function loanKeys() {
+          return ['userId', 'description', 'direction', 'amount', 'date', 'notes', 'accountId', 'dateEstimated',
+                  'importRef', 'createdAt', 'updatedAt'];
+        }
+        function validLoan(d) {
+          return isShortString(d.description, 300)
+            && d.direction in ['to_company', 'from_company']
+            && isNum(d.amount)
+            && d.amount > 0
+            && d.date is timestamp
+            && isOptionalString(d.get('notes', null), 500)
+            && (d.get('accountId', null) == null || isShortString(d.accountId, 200))
+            && d.get('dateEstimated', false) is bool
+            && isOptionalString(d.get('importRef', null), 40)
+            && isStamped(d);
+        }
+        allow read, delete: if isOwner(userId);
+        allow create: if isOwner(userId)
+          && isClosedCreate(userId, loanKeys(), ['userId', 'description', 'direction', 'amount', 'date'])
+          && validLoan(incoming());
+        allow update: if isOwner(userId)
+          && isClosedUpdate(userId, loanKeys(), ['userId', 'description', 'direction', 'amount', 'date'])
+          && validLoan(incoming());
+      }
+
+      // ── Company Accounts and Movements (the cash book) ────────────────────
+      //
+      // New collections: every optional field is read with get(), so a document
+      // lacking it passes. incoming() is the merged document on update, so one
+      // function covers create and update, cross-field checks included. The same
+      // checks are the zod schemas in schemas.ts; the mock parses those.
+
+      match /company_accounts/{accountId} {
+        function companyAccountKeys() {
+          return ['userId', 'name', 'openingBalance', 'openingDate', 'statementBalance', 'statementDate', 'importRef',
+                  'createdAt', 'updatedAt'];
+        }
+        function validAccount(d) {
+          return isShortString(d.name, 100)
+            && isNum(d.openingBalance)
+            && d.openingDate is timestamp
+            && (d.get('statementBalance', null) == null) == (d.get('statementDate', null) == null)
+            && (d.get('statementBalance', null) == null || isNum(d.statementBalance))
+            && (d.get('statementDate', null) == null || d.statementDate is timestamp)
+            && isOptionalString(d.get('importRef', null), 40)
+            && isStamped(d);
+        }
+        allow read, delete: if isOwner(userId);
+        allow create: if isOwner(userId)
+          && isClosedCreate(userId, companyAccountKeys(), ['userId', 'name', 'openingBalance', 'openingDate'])
+          && validAccount(incoming());
+        allow update: if isOwner(userId)
+          && isClosedUpdate(userId, companyAccountKeys(), ['userId', 'name', 'openingBalance', 'openingDate'])
+          && validAccount(incoming());
+      }
+
+      // The company's own settings: one document, 'main'. cashFloor is the amount the
+      // Plan's Runway marks the first month under; null = none. Same check as
+      // cashFloorSchema in schemas.ts.
+      match /company_settings/{settingsId} {
+        function validSettings(d) {
+          return settingsId == 'main'
+            && (d.cashFloor == null || (isNum(d.cashFloor) && d.cashFloor >= 0))
+            && isStamped(d);
+        }
+        allow read, delete: if isOwner(userId);
+        allow create: if isOwner(userId)
+          && isClosedCreate(userId, ['userId', 'cashFloor', 'updatedAt'], ['userId', 'cashFloor'])
+          && validSettings(incoming());
+        allow update: if isOwner(userId)
+          && isClosedUpdate(userId, ['userId', 'cashFloor', 'updatedAt'], ['userId', 'cashFloor'])
+          && validSettings(incoming());
+      }
+
+      // Time off: one document a month, the id is the month. The Plan writes it from the app; the
+      // connector writes the same documents through the Admin SDK, which skips the rules. Same check as
+      // capacityDocSchema in schemas.ts. The app caps daysOff at the month's weekdays; the rules can only say 31.
+      match /capacity/{capacityId} {
+        function capacityKeys() {
+          return ['userId', 'yearMonth', 'daysOff', 'availableDays', 'reason', 'note', 'updatedAt'];
+        }
+        function capacityRequired() {
+          return ['userId', 'yearMonth', 'daysOff', 'availableDays'];
+        }
+        function validCapacity(d) {
+          return d.yearMonth == capacityId
+            && isYearMonth(d.yearMonth)
+            && isNum(d.daysOff) && d.daysOff >= 0 && d.daysOff <= 31
+            && isNum(d.availableDays) && d.availableDays >= 0 && d.availableDays <= 31
+            && (!('reason' in d) || d.reason in ['vacation', 'training', 'admin', 'other'])
+            && isOptionalString(d.get('note', null), 500)
+            && isStamped(d);
+        }
+        allow read, delete: if isOwner(userId);
+        allow create: if isOwner(userId)
+          && isClosedCreate(userId, capacityKeys(), capacityRequired())
+          && validCapacity(incoming());
+        allow update: if isOwner(userId)
+          && isClosedUpdate(userId, capacityKeys(), capacityRequired())
+          && validCapacity(incoming());
+      }
+
+      // A transfer is one document, always 'out' of accountId into toAccountId.
+      match /company_movements/{movementId} {
+        function movementKeys() {
+          return ['userId', 'kind', 'direction', 'amount', 'date', 'accountId', 'toAccountId', 'expenseId', 'description',
+                  'documentRef', 'project', 'counterparty', 'notes', 'dateEstimated', 'importRef', 'leaseId', 'rentMonth', 'rentPart',
+                  'createdAt', 'updatedAt'];
+        }
+        function movementRequired() {
+          return ['userId', 'kind', 'direction', 'amount', 'date', 'accountId', 'description'];
+        }
+        function validMovement(d) {
+          return d.kind in ['transfer', 'income', 'client_income', 'deposit_held', 'deposit_paid',
+                          'capital', 'vat', 'tax', 'compensation', 'supplier_payment']
+            && d.direction in ['in', 'out']
+            && isNum(d.amount)
+            && d.amount > 0
+            && d.date is timestamp
+            && isShortString(d.accountId, 200)
+            && (d.kind == 'transfer'
+                  ? (d.direction == 'out'
+                     && isShortString(d.get('toAccountId', null), 200)
+                     && d.toAccountId != d.accountId)
+                  : d.get('toAccountId', null) == null)
+            && (d.kind == 'supplier_payment'
+                  ? isShortString(d.get('expenseId', null), 200)
+                  : d.get('expenseId', null) == null)
+            && isShortString(d.description, 300)
+            && isOptionalString(d.get('documentRef', null), 100)
+            && isOptionalString(d.get('project', null), 60)
+            && isOptionalString(d.get('counterparty', null), 100)
+            && isOptionalString(d.get('notes', null), 1000)
+            && d.get('dateEstimated', false) is bool
+            && isOptionalString(d.get('importRef', null), 40)
+            // Rent module: the lease, the month a payment covers and which part it pays. Only income is rent.
+            && (d.get('leaseId', null) == null || isShortString(d.leaseId, 200))
+            && (d.get('rentMonth', null) == null || (d.kind == 'income' && isYearMonth(d.rentMonth)))
+            && (d.get('rentPart', null) == null || (d.kind == 'income' && d.rentPart in ['rent', 'contribution']))
+            && isStamped(d);
+        }
+        allow read, delete: if isOwner(userId);
+        allow create: if isOwner(userId)
+          && isClosedCreate(userId, movementKeys(), movementRequired())
+          && validMovement(incoming());
+        allow update: if isOwner(userId)
+          && isClosedUpdate(userId, movementKeys(), movementRequired())
+          && validMovement(incoming());
+      }
+
+      // ── Company Deadlines ─────────────────────────────────────────────────
+
+      match /company_deadlines/{deadlineId} {
+        function deadlineKeys() {
+          return ['userId', 'title', 'date', 'kind', 'amount', 'notes', 'isDone', 'createdAt', 'updatedAt'];
+        }
+        function validDeadlineDoc(d) {
+          return isShortString(d.get('title', 'x'), 200)
+            && d.get('date', request.time) is timestamp
+            && d.get('kind', 'other') in ['tax', 'contract', 'admin', 'other']
+            && (d.get('amount', null) == null || (isNum(d.amount) && d.amount >= 0))
+            && isOptionalString(d.get('notes', null), 1000)
+            && d.get('isDone', false) is bool
+            && isStamped(d);
+        }
+        allow read, delete: if isOwner(userId);
+        allow create: if isOwner(userId)
+          && isClosedCreate(userId, deadlineKeys(), ['userId', 'title', 'date', 'kind', 'isDone'])
+          && validDeadlineDoc(incoming());
+        allow update: if isOwner(userId)
+          && isClosedUpdate(userId, deadlineKeys(), ['userId', 'title', 'date', 'kind', 'isDone'])
+          && validDeadlineDoc(incoming());
+      }
+
+      // ── Allocations (days per contract per month) ─────────────────────────
+
+      match /allocations/{allocationId} {
+        function validAllocationDoc(d) {
+          return isShortString(d.get('engagementId', 'x'), 200)
+            && isYearMonth(d.get('yearMonth', '2000-01'))
+            && isNum(d.get('days', 0))
+            && d.get('days', 0) >= 0
+            && d.get('days', 0) <= 31
+            && isStamped(d);
+        }
+        allow read, delete: if isOwner(userId);
+        allow create: if isOwner(userId)
+          && isClosedCreate(userId, ['userId', 'engagementId', 'yearMonth', 'days', 'createdAt', 'updatedAt'],
+                            ['userId', 'engagementId', 'yearMonth', 'days'])
+          && validAllocationDoc(incoming());
+        allow update: if isOwner(userId)
+          && isClosedUpdate(userId, ['userId', 'engagementId', 'yearMonth', 'days', 'createdAt', 'updatedAt'],
+                            ['userId', 'engagementId', 'yearMonth', 'days'])
+          && validAllocationDoc(incoming());
+      }

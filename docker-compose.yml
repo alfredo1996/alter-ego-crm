@@ -1,0 +1,24 @@
+services:
+  # ─── Firebase Emulator Suite (Auth + Firestore + Storage) ──────────────────────────────
+  firebase-emulator:
+    image: alter-ego-crm-firebase-emulator:latest
+    build:
+      context: .
+      dockerfile: docker/firebase-emulator/Dockerfile
+    ports:
+      - "9099:9099"   # Auth emulator
+      - "8080:8080"   # Firestore emulator
+      - "19199:19199" # Storage emulator (invoice files)
+      - "4000:4000"   # Emulator UI
+    # Mount rules + indexes from host so changes only need a restart,
+    # not a full image rebuild. Read-only so the container can't drift.
+    volumes:
+      - ./firestore.rules:/app/firestore.rules:ro
+      - ./firestore.indexes.json:/app/firestore.indexes.json:ro
+      - ./storage.rules:/app/storage.rules:ro
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/"]
+      interval: 5s
+      timeout: 3s
+      start_period: 15s
+      retries: 10

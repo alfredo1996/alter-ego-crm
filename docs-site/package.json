@@ -1,0 +1,25 @@
+{
+  "name": "alter-ego-docs",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "fumadocs-mdx && next dev --webpack --port 3010",
+    "build": "fumadocs-mdx && next build --webpack",
+    "postbuild": "touch out/.nojekyll"
+  },
+  "dependencies": {
+    "fumadocs-core": "^16.6.9",
+    "fumadocs-mdx": "^14.2.9",
+    "fumadocs-ui": "^16.6.9",
+    "next": "16.4.3",
+    "react": "19.2.3",
+    "react-dom": "19.2.3"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4",
+    "@types/node": "^24",
+    "@types/react": "^19",
+    "tailwindcss": "^4",
+    "typescript": "^5"
+  }
+}

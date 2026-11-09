@@ -1,0 +1,74 @@
+# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
+
+# dependencies
+**/node_modules
+/.pnp
+.pnp.*
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/versions
+
+# testing
+coverage
+
+# next.js
+**/.next/
+**/out/
+
+# turborepo
+.turbo
+
+# fumadocs generated
+**/.source/
+
+# production
+**/build
+
+# misc
+.DS_Store
+*.pem
+
+# debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+firebase-debug.log
+firestore-debug.log
+ui-debug.log
+
+# env files
+.env*
+!.env.example
+
+# vercel
+.vercel
+
+# typescript
+*.tsbuildinfo
+next-env.d.ts
+
+# playwright
+**/test-results/
+**/playwright-report/
+**/blob-report/
+**/playwright/.cache/
+# pnpm shots
+.shots/
+
+# IDE
+.idea/
+
+# Local self-hosted data (docker-compose.local.yml)
+.emulator-data/
+
+# Docs site build output
+docs-site/.next/
+docs-site/out/
+docs-site/.source/
+docs-site/next-env.d.ts
+
+# Firebase App Hosting adapter output
+**/.apphosting/

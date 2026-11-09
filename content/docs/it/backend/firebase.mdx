@@ -1,0 +1,35 @@
+---
+title: Backend Firebase
+description: Backend Firestore con Firebase Authentication e Storage
+---
+
+## Panoramica
+
+Il backend Firebase usa Firestore per l'archiviazione dati, Firebase Authentication per la gestione utenti e Firebase Storage per i file delle fatture.
+
+## Modello Dati
+
+Firestore usa una struttura basata su sotto-collezioni, un albero per utente:
+
+```
+/users/{userId}/
+  ├── clients/ · opportunities/ · engagements/ · allocations/
+  ├── tasks/ · meetings/ · timecards/ · solutions/
+  ├── collaborators/ · collaborator_assignments/ · capacity/
+  ├── invoices/
+  ├── company_expenses/ · company_loans/ · company_accounts/
+  ├── company_movements/ · company_settings/ · company_deadlines/
+  ├── tenants/ · leases/
+  ├── api_keys/ · mcp_audit/
+/oauth_clients · /oauth_codes · /oauth_tokens · /api_keys_index   (solo server)
+```
+
+I file delle fatture stanno in Storage sotto `users/{userId}/company-files/`.
+
+## Regole di Sicurezza
+
+`firestore.rules` è generato: modifica `firestore/base.rules`, `firestore/crm.rules` o le regole di un modulo, poi esegui `pnpm rules:build`. Ogni collezione ha uno schema chiuso e viene ammesso un solo id utente (`isAllowedUser`). `storage.rules` protegge i file delle fatture.
+
+## Accesso dal Server
+
+Il server MCP e gli endpoint OAuth usano l'Admin SDK (`firebase-admin.ts`), che aggira le regole, tramite `getServerDb()`.

@@ -1,0 +1,171 @@
+import { describe, expect, it } from "vitest"
+
+import {
+  contractState,
+  filledSections,
+  filterSolutions,
+  historyEntries,
+  lineLabel,
+  missingSections,
+  solutionFilters,
+  solutionNameTaken,
+  usedStack,
+} from "@/lib/solutions"
+import { normalizeSolutionSections } from "@/types/schemas"
+
+import type { Solution } from "@/types"
+
+/** Made-up data: Nordwind Retail S.p.A.'s product knowledge graph and a second, older solution. */
+const solution = (o: Partial<Solution> & Pick<Solution, "id">): Solution => ({
+  userId: "u1", clientId: "c1", engagementId: null, name: o.id, status: "proposed", domain: null, stack: [],
+  sections: normalizeSolutionSections({}), entities: [], relations: [],
+  createdAt: new Date(2026, 0, 1), updatedAt: new Date(2026, 0, 1), ...o,
+})
+const GRAPH = solution({
+  id: "graph", name: "Product knowledge graph", status: "delivered", stack: ["neo4j", "gds", "kafka"],
+  updatedAt: new Date(2026, 9, 1),
+})
+const SEARCH = solution({ id: "search", clientId: "c2", stack: ["kafka"], updatedAt: new Date(2026, 9, 5) })
+const OLD = solution({ id: "old", status: "retired", stack: ["neo4j"], updatedAt: new Date(2025, 5, 1) })
+const ALL = [GRAPH, OLD, SEARCH]
+const none = { client: null, status: null, stack: null, q: null }
+const ids = (list: Solution[]) => list.map((s) => s.id)
+
+describe("filterSolutions", () => {
+  it("lists every solution, the most recently updated first", () => {
+    expect(ids(filterSolutions(ALL, none))).toEqual(["search", "graph", "old"])
+  })
+
+  it("narrows by client, status and stack, and by all three at once", () => {
+    expect(ids(filterSolutions(ALL, { ...none, client: "c1" }))).toEqual(["graph", "old"])
+    expect(ids(filterSolutions(ALL, { ...none, status: "retired" }))).toEqual(["old"])
+    expect(ids(filterSolutions(ALL, { ...none, stack: "kafka" }))).toEqual(["search", "graph"])
+    expect(ids(filterSolutions(ALL, { ...none, client: "c1", status: "delivered", stack: "neo4j" }))).toEqual(["graph"])
+    expect(filterSolutions(ALL, { ...none, client: "c2", stack: "neo4j" })).toEqual([])
+  })
+
+  it("searches the name, domain, stack and every section's text, in any case", () => {
+    const written = solution({
+      id: "written", domain: "Retail",
+      sections: normalizeSolutionSections({ kpis: "Search time from 4 s to 1 s", history: "2026-06-30 Threshold to 0.85" }),
+    })
+    const list = [...ALL, written]
+    expect(ids(filterSolutions(list, { ...none, q: "knowledge" }))).toEqual(["graph"])
+    expect(ids(filterSolutions(list, { ...none, q: "SEARCH TIME" }))).toEqual(["written"])
+    expect(ids(filterSolutions(list, { ...none, q: "threshold" }))).toEqual(["written"])
+    expect(ids(filterSolutions(list, { ...none, q: "retail" }))).toEqual(["written"])
+    expect(ids(filterSolutions(list, { ...none, q: "GDS" }))).toEqual(["graph"])
+    expect(ids(filterSolutions(list, { ...none, q: "kafka", client: "c1" }))).toEqual(["graph"])
+    expect(filterSolutions(list, { ...none, q: "salesforce" })).toEqual([])
+  })
+})
+
+describe("solutionFilters", () => {
+  it("reads the four params, a tag in lowercase and the search trimmed", () => {
+    expect(solutionFilters(new URLSearchParams("client=c1&status=building&stack=Neo4j&q=+Graph+"))).toEqual({
+      client: "c1", status: "building", stack: "neo4j", q: "Graph",
+    })
+  })
+
+  it("reads a missing, empty or unknown value as no filter", () => {
+    expect(solutionFilters(new URLSearchParams("client=&status=done&q=%20"))).toEqual(none)
+  })
+})
+
+describe("usedStack", () => {
+  it("lists each technology once, alphabetically", () => {
+    expect(usedStack(ALL)).toEqual(["gds", "kafka", "neo4j"])
+  })
+})
+
+describe("filledSections", () => {
+  it("counts the sections with text, a blank one as empty", () => {
+    expect(filledSections(GRAPH)).toBe(0)
+    const sections = normalizeSolutionSections({ purpose: "One graph for the catalog", kpis: "  \n", results: "Search time halved" })
+    expect(filledSections({ sections })).toBe(2)
+  })
+})
+
+describe("missingSections", () => {
+  it("lists the sections with no text in their order, a blank one included", () => {
+    const sections = normalizeSolutionSections({ purpose: "One graph for the catalog", kpis: "  \n", results: "Search time halved" })
+    expect(missingSections({ sections })).toEqual(["requirements", "kpis", "sources", "model", "architecture", "steps", "history"])
+    expect(missingSections(GRAPH)).toHaveLength(9)
+  })
+})
+
+describe("contractState", () => {
+  it("is Pre-sales without a contract, else the contract's own state", () => {
+    expect(contractState(undefined)).toBe("Pre-sales")
+    expect(contractState({ isActive: true })).toBe("Active")
+    expect(contractState({ isActive: false })).toBe("Closed")
+  })
+})
+
+describe("solutionNameTaken", () => {
+  it("finds the client's solution with the name, ignoring case and the spaces at its ends", () => {
+    expect(solutionNameTaken(ALL, "c1", "  product KNOWLEDGE graph ")).toBe(GRAPH)
+    expect(solutionNameTaken(ALL, "c1", "Product knowledge graphs")).toBeUndefined()
+  })
+
+  it("lets a solution keep its own name in another case, and another client use the name", () => {
+    expect(solutionNameTaken(ALL, "c1", "PRODUCT KNOWLEDGE GRAPH", "graph")).toBeUndefined()
+    expect(solutionNameTaken(ALL, "c2", "Product knowledge graph")).toBeUndefined()
+  })
+})
+
+describe("historyEntries", () => {
+  it("reads one dated line per entry, newest first, a same-day pair in the order written", () => {
+    const text = "2026-02-10 Kickoff, 48-day contract.\n2026-07-15 Go-live.\n2026-03-20: Model v1 approved\n2026-07-15 — Store pilot signed off"
+    expect(historyEntries(text)).toEqual([
+      { date: "2026-07-15", text: "Go-live." },
+      { date: "2026-07-15", text: "Store pilot signed off" },
+      { date: "2026-03-20", text: "Model v1 approved" },
+      { date: "2026-02-10", text: "Kickoff, 48-day contract." },
+    ])
+  })
+
+  it("keeps a line with no date as part of the entry above it, and skips blank lines", () => {
+    expect(historyEntries("2026-05-12 From the nightly CSV to CDC:\n\n  24 hours of latency were blocking search.\n2026-06-30 Threshold 0.85")).toEqual([
+      { date: "2026-06-30", text: "Threshold 0.85" },
+      { date: "2026-05-12", text: "From the nightly CSV to CDC:\n24 hours of latency were blocking search." },
+    ])
+  })
+
+  it("is null, so the text shows as written, when it does not open on a date", () => {
+    expect(historyEntries("We moved to CDC in May.\n2026-07-15 Go-live.")).toBeNull()
+    expect(historyEntries("2026-07-150 is not a date")).toBeNull()
+    expect(historyEntries("   \n")).toBeNull()
+  })
+
+  it("never drops text: every line that is not blank is in some entry, or the whole text shows as written", () => {
+    const texts = [
+      "2026-02-10 Kickoff\nscope: graph only\n2026-03-20 Model v1\n\n- dropped Attribute nodes",
+      "2026-02-10\nKickoff without words on the dated line",
+      "Kickoff\n2026-03-20 Model v1",
+    ]
+    for (const text of texts) {
+      const entries = historyEntries(text)
+      if (!entries) continue
+      const shown = entries.map((e) => `${e.date} ${e.text}`).join("\n")
+      for (const line of text.split("\n").filter((l) => l.trim())) {
+        expect(shown).toContain(line.trim().replace(/^\d{4}-\d{2}-\d{2}\s*/, ""))
+      }
+    }
+  })
+})
+
+describe("lineLabel", () => {
+  it("finds a short leading label before a colon and a space", () => {
+    expect(lineLabel("Zero-result searches: 12% → under 5%")).toBe("Zero-result searches:")
+    expect(lineLabel("SAP → graph latency: under 15 minutes")).toBe("SAP → graph latency:")
+  })
+
+  it("leaves a sentence, a link and a time alone", () => {
+    expect(lineLabel("Duplicates flagged, never deleted: the category manager decides.")).toBeNull()
+    expect(lineLabel("https://neo4j.com/docs for the details")).toBeNull()
+    expect(lineLabel("10:30 standup with the catalogue team")).toBeNull()
+    expect(lineLabel("A label that runs on for far too long to be one: text")).toBeNull()
+    expect(lineLabel("Ends with a colon:")).toBeNull()
+  })
+})

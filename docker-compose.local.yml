@@ -1,0 +1,54 @@
+# Running Alter Ego locally, with data that survives a restart.
+#
+# Separate from docker-compose.yml on purpose: that one backs the test suite and
+# must start empty every run, while this one must not. Same image, different
+# command and a volume.
+#
+#   pnpm local:start   # emulator up, data restored from ./.emulator-data
+#   pnpm dev:local     # the app, pointed at it
+#   pnpm local:stop    # emulator down, data exported on the way out
+#
+# Production admits one uid (#389), and no local user has it: `pnpm local:start`
+# loads the same rules with that allowlist opened (scripts/local-rules.ts). The
+# emulator reloads the mounted file when it changes, so run `pnpm local:rules`
+# again after a `pnpm rules:build`.
+#
+# Your data lives in ./.emulator-data. Back that folder up; deleting it resets
+# the app to empty.
+
+services:
+  firebase-emulator-local:
+    image: alter-ego-crm-firebase-emulator:latest
+    build:
+      context: .
+      dockerfile: docker/firebase-emulator/Dockerfile
+    container_name: alter-ego-local
+    ports:
+      - "9099:9099" # Auth
+      - "8080:8080" # Firestore
+      - "4000:4000" # Emulator UI
+    volumes:
+      - ./firestore.rules:/app/firestore.rules:ro
+      - ./firestore.indexes.json:/app/firestore.indexes.json:ro
+      - ./.emulator-data:/data
+    # Two things this command has to get right:
+    #
+    # 1. Export to a SUBDIRECTORY of the mount, never the mount point. The emulator
+    #    clears its target directory before writing, and removing a bind mount from
+    #    inside the container fails with "Device or resource busy".
+    # 2. `exec`, so the emulator itself receives the SIGTERM that `docker compose
+    #    down` sends — it exports on that signal, and a wrapping shell would swallow it.
+    #
+    # --import is added only once there is something to restore: it fails outright
+    # when the directory holds no export, which is the case on the very first run.
+    command: >
+      sh -c 'if [ -f /data/export/firebase-export-metadata.json ]; then IMPORT=--import=/data/export; else IMPORT=""; fi;
+      exec firebase emulators:start --only auth,firestore --project demo-alter-ego $$IMPORT --export-on-exit=/data/export'
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/"]
+      interval: 5s
+      timeout: 3s
+      start_period: 15s
+      retries: 10
+    # SIGTERM must reach the emulator with time to write the export.
+    stop_grace_period: 30s

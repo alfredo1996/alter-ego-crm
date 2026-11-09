@@ -1,0 +1,84 @@
+---
+title: Testing
+description: Testing strategy and patterns
+---
+
+## Unit Tests (Vitest)
+
+**354+ unit tests** cover utilities, business logic, and the mock backend adapter.
+
+```bash
+# Watch mode
+pnpm test
+
+# Single run
+pnpm test --run
+
+# With coverage
+pnpm test --run --coverage
+```
+
+### Test Files
+
+Tests live in `__tests__/` directories next to the code they test:
+
+```
+src/lib/__tests__/
+  ├── dates.test.ts
+  ├── export.test.ts
+  ├── merchants.test.ts
+  ├── net-worth.test.ts
+  ├── amortization.test.ts
+  └── ...
+src/lib/backend/__tests__/
+  ├── adapter-contract.ts  # Shared contract tests
+  ├── mock.test.ts
+  ├── mock.adapter.test.ts
+  └── firebase.adapter.test.ts
+```
+
+### Mock Backend in Tests
+
+Always reset state between tests:
+
+```typescript
+import { getBackend } from "@/lib/backend"
+
+beforeEach(() => {
+  const backend = getBackend()
+  ;(backend as any).__resetMockState()
+})
+```
+
+### Contract Tests
+
+The adapter contract test suite (`adapter-contract.ts`) defines 97 shared tests that any backend adapter must pass. They run against the mock adapter on every `pnpm test`, and against Firebase under the emulator with `pnpm test:firebase:docker`.
+
+## E2E Tests (Playwright)
+
+E2E tests cover critical user flows using the mock backend, against a production build. **30 spec files**, one per area.
+
+```bash
+pnpm test:e2e
+```
+
+A deployment with Invoicing and Solutions switched off is a build of its own: `pnpm test:e2e:modules` runs `modules.spec.ts` against it.
+
+### Test Specs
+
+```
+e2e/
+  ├── auth.spec.ts, sign-out.spec.ts, oauth-consent.spec.ts   # Sign-in, sign-out, the connector's consent page
+  ├── navigation.spec.ts, redirects.spec.ts, settings.spec.ts
+  ├── crm.spec.ts, collaborators.spec.ts, solutions.spec.ts    # Pipeline, clients, contracts, collaborators, solutions
+  ├── billing.spec.ts, invoice-files.spec.ts                   # Invoices and their files
+  ├── cash-book*.spec.ts, month-end*.spec.ts, rent.spec.ts     # Books and Rent
+  ├── plan-*.spec.ts, hours.spec.ts                            # The Plan, runway and quarters
+  └── mobile.spec.ts, loading-states.spec.ts, modules.spec.ts  # Phone fixes, loading states, a module left out
+```
+
+### Patterns
+
+- Tests run against the mock backend for speed and isolation
+- Use `aria-label` and role-based selectors for accessibility
+- Desktop-only interactions (hover menus, dropdowns) are tested in desktop viewport

@@ -1,0 +1,136 @@
+name: Firebase Emulator Tests
+
+# Feature branches are tested through their PR, not on every push: a push
+# trigger on them ran each workflow twice per commit. pull_request has no
+# branch filter, so a PR stacked on another feature branch is tested too.
+on:
+  push:
+    branches: [main, dev]
+    paths:
+      - "apps/web/src/lib/backend/firebase.ts"
+      - "apps/web/src/lib/backend/firebase-admin.ts"
+      # The interface every adapter implements, and the types it is written in:
+      # changing either can break all three backends without touching one of them.
+      - "apps/web/src/lib/backend/types.ts"
+      - "apps/web/src/types/**"
+      - "packages/kernel/**"
+      # A module package carries its adapter slice, its contract test and its rules fragment.
+      - "packages/modules/**"
+      - "apps/web/src/lib/backend/__tests__/firebaseadmin.adapter.test.ts"
+      - "apps/web/src/lib/backend/__tests__/firebaseadmin.crm.test.ts"
+      - "apps/web/src/lib/backend/__tests__/firestore-rules.test.ts"
+      - "apps/web/src/lib/mcp/**"
+      - "apps/web/src/app/api/mcp/**"
+      - "apps/web/src/lib/oauth/**"
+      - "apps/web/src/app/api/oauth/**"
+      # What the route handlers reach the database through, and the handlers.
+      - "apps/web/src/lib/backend/server-db.ts"
+      - "apps/web/src/lib/firebase-admin-client.ts"
+      - "apps/web/src/lib/api-auth.ts"
+      - "apps/web/src/lib/firebase-client.ts"
+      - "apps/web/src/lib/backend/__tests__/firebase.adapter.test.ts"
+      - "apps/web/src/lib/backend/__tests__/firebase.freshness.test.ts"
+      - "apps/web/src/lib/backend/__tests__/firebase.files.test.ts"
+      - "apps/web/src/lib/backend/__tests__/firebase.api-keys.test.ts"
+      - "apps/web/src/lib/backend/__tests__/firestore-rules-owner.test.ts"
+      - "apps/web/src/lib/backend/__tests__/storage-rules.test.ts"
+      - "apps/web/src/lib/backend/__tests__/adapter-contract.ts"
+      # The fragments firestore.rules is built from (pnpm rules:build).
+      - "firestore/**"
+      - "firestore.rules"
+      - "storage.rules"
+      - "firestore.indexes.json"
+      - "apps/web/vitest.emulator*.ts"
+      - "docker/firebase-emulator/**"
+      - "docker-compose.yml"
+  pull_request:
+    paths:
+      - "apps/web/src/lib/backend/firebase.ts"
+      - "apps/web/src/lib/backend/firebase-admin.ts"
+      # The interface every adapter implements, and the types it is written in:
+      # changing either can break all three backends without touching one of them.
+      - "apps/web/src/lib/backend/types.ts"
+      - "apps/web/src/types/**"
+      - "packages/kernel/**"
+      # A module package carries its adapter slice, its contract test and its rules fragment.
+      - "packages/modules/**"
+      - "apps/web/src/lib/backend/__tests__/firebaseadmin.adapter.test.ts"
+      - "apps/web/src/lib/backend/__tests__/firebaseadmin.crm.test.ts"
+      - "apps/web/src/lib/backend/__tests__/firestore-rules.test.ts"
+      - "apps/web/src/lib/mcp/**"
+      - "apps/web/src/app/api/mcp/**"
+      - "apps/web/src/lib/oauth/**"
+      - "apps/web/src/app/api/oauth/**"
+      # What the route handlers reach the database through, and the handlers.
+      - "apps/web/src/lib/backend/server-db.ts"
+      - "apps/web/src/lib/firebase-admin-client.ts"
+      - "apps/web/src/lib/api-auth.ts"
+      - "apps/web/src/lib/firebase-client.ts"
+      - "apps/web/src/lib/backend/__tests__/firebase.adapter.test.ts"
+      - "apps/web/src/lib/backend/__tests__/firebase.freshness.test.ts"
+      - "apps/web/src/lib/backend/__tests__/firebase.files.test.ts"
+      - "apps/web/src/lib/backend/__tests__/firebase.api-keys.test.ts"
+      - "apps/web/src/lib/backend/__tests__/firestore-rules-owner.test.ts"
+      - "apps/web/src/lib/backend/__tests__/storage-rules.test.ts"
+      - "apps/web/src/lib/backend/__tests__/adapter-contract.ts"
+      # The fragments firestore.rules is built from (pnpm rules:build).
+      - "firestore/**"
+      - "firestore.rules"
+      - "storage.rules"
+      - "firestore.indexes.json"
+      - "apps/web/vitest.emulator*.ts"
+      - "docker/firebase-emulator/**"
+      - "docker-compose.yml"
+  workflow_dispatch:
+
+# One run per PR (or branch): a new push to a PR cancels its superseded run.
+# A running main/dev run is never cancelled; GitHub keeps one queued run per
+# group, so in a burst of merges the newest queued one replaces the older.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  firebase-emulator-tests:
+    name: Firebase Adapter Contract Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+
+      - name: Install Node.js
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version: 24
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4.4.0
+
+      - name: Get pnpm store directory
+        id: pnpm-cache
+        run: echo "STORE_PATH=$(pnpm store path)" >> $GITHUB_OUTPUT
+
+      - name: Cache pnpm store
+        uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5.1.0
+        with:
+          path: ${{ steps.pnpm-cache.outputs.STORE_PATH }}
+          key: ${{ runner.os }}-pnpm-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: ${{ runner.os }}-pnpm-
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Start Firebase Emulators (Docker)
+        run: docker compose up -d --wait
+
+      - name: Run Firebase adapter contract tests
+        run: pnpm test:firebase
+
+      - name: Stop emulators
+        if: always()
+        run: docker compose down

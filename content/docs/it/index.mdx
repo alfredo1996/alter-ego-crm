@@ -1,0 +1,61 @@
+---
+title: Per Iniziare
+description: Configura e avvia Alter Ego CRM in locale
+---
+
+## Panoramica
+
+Alter Ego CRM è l'app gestionale di una piccola SRL italiana, costruita con Next.js 16, TypeScript e Tailwind CSS v4: la pipeline commerciale, clienti e contratti, ore e piano, fatture e relativi file, la prima nota, la chiusura mensile, le soluzioni e gli affitti. Ogni area è un modulo che un'installazione può disattivare. Usa un pattern adapter per il backend che permette di passare tra il backend Mock in memoria e Firebase senza modificare il codice delle funzionalità, ed espone un connettore MCP per gli assistenti AI. L'AI è sempre opzionale.
+
+## Prerequisiti
+
+- **Node.js** 24+ (vedi `.nvmrc`)
+- **pnpm** 10+
+- (Opzionale) **Docker** per eseguire l'emulatore Firebase in locale
+
+## Avvio Rapido
+
+```bash
+# Clona il repository
+git clone https://github.com/alfredo1996/alter-ego-crm.git
+cd alter-ego-crm
+
+# Installa le dipendenze
+pnpm install
+
+# Avvia il server di sviluppo (usa il backend mock di default)
+pnpm dev
+```
+
+Apri [http://localhost:3000](http://localhost:3000) e accedi con una qualsiasi email e password: il backend mock le accetta e tiene i dati in memoria.
+
+## Variabili d'Ambiente
+
+Crea un file `apps/web/.env.local`:
+
+```ini
+# Backend: "mock" | "firebase"
+NEXT_PUBLIC_BACKEND=mock
+
+# Moduli che questa installazione lascia fuori (crm, invoicing, books, solutions, rent)
+NEXT_PUBLIC_DISABLED_MODULES=
+
+# Firebase (necessario solo con NEXT_PUBLIC_BACKEND=firebase)
+NEXT_PUBLIC_FIREBASE_API_KEY=
+NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=
+NEXT_PUBLIC_FIREBASE_PROJECT_ID=
+NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=
+NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=
+NEXT_PUBLIC_FIREBASE_APP_ID=
+```
+
+## Script
+
+| Comando | Descrizione |
+|---|---|
+| `pnpm dev` | Avvia il server di sviluppo (Turbopack) |
+| `pnpm build` | Build di produzione |
+| `pnpm lint` | Esegue ESLint |
+| `pnpm test` | Esegue Vitest in modalità watch |
+| `pnpm test --run` | Esegue Vitest una volta |
+| `pnpm test:e2e` | Esegue i test E2E Playwright |

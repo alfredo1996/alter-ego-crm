@@ -1,0 +1,421 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`SolutionGraph > draws the Nordwind model at a phone's width 1`] = `
+<svg
+  aria-label="Data model graph: 6 entities, 6 relations"
+  class="block"
+  height="504.5"
+  role="img"
+  viewBox="0 0 326 504.5"
+  width="326"
+>
+  <title>
+    Data model graph: 6 entities, 6 relations
+  </title>
+  <desc>
+    Supplier SUPPLIES Product. Product IN_CATEGORY Category. Order CONTAINS Product. Customer PLACED Order. SearchQuery RETURNED Product. Product SIMILAR_TO Product
+  </desc>
+  <g>
+    <title>
+      Supplier SUPPLIES Product
+    </title>
+    <path
+      class="stroke-muted-foreground"
+      d="M239.5 152L163 180L163 280L129.1 304.5"
+      fill="none"
+      stroke-linejoin="round"
+      stroke-width="1.5"
+    />
+    <polygon
+      class="fill-muted-foreground"
+      points="124.2,308 127.5,300.7 132.2,307.1"
+    />
+  </g>
+  <g>
+    <title>
+      Product IN_CATEGORY Category
+    </title>
+    <path
+      class="stroke-muted-foreground"
+      d="M64.5 352L85.2 446.6"
+      fill="none"
+      stroke-linejoin="round"
+      stroke-width="1.5"
+    />
+    <polygon
+      class="fill-muted-foreground"
+      points="86.5,452.5 81.1,446.5 88.9,444.8"
+    />
+  </g>
+  <g>
+    <title>
+      Order CONTAINS Product
+    </title>
+    <path
+      class="stroke-muted-foreground"
+      d="M86.5 152L10 180L10 280L43.9 304.5"
+      fill="none"
+      stroke-linejoin="round"
+      stroke-width="1.5"
+    />
+    <polygon
+      class="fill-muted-foreground"
+      points="48.8,308 40.8,307.1 45.5,300.7"
+    />
+  </g>
+  <g>
+    <title>
+      Customer PLACED Order
+    </title>
+    <path
+      class="stroke-muted-foreground"
+      d="M86.5 52L86.5 102"
+      fill="none"
+      stroke-linejoin="round"
+      stroke-width="1.5"
+    />
+    <polygon
+      class="fill-muted-foreground"
+      points="86.5,108 82.5,101 90.5,101"
+    />
+  </g>
+  <g>
+    <title>
+      SearchQuery RETURNED Product
+    </title>
+    <path
+      class="stroke-muted-foreground"
+      d="M86.5 252L86.5 302"
+      fill="none"
+      stroke-linejoin="round"
+      stroke-width="1.5"
+    />
+    <polygon
+      class="fill-muted-foreground"
+      points="86.5,308 82.5,301 90.5,301"
+    />
+  </g>
+  <g>
+    <title>
+      Product SIMILAR_TO Product
+    </title>
+    <path
+      class="stroke-muted-foreground"
+      d="M109 352C99 382 147 382 138.9 357.7"
+      fill="none"
+      stroke-linejoin="round"
+      stroke-width="1.5"
+    />
+    <polygon
+      class="fill-muted-foreground"
+      points="137,352 143,357.4 135.4,359.9"
+    />
+  </g>
+  <g>
+    <title>
+      Product, from SAP MARA
+    </title>
+    <rect
+      class="fill-muted/50 stroke-muted-foreground/40"
+      height="44"
+      rx="6"
+      width="133"
+      x="20"
+      y="308"
+    />
+    <text
+      class="fill-foreground text-[13px] font-medium"
+      text-anchor="middle"
+      x="86.5"
+      y="327"
+    >
+      Product
+    </text>
+    <text
+      class="fill-muted-foreground text-[12px]"
+      text-anchor="middle"
+      x="86.5"
+      y="343"
+    >
+      SAP MARA
+    </text>
+  </g>
+  <g>
+    <title>
+      Category, from SAP T179
+    </title>
+    <rect
+      class="fill-muted/50 stroke-muted-foreground/40"
+      height="44"
+      rx="6"
+      width="133"
+      x="20"
+      y="452.5"
+    />
+    <text
+      class="fill-foreground text-[13px] font-medium"
+      text-anchor="middle"
+      x="86.5"
+      y="471.5"
+    >
+      Category
+    </text>
+    <text
+      class="fill-muted-foreground text-[12px]"
+      text-anchor="middle"
+      x="86.5"
+      y="487.5"
+    >
+      SAP T179
+    </text>
+  </g>
+  <g>
+    <title>
+      Supplier, from SAP LFA1
+    </title>
+    <rect
+      class="fill-muted/50 stroke-muted-foreground/40"
+      height="44"
+      rx="6"
+      width="133"
+      x="173"
+      y="108"
+    />
+    <text
+      class="fill-foreground text-[13px] font-medium"
+      text-anchor="middle"
+      x="239.5"
+      y="127"
+    >
+      Supplier
+    </text>
+    <text
+      class="fill-muted-foreground text-[12px]"
+      text-anchor="middle"
+      x="239.5"
+      y="143"
+    >
+      SAP LFA1
+    </text>
+  </g>
+  <g>
+    <title>
+      Order, from Shop orders
+    </title>
+    <rect
+      class="fill-muted/50 stroke-muted-foreground/40"
+      height="44"
+      rx="6"
+      width="133"
+      x="20"
+      y="108"
+    />
+    <text
+      class="fill-foreground text-[13px] font-medium"
+      text-anchor="middle"
+      x="86.5"
+      y="127"
+    >
+      Order
+    </text>
+    <text
+      class="fill-muted-foreground text-[12px]"
+      text-anchor="middle"
+      x="86.5"
+      y="143"
+    >
+      Shop orders
+    </text>
+  </g>
+  <g>
+    <title>
+      Customer, from CRM contacts
+    </title>
+    <rect
+      class="fill-muted/50 stroke-muted-foreground/40"
+      height="44"
+      rx="6"
+      width="133"
+      x="20"
+      y="8"
+    />
+    <text
+      class="fill-foreground text-[13px] font-medium"
+      text-anchor="middle"
+      x="86.5"
+      y="27"
+    >
+      Customer
+    </text>
+    <text
+      class="fill-muted-foreground text-[12px]"
+      text-anchor="middle"
+      x="86.5"
+      y="43"
+    >
+      CRM contacts
+    </text>
+  </g>
+  <g>
+    <title>
+      SearchQuery, derived
+    </title>
+    <rect
+      class="fill-muted/50 stroke-muted-foreground/40"
+      height="44"
+      rx="6"
+      width="133"
+      x="20"
+      y="208"
+    />
+    <text
+      class="fill-foreground text-[13px] font-medium"
+      text-anchor="middle"
+      x="86.5"
+      y="227"
+    >
+      SearchQuery
+    </text>
+    <text
+      class="fill-muted-foreground text-[12px] italic"
+      text-anchor="middle"
+      x="86.5"
+      y="243"
+    >
+      derived
+    </text>
+  </g>
+  <g>
+    <title>
+      Supplier SUPPLIES Product
+    </title>
+    <rect
+      class="fill-background"
+      height="16"
+      rx="3"
+      width="65.6"
+      x="130.2"
+      y="172"
+    />
+    <text
+      class="fill-muted-foreground font-mono text-[12px]"
+      dominant-baseline="central"
+      text-anchor="middle"
+      x="163"
+      y="180"
+    >
+      SUPPLIES
+    </text>
+  </g>
+  <g>
+    <title>
+      Product IN_CATEGORY Category
+    </title>
+    <rect
+      class="fill-background"
+      height="16"
+      rx="3"
+      width="87.2"
+      x="31.9"
+      y="394.3"
+    />
+    <text
+      class="fill-muted-foreground font-mono text-[12px]"
+      dominant-baseline="central"
+      text-anchor="middle"
+      x="75.5"
+      y="402.3"
+    >
+      IN_CATEGORY
+    </text>
+  </g>
+  <g>
+    <title>
+      Order CONTAINS Product
+    </title>
+    <rect
+      class="fill-background"
+      height="16"
+      rx="3"
+      width="65.6"
+      x="2"
+      y="172"
+    />
+    <text
+      class="fill-muted-foreground font-mono text-[12px]"
+      dominant-baseline="central"
+      text-anchor="middle"
+      x="34.8"
+      y="180"
+    >
+      CONTAINS
+    </text>
+  </g>
+  <g>
+    <title>
+      Customer PLACED Order
+    </title>
+    <rect
+      class="fill-background"
+      height="16"
+      rx="3"
+      width="51.2"
+      x="60.9"
+      y="72"
+    />
+    <text
+      class="fill-muted-foreground font-mono text-[12px]"
+      dominant-baseline="central"
+      text-anchor="middle"
+      x="86.5"
+      y="80"
+    >
+      PLACED
+    </text>
+  </g>
+  <g>
+    <title>
+      SearchQuery RETURNED Product
+    </title>
+    <rect
+      class="fill-background"
+      height="16"
+      rx="3"
+      width="65.6"
+      x="53.7"
+      y="272"
+    />
+    <text
+      class="fill-muted-foreground font-mono text-[12px]"
+      dominant-baseline="central"
+      text-anchor="middle"
+      x="86.5"
+      y="280"
+    >
+      RETURNED
+    </text>
+  </g>
+  <g>
+    <title>
+      Product SIMILAR_TO Product
+    </title>
+    <rect
+      class="fill-background"
+      height="16"
+      rx="3"
+      width="80"
+      x="83"
+      y="376.5"
+    />
+    <text
+      class="fill-muted-foreground font-mono text-[12px]"
+      dominant-baseline="central"
+      text-anchor="middle"
+      x="123"
+      y="384.5"
+    >
+      SIMILAR_TO
+    </text>
+  </g>
+</svg>
+`;

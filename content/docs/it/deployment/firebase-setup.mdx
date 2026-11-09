@@ -1,0 +1,37 @@
+---
+title: Configurazione Firebase
+description: Configura Firebase per la produzione
+---
+
+## Configurazione Progetto
+
+1. Crea un progetto nella [Console Firebase](https://console.firebase.google.com)
+2. Abilita **Firestore Database** in modalità produzione
+3. Abilita **Authentication** con il provider email/password
+4. Abilita **Storage** (file delle fatture)
+
+## Regole di Sicurezza
+
+Costruisci e distribuisci le regole, che `pnpm rules:build` assembla da `firestore/base.rules`, `firestore/crm.rules` e dalle regole dei moduli:
+
+```bash
+pnpm rules:build
+firebase deploy --only firestore:rules,firestore:indexes,storage --project IL_TUO_PROJECT_ID
+```
+
+La registrazione è chiusa: inserisci l'uid del tuo utente in `firestore/base.rules`, `storage.rules` e `apps/web/src/lib/owner-uid.ts`.
+
+## Variabili d'Ambiente
+
+Imposta le variabili `NEXT_PUBLIC_FIREBASE_*` (vedi la pagina Per Iniziare) e `NEXT_PUBLIC_BACKEND=firebase`.
+
+## Emulatore Locale
+
+Per lo sviluppo locale con gli emulatori Firebase:
+
+```bash
+pnpm emulator:start
+pnpm dev:emulator
+```
+
+Vedi `docs/DEPLOYMENT.md` nel repository per i passaggi completi di App Hosting.

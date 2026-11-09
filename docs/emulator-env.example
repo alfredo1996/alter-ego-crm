@@ -1,0 +1,21 @@
+# Run dev server against the local Firebase emulator (Auth + Firestore).
+#
+# Steps:
+#   1) cp docs/emulator-env.example apps/web/.env.local
+#   2) pnpm emulator:start        # starts Docker emulator (Auth + Firestore)
+#   3) pnpm dev                    # boots the app on http://localhost:3000
+#
+# The credentials below are placeholders — the emulator does not validate them,
+# it just needs the SDK to be initialized. NEXT_PUBLIC_USE_EMULATOR=true routes
+# all Auth/Firestore calls to localhost.
+
+NEXT_PUBLIC_BACKEND=firebase
+NEXT_PUBLIC_USE_EMULATOR=true
+
+NEXT_PUBLIC_FIREBASE_API_KEY=emulator-fake-key
+NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=localhost
+# Must match the project ID the Docker emulator starts with (--project demo-alter-ego)
+NEXT_PUBLIC_FIREBASE_PROJECT_ID=demo-alter-ego
+NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=localhost
+NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=000000000000
+NEXT_PUBLIC_FIREBASE_APP_ID=1:000000000000:web:emulator

@@ -1,0 +1,66 @@
+---
+title: Architettura
+description: Struttura del progetto, pattern adapter, moduli e convenzioni principali
+---
+
+## Struttura del Progetto
+
+```
+apps/web/src/
+├── app/              # Pagine Next.js App Router
+│   ├── (auth)/       # Accesso (non autenticato)
+│   ├── (app)/        # Pipeline, clienti, fatture, prima nota, piano... (autenticato)
+│   └── api/          # Server MCP, OAuth 2.1, chiavi API
+├── components/       # crm, plan, deadlines, cash-book, rent... componenti delle funzionalità
+├── hooks/            # Hook React (use-clients, use-invoices, ecc.)
+├── lib/
+│   ├── backend/      # Adapter backend (types, mock, firebase, firebase-admin)
+│   ├── mcp/          # Strumenti MCP e server del connettore
+│   └── oauth/        # Server OAuth 2.1 per l'endpoint MCP remoto
+├── modules/          # Il registro dei moduli
+├── stores/           # Store Zustand
+└── types/            # Tipi TypeScript e schemi Zod
+packages/
+├── kernel/           # Importi, date e il contratto dei moduli
+├── ui/               # Il kit UI (primitive shadcn, page kit)
+└── modules/rent/     # Il modulo Affitti
+```
+
+## Pattern Adapter del Backend
+
+Tutto l'accesso ai dati passa da un'interfaccia adapter unificata. Il codice delle funzionalità non importa mai Firebase direttamente.
+
+```typescript
+import { getBackend } from "@/lib/backend"
+
+const backend = getBackend()
+await backend.db.getClients(userId)
+```
+
+L'adapter viene scelto in fase di build dalla variabile d'ambiente `NEXT_PUBLIC_BACKEND`:
+- `mock` — Store in memoria
+- `firebase` — Firestore tramite SDK Firebase
+
+Vedi la [Panoramica Backend](/it/docs/backend/overview) per i dettagli.
+
+## Moduli
+
+Ogni area dell'app è un modulo: `crm`, `invoicing`, `books`, `solutions` e `rent`. Un'installazione ne lascia fuori alcuni con `NEXT_PUBLIC_DISABLED_MODULES`: le loro pagine, i link e gli strumenti MCP spariscono, e un modulo che ne richiede un altro fa fallire la build se quello è escluso. Il registro è in `apps/web/src/modules`.
+
+## Gestione dello Stato
+
+- **Stato del server**: TanStack Query con hook personalizzati (`useClients`, `useInvoices`, ecc.)
+- **Stato del client**: Zustand (`useSettingsStore`) per l'impostazione del tema
+- **Form**: React Hook Form + schemi di validazione Zod
+
+## Integrazione AI
+
+L'AI è opzionale — l'app è pienamente funzionante senza e non ha un livello AI proprio.
+
+Le funzionalità AI non bloccano mai le funzionalità principali. Il connettore MCP permette a un assistente di leggere e scrivere gli stessi dati di una persona, con le stesse regole.
+
+## Stile
+
+- Tailwind CSS v4 con l'utility `cn()` per le classi condizionali
+- Primitive di componenti shadcn/ui (non modificarle direttamente)
+- I grafici sono SVG puro — nessuna libreria di grafici esterna

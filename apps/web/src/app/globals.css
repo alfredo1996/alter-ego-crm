@@ -1,0 +1,12 @@
+@import "tailwindcss";
+/* Tokens, theme and base layer live in the UI kit. */
+@import "@alter-ego/ui/tokens.css";
+/* Tailwind scans the app on its own; the kit sits outside it. */
+@source "../../../../packages/ui/src";
+@source "../../../../packages/modules/rent/src";
+
+/* The invoice view prints on A4 (its toolbar and the toasts are print:hidden). */
+@page {
+  size: A4;
+  margin: 14mm;
+}

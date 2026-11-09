@@ -1,0 +1,26 @@
+---
+title: Panoramica
+description: Cosa fa ogni area dell'app e i moduli che un'installazione può disattivare
+---
+
+Alter Ego CRM gestisce il lato aziendale di una piccola SRL italiana. Ogni area qui sotto è un **modulo**: un'installazione può lasciarne fuori alcuni con `NEXT_PUBLIC_DISABLED_MODULES`, e le Impostazioni mostrano quali sono attivi.
+
+| Modulo | Cosa copre |
+|---|---|
+| **CRM** | Pipeline delle trattative, clienti, contratti e relativi addendum, collaboratori, attività, il Piano (capacità, ore e trimestri) e scadenze. |
+| **Fatturazione** | Fatture e note di credito, ore da fatturare, file delle fatture e il pacchetto per il commercialista. Richiede CRM. |
+| **Prima nota** | La prima nota (con l'importazione della cartella di lavoro), costi, runway e la chiusura di Fine Mese. |
+| **Soluzioni** | Il catalogo delle soluzioni e il grafo del loro modello dati. Richiede CRM. |
+| **Affitti** | Inquilini e contratti annuali, con gli incassi collegati al mese di competenza. Richiede Prima nota. |
+
+## Muoversi nell'app
+
+La barra laterale elenca le pagine dei moduli attivi; su telefono si apre dal pulsante del menu. Le **Impostazioni** sono fissate sotto i link.
+
+## Connettore MCP
+
+L'app espone un server MCP su `/api/mcp`, con OAuth 2.1 e chiavi API, così un assistente AI può leggere e scrivere gli stessi dati. Collegalo da **Impostazioni, Dati**. Gli strumenti di un modulo disattivato non vengono offerti.
+
+## Solo flusso di cassa
+
+L'app non calcola mai le imposte. Tiene il flusso di cassa, i contratti e la prima nota; la dichiarazione dei redditi è compito del commercialista.

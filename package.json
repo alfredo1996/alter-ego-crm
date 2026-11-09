@@ -1,0 +1,51 @@
+{
+  "name": "alter-ego-crm",
+  "version": "0.22.0",
+  "private": true,
+  "packageManager": "pnpm@10.34.1",
+  "scripts": {
+    "dev": "pnpm --filter @alter-ego/web dev",
+    "dev:emulator": "pnpm --filter @alter-ego/web dev:emulator",
+    "build": "pnpm --filter @alter-ego/web build",
+    "start": "pnpm --filter @alter-ego/web start",
+    "lint": "eslint . --max-warnings 0",
+    "typecheck": "pnpm --filter @alter-ego/web --filter @alter-ego/kernel --filter @alter-ego/ui --filter @alter-ego/rent exec tsc --noEmit",
+    "test": "pnpm --filter @alter-ego/web test",
+    "test:coverage": "pnpm --filter @alter-ego/web test:coverage",
+    "rules:build": "node scripts/build-firestore-rules.mjs",
+    "test:firebase": "pnpm --filter @alter-ego/web test:firebase",
+    "test:firebase:alt": "pnpm --filter @alter-ego/web test:firebase:alt",
+    "test:firebase:docker": "docker compose up -d --wait && pnpm --filter @alter-ego/web test:firebase",
+    "test:e2e": "pnpm --filter @alter-ego/web test:e2e",
+    "test:e2e:modules": "pnpm --filter @alter-ego/web test:e2e:modules",
+    "shots": "pnpm --filter @alter-ego/web shots",
+    "seed:demo": "pnpm --filter @alter-ego/web seed:demo",
+    "emulator:start": "docker compose up -d --wait",
+    "emulator:stop": "docker compose down",
+    "local:start": "docker compose -f docker-compose.local.yml up -d --wait && pnpm --filter @alter-ego/web local:rules",
+    "local:rules": "pnpm --filter @alter-ego/web local:rules",
+    "local:stop": "docker compose -f docker-compose.local.yml down",
+    "local:logs": "docker compose -f docker-compose.local.yml logs -f",
+    "mcp:stdio": "pnpm --filter @alter-ego/web mcp:stdio",
+    "prepare": "husky",
+    "setup": "pnpm --filter @alter-ego/web setup"
+  },
+  "lint-staged": {
+    "*.{ts,tsx}": [
+      "eslint --fix --max-warnings 0",
+      "pnpm --filter @alter-ego/web exec vitest related --run"
+    ],
+    "*.{json,md,css}": "prettier --write --ignore-unknown"
+  },
+  "devDependencies": {
+    "eslint": "^9",
+    "eslint-config-next": "16.4.3",
+    "eslint-plugin-import": "^2.32.0",
+    "firebase-tools": "^15.34.1",
+    "husky": "^9.1.7",
+    "lint-staged": "^16.3.1",
+    "prettier": "^3.8.1",
+    "turbo": "^2.11.10",
+    "typescript": "^5"
+  }
+}

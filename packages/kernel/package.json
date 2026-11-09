@@ -1,0 +1,19 @@
+{
+  "name": "@alter-ego/kernel",
+  "version": "0.0.0",
+  "private": true,
+  "description": "What every product and module shares: money and date helpers, the Currency type, the module contract. Imports nothing from the app or the UI kit.",
+  "exports": {
+    "./currency": "./src/currency.ts",
+    "./dates": "./src/dates.ts",
+    "./module": "./src/module.ts"
+  },
+  "dependencies": {
+    "date-fns": "^4.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.12.4",
+    "typescript": "^5",
+    "vitest": "^4.0.18"
+  }
+}

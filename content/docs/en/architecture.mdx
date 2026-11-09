@@ -1,0 +1,66 @@
+---
+title: Architecture
+description: Project structure, adapter pattern, modules and key conventions
+---
+
+## Project Structure
+
+```
+apps/web/src/
+├── app/              # Next.js App Router pages
+│   ├── (auth)/       # Sign-in (unauthenticated)
+│   ├── (app)/        # Pipeline, clients, invoices, cash book, plan... (authenticated)
+│   └── api/          # MCP server, OAuth 2.1, API keys
+├── components/       # crm, plan, deadlines, cash-book, rent... feature components
+├── hooks/            # React hooks (use-clients, use-invoices, etc.)
+├── lib/
+│   ├── backend/      # Backend adapter (types, mock, firebase, firebase-admin)
+│   ├── mcp/          # MCP tools and the connector's server
+│   └── oauth/        # OAuth 2.1 server for the remote MCP endpoint
+├── modules/          # The module registry
+├── stores/           # Zustand stores
+└── types/            # TypeScript types and Zod schemas
+packages/
+├── kernel/           # Money, dates and the module contract
+├── ui/               # The UI kit (shadcn primitives, page kit)
+└── modules/rent/     # The Rent module
+```
+
+## Backend Adapter Pattern
+
+All data access goes through a unified adapter interface. Feature code never imports Firebase directly.
+
+```typescript
+import { getBackend } from "@/lib/backend"
+
+const backend = getBackend()
+await backend.db.getClients(userId)
+```
+
+The adapter is selected at build time by the `NEXT_PUBLIC_BACKEND` environment variable:
+- `mock` — In-memory store
+- `firebase` — Firestore via Firebase SDK
+
+See the [Backend Overview](/docs/backend/overview) for implementation details.
+
+## Modules
+
+Each area of the app is a module: `crm`, `invoicing`, `books`, `solutions` and `rent`. A deployment leaves some out with `NEXT_PUBLIC_DISABLED_MODULES`; their pages, links and MCP tools are gone, and a module that needs another one fails the build when that one is left out. The registry is `apps/web/src/modules`.
+
+## State Management
+
+- **Server state**: TanStack Query with custom hooks (`useClients`, `useInvoices`, etc.)
+- **Client state**: Zustand (`useSettingsStore`) for the theme setting
+- **Forms**: React Hook Form + Zod validation schemas
+
+## AI Integration
+
+AI is optional — the app is fully functional without it and has no AI layer of its own.
+
+AI features never gate core functionality. The MCP connector lets an assistant read and write the same data a person does, under the same rules.
+
+## Styling
+
+- Tailwind CSS v4 with the `cn()` utility for conditional classes
+- shadcn/ui component primitives (do not modify directly)
+- Charts are pure SVG — no external chart library

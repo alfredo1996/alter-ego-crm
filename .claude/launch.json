@@ -1,0 +1,17 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "mock",
+      "runtimeExecutable": "sh",
+      "runtimeArgs": ["-c", "NEXT_PUBLIC_BACKEND=mock pnpm dev"],
+      "port": 3000
+    },
+    {
+      "name": "emulator",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["dev:emulator"],
+      "port": 3003
+    }
+  ]
+}

@@ -1,0 +1,5 @@
+{
+  "extends": "../../apps/web/tsconfig.json",
+  "compilerOptions": { "incremental": false, "plugins": [], "paths": {} },
+  "include": ["src/**/*.ts", "src/**/*.tsx", "../../apps/web/vitest.setup.ts"]
+}

@@ -1,0 +1,41 @@
+---
+title: Deploy su Vercel
+description: Distribuisci Alter Ego su Vercel
+---
+
+## Panoramica
+
+Alter Ego è progettato per il deploy su Vercel senza configurazione aggiuntiva oltre alle variabili d'ambiente.
+
+## Passaggi
+
+1. Pusha il tuo repository su GitHub
+2. Importa il progetto nella [Dashboard Vercel](https://vercel.com/new)
+3. Imposta le variabili d'ambiente per il backend scelto
+4. Effettua il deploy
+
+## Variabili d'Ambiente
+
+Impostale nelle impostazioni del progetto Vercel:
+
+```ini
+NEXT_PUBLIC_BACKEND=firebase
+
+# Firebase
+NEXT_PUBLIC_FIREBASE_API_KEY=...
+NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=...
+NEXT_PUBLIC_FIREBASE_PROJECT_ID=...
+```
+
+## Impostazioni di Build
+
+- **Framework**: Next.js (rilevato automaticamente)
+- **Comando di build**: `pnpm build`
+- **Comando di installazione**: `pnpm install`
+- **Directory di output**: `.next` (predefinita)
+
+## Note
+
+- **Non** usare il backend `mock` in produzione
+- Assicurati che il tuo progetto Firebase abbia l'autenticazione configurata
+- Configura le regole di sicurezza appropriate prima di andare in produzione

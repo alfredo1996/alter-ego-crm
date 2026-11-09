@@ -1,0 +1,229 @@
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --radius: 0.5rem;
+  --color-background: hsl(var(--background));
+  --color-foreground: hsl(var(--foreground));
+  --color-card: hsl(var(--card));
+  --color-card-foreground: hsl(var(--card-foreground));
+  --color-popover: hsl(var(--popover));
+  --color-popover-foreground: hsl(var(--popover-foreground));
+  --color-primary: hsl(var(--primary));
+  --color-primary-foreground: hsl(var(--primary-foreground));
+  --color-secondary: hsl(var(--secondary));
+  --color-secondary-foreground: hsl(var(--secondary-foreground));
+  --color-muted: hsl(var(--muted));
+  --color-muted-foreground: hsl(var(--muted-foreground));
+  --color-accent: hsl(var(--accent));
+  --color-accent-foreground: hsl(var(--accent-foreground));
+  --color-destructive: hsl(var(--destructive));
+  --color-destructive-foreground: hsl(var(--destructive-foreground));
+  --color-border: hsl(var(--border));
+  --color-input: hsl(var(--input));
+  --color-ring: hsl(var(--ring));
+  --color-chart-1: hsl(var(--chart-1));
+  --color-chart-2: hsl(var(--chart-2));
+  --color-chart-3: hsl(var(--chart-3));
+  --color-chart-4: hsl(var(--chart-4));
+  --color-chart-5: hsl(var(--chart-5));
+  --color-sidebar: hsl(var(--sidebar));
+  --color-sidebar-foreground: hsl(var(--sidebar-foreground));
+  --color-sidebar-primary: hsl(var(--sidebar-primary));
+  --color-sidebar-primary-foreground: hsl(var(--sidebar-primary-foreground));
+  --color-sidebar-accent: hsl(var(--sidebar-accent));
+  --color-sidebar-accent-foreground: hsl(var(--sidebar-accent-foreground));
+  --color-sidebar-border: hsl(var(--sidebar-border));
+  --color-sidebar-ring: hsl(var(--sidebar-ring));
+
+  /* Finance semantic colors */
+  --color-income: hsl(var(--income));
+  --color-income-foreground: hsl(var(--income-foreground));
+
+  /* Redesign tokens (Components.dc). Every shadcn Card is rounded-xl, so cards
+     become 14px here, with no class churn; menus use rounded-[12px] explicitly. */
+  --radius-xl: 0.875rem;
+  --text-meta: 0.8125rem;
+  --text-meta--line-height: 1.25rem;
+  --color-hairline: hsl(var(--hairline));
+  --color-border-strong: hsl(var(--border-strong));
+  --color-surface-subtle: hsl(var(--surface-subtle));
+  --color-subtle-foreground: hsl(var(--subtle-foreground));
+  --color-success: hsl(var(--success));
+  --color-success-soft: hsl(var(--success-soft));
+  --color-success-soft-foreground: hsl(var(--success-soft-foreground));
+  --color-warning: hsl(var(--warning));
+  --color-warning-soft: hsl(var(--warning-soft));
+  --color-warning-soft-foreground: hsl(var(--warning-soft-foreground));
+  --color-info: hsl(var(--info));
+  --color-info-soft: hsl(var(--info-soft));
+  --color-info-soft-foreground: hsl(var(--info-soft-foreground));
+  --color-danger: hsl(var(--danger));
+  --color-danger-soft: hsl(var(--danger-soft));
+  --color-danger-soft-foreground: hsl(var(--danger-soft-foreground));
+
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+
+  --animate-accordion-down: accordion-down 0.2s ease-out;
+  --animate-accordion-up: accordion-up 0.2s ease-out;
+
+  @keyframes accordion-down {
+    from {
+      height: 0;
+    }
+    to {
+      height: var(--radix-accordion-content-height);
+    }
+  }
+
+  @keyframes accordion-up {
+    from {
+      height: var(--radix-accordion-content-height);
+    }
+    to {
+      height: 0;
+    }
+  }
+}
+
+:root {
+  --background: 0 0% 100%;
+  --foreground: 0 0% 3.9%;
+  --card: 0 0% 100%;
+  --card-foreground: 0 0% 3.9%;
+  --popover: 0 0% 100%;
+  --popover-foreground: 0 0% 3.9%;
+  --primary: 0 0% 9%;
+  --primary-foreground: 0 0% 98%;
+  --secondary: 0 0% 96.1%;
+  --secondary-foreground: 0 0% 9%;
+  --muted: 0 0% 96.1%;
+  --muted-foreground: 0 0% 45.1%;
+  --accent: 0 0% 96.1%;
+  --accent-foreground: 0 0% 9%;
+  /* red-600: white on it and it on white both keep AA (4.8:1); red-500 was 3.8:1. */
+  --destructive: 0 72% 51%;
+  --destructive-foreground: 0 0% 98%;
+  --border: 0 0% 89.8%;
+  --input: 0 0% 89.8%;
+  --ring: 0 0% 3.9%;
+  --chart-1: 12 76% 61%;
+  --chart-2: 173 58% 39%;
+  --chart-3: 197 37% 24%;
+  --chart-4: 43 74% 66%;
+  --chart-5: 27 87% 67%;
+  --sidebar: 0 0% 98%;
+  --sidebar-foreground: 0 0% 3.9%;
+  --sidebar-primary: 0 0% 9%;
+  --sidebar-primary-foreground: 0 0% 98%;
+  --sidebar-accent: 0 0% 92.5%;
+  --sidebar-accent-foreground: 0 0% 9%;
+  --sidebar-border: 0 0% 89.8%;
+  --sidebar-ring: 0 0% 3.9%;
+
+  /* Redesign: hairline dividers, a strong border, a subtle surface, and four soft tones
+     (soft background + AA text: green 6.5:1, amber 6.9:1, sky 7.0:1, red 7.4:1). */
+  --hairline: 0 0% 94.1%;
+  --border-strong: 0 0% 83.1%;
+  --surface-subtle: 0 0% 98.8%;
+  --subtle-foreground: 0 0% 32.2%;
+  --success: 142 76% 36%;
+  --success-soft: 141 84% 93%;
+  --success-soft-foreground: 143 64% 24%;
+  --warning: 38 92% 50%;
+  --warning-soft: 48 96% 89%;
+  --warning-soft-foreground: 23 83% 31%;
+  --info: 199 89% 48%;
+  --info-soft: 204 94% 94%;
+  --info-soft-foreground: 201 90% 27%;
+  --danger: 0 72% 51%;
+  --danger-soft: 0 93% 94%;
+  --danger-soft-foreground: 0 70% 35%;
+
+  /* Finance semantic */
+  --income: 142 76% 36%;
+  --income-foreground: 0 0% 98%;
+}
+
+.dark {
+  /* Native controls (a date input's calendar icon, spinners, scrollbars) drawn for a dark page. */
+  color-scheme: dark;
+  --background: 0 0% 3.9%;
+  --foreground: 0 0% 98%;
+  --card: 0 0% 3.9%;
+  --card-foreground: 0 0% 98%;
+  --popover: 0 0% 3.9%;
+  --popover-foreground: 0 0% 98%;
+  --primary: 0 0% 98%;
+  --primary-foreground: 0 0% 9%;
+  --secondary: 0 0% 14.9%;
+  --secondary-foreground: 0 0% 98%;
+  --muted: 0 0% 14.9%;
+  --muted-foreground: 0 0% 63.9%;
+  --accent: 0 0% 14.9%;
+  --accent-foreground: 0 0% 98%;
+  /* Red text on the page reads (4.1:1, was 2:1) and white on red keeps AA (4.6:1). */
+  --destructive: 0 72% 51%;
+  --destructive-foreground: 0 0% 98%;
+  --border: 0 0% 14.9%;
+  --input: 0 0% 14.9%;
+  --ring: 0 0% 83.1%;
+  --chart-1: 220 70% 50%;
+  --chart-2: 160 60% 45%;
+  --chart-3: 30 80% 55%;
+  --chart-4: 280 65% 60%;
+  --chart-5: 340 75% 55%;
+  --sidebar: 0 0% 3.9%;
+  --sidebar-foreground: 0 0% 98%;
+  --sidebar-primary: 0 0% 98%;
+  --sidebar-primary-foreground: 0 0% 9%;
+  --sidebar-accent: 0 0% 14.9%;
+  --sidebar-accent-foreground: 0 0% 98%;
+  --sidebar-border: 0 0% 14.9%;
+  --sidebar-ring: 0 0% 83.1%;
+
+  --hairline: 0 0% 11%;
+  --border-strong: 0 0% 25%;
+  --surface-subtle: 0 0% 6%;
+  --subtle-foreground: 0 0% 72%;
+  --success: 142 71% 45%;
+  --success-soft: 143 60% 11%;
+  --success-soft-foreground: 142 77% 73%;
+  --warning: 43 96% 56%;
+  --warning-soft: 22 76% 10%;
+  --warning-soft-foreground: 46 97% 65%;
+  --info: 198 93% 60%;
+  --info-soft: 205 68% 11%;
+  --info-soft-foreground: 199 95% 74%;
+  --danger: 0 84% 60%;
+  --danger-soft: 0 64% 11%;
+  --danger-soft-foreground: 0 94% 82%;
+
+  /* Finance semantic */
+  --income: 142 69% 45%;
+  --income-foreground: 0 0% 98%;
+}
+
+/* Phone (below sm) values, then sm and up: a Card's padding (18 / 22px) and a small
+   Button's text (12 / 13px). Variables, so a caller's p-4 or text-xs still wins. */
+:root {
+  --card-padding: 1.125rem;
+  --button-sm-text: 0.75rem;
+}
+@media (width >= 40rem) {
+  :root {
+    --card-padding: 1.375rem;
+    --button-sm-text: 0.8125rem;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  /* No font-family here: Tailwind's preflight sets Geist (--font-sans) on html, from the
+     next/font variables app/layout.tsx puts on <html>. */
+  body {
+    @apply bg-background text-foreground;
+  }
+}

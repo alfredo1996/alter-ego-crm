@@ -1,0 +1,75 @@
+---
+title: Convenzioni
+description: Convenzioni di codifica e pattern utilizzati in Alter Ego
+---
+
+## Nomenclatura File
+
+- **kebab-case** per tutti i file: `use-clients.ts`, `client-card.tsx`
+- Test collocati in directory `__tests__/`: `src/lib/__tests__/dates.test.ts`
+
+## Esportazioni
+
+- **Solo named export** — nessun export di default tranne le pagine Next.js
+- I componenti usano il pattern `forwardRef` con `displayName`
+
+## Import
+
+Usa sempre l'alias di percorso `@/*`:
+
+```typescript
+// Corretto
+import { getBackend } from "@/lib/backend"
+
+// Sbagliato
+import { getBackend } from "../../lib/backend"
+```
+
+## Stile
+
+Usa `cn()` per classi Tailwind condizionali:
+
+```typescript
+import { cn } from "@alter-ego/ui/utils"
+
+<div className={cn("p-4", isActive && "bg-primary/10")} />
+```
+
+## Validazione
+
+Schemi Zod per tutti i confini dati esterni:
+
+```typescript
+import { createClientSchema } from "@/types/schemas"
+```
+
+## Accesso al Backend
+
+Non importare mai Firebase direttamente:
+
+```typescript
+// Corretto
+import { getBackend } from "@/lib/backend"
+
+// Sbagliato
+import { collection, getDocs } from "firebase/firestore"
+```
+
+## Convenzioni Git
+
+- **Commit**: Conventional Commits (`feat:`, `fix:`, `refactor:`, `test:`, `docs:`, `chore:`)
+- **Branch**: Prefissi `feat/`, `fix/`, `refactor/`
+- **Titoli PR**: Seguono la convenzione dei commit
+
+## Valuta
+
+Usa sempre l'hook `useCurrency()` — mai hardcodare `Intl.NumberFormat`:
+
+```typescript
+const { format } = useCurrency()
+// format(1234.56) → "€1.234,56"
+```
+
+## Grafici
+
+Tutti i grafici sono SVG puri. La funzione `format` viene sempre passata come prop, mai importata direttamente dentro i componenti grafici.

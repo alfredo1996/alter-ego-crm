@@ -1,0 +1,76 @@
+name: Documentation
+
+# The build runs on every change to the docs so a broken page is caught in review.
+# Publishing to GitHub Pages is a repository setting; this workflow builds the docs.
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "content/docs/**"
+      - "docs-site/**"
+      - ".github/workflows/docs.yml"
+  push:
+    branches: [main]
+    paths:
+      - "content/docs/**"
+      - "docs-site/**"
+      - ".github/workflows/docs.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build static site
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4.4.0
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Build
+        working-directory: docs-site
+        # A project site is served from /<repo>, so the base path has to match or
+        # every asset 404s. Unset it for a user or organisation site.
+        env:
+          DOCS_BASE_PATH: /${{ github.event.repository.name }}
+        run: pnpm build
+
+      - name: Check the export actually produced pages
+        working-directory: docs-site
+        run: |
+          count=$(find out -name index.html | wc -l)
+          echo "$count pages"
+          # 22 MDX files across two languages, plus the root and language redirects.
+          if [ "$count" -lt 24 ]; then
+            echo "::error::Expected at least 24 pages, found $count"
+            exit 1
+          fi
+
+      - uses: actions/upload-pages-artifact@56afc609e74202658d3ffba0e8f6dda462b719fa # v3.0.1
+        with:
+          path: docs-site/out
+
+  deploy:
+    name: Publish to Pages
+    # Manual: run it once Pages is enabled in the repository settings.
+    if: github.event_name == 'workflow_dispatch'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e # v4.0.5

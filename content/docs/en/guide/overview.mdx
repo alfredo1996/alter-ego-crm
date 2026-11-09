@@ -1,0 +1,26 @@
+---
+title: Overview
+description: What each area of the app does, and the modules a deployment can switch off
+---
+
+Alter Ego CRM runs the company side of a small Italian SRL. Every area below is a **module**; a deployment can leave some out with `NEXT_PUBLIC_DISABLED_MODULES`, and Settings lists which ones are on.
+
+| Module | What it covers |
+|---|---|
+| **CRM** | Pipeline of deals, clients, contracts and their amendments, collaborators, tasks, the Plan (capacity, hours and quarters) and deadlines. |
+| **Invoicing** | Invoices and credit notes, unbilled hours, invoice files and the accountant's package. Needs CRM. |
+| **Books** | The cash book (with its workbook import), costs, the runway and the Month End close. |
+| **Solutions** | The solution catalog and its data model graph. Needs CRM. |
+| **Rent** | Tenants and yearly leases, with rent payments linked to the month they cover. Needs Books. |
+
+## Getting around
+
+The sidebar lists the pages of the modules that are on; on a phone it opens from the menu button. **Settings** is pinned below the links.
+
+## MCP connector
+
+The app serves an MCP server at `/api/mcp`, with OAuth 2.1 and API keys, so an AI assistant can read and write the same data. Connect it from **Settings, Data**. The tools of a module that is switched off are not offered.
+
+## Cash flow only
+
+The app never computes taxes. It keeps the cash flow, the contracts and the books; the tax return is the accountant's job.

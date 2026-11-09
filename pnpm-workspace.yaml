@@ -1,0 +1,16 @@
+packages:
+  - "apps/*"
+  - "packages/*"
+  - "packages/modules/*"
+  - "docs-site"
+
+ignoredBuiltDependencies:
+  - sharp
+  - unrs-resolver
+
+# swagger-ui-react's two helpers declare react <= 18 and work on 19; strict-peer-dependencies
+# (.npmrc) would otherwise fail every resolution that is not --frozen-lockfile.
+peerDependencyRules:
+  allowedVersions:
+    react-debounce-input>react: "19"
+    react-inspector>react: "19"
