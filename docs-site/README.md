@@ -25,9 +25,9 @@ export produced exactly the expected number of pages (the count is in the
 workflow), so a broken or missing page is caught in review. Change the count when
 a page is added or removed.
 
-**Publishing is manual for now.** GitHub Pages has to be enabled in the
-repository settings first. Then run the workflow by hand from the Actions tab,
-or change the `deploy` job's condition to run on pushes to `main`.
+The workflow's `deploy` job publishes to GitHub Pages on every push to `main` that
+changes the docs, and when started by hand from the Actions tab. The site is at
+https://alfredo1996.github.io/alter-ego-crm/.
 
 `DOCS_BASE_PATH` is the sub-path a project site is served from, `/alter-ego-crm` for
 `<user>.github.io/alter-ego-crm`. The workflow sets it from the repository name. Leave it

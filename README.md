@@ -230,7 +230,7 @@ pnpm test:firebase:docker    # starts the emulator via Docker first
 
 ## Documentation
 
-- **`/docs`** — Fumadocs site covering architecture, the backend adapters, deployment, and contributing guides (English, and Italian under `/it/docs`)
+- **[alfredo1996.github.io/alter-ego-crm](https://alfredo1996.github.io/alter-ego-crm/)** — the docs site, covering architecture, the backend adapters, deployment, and contributing guides, in English and Italian. The app serves the same pages under `/docs`
 - **[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)** — Deploy your own on Firebase App Hosting
 - **[docs/SELF-HOSTING.md](docs/SELF-HOSTING.md)** — Running it locally with persistent data, and connecting an MCP client
 

@@ -1,7 +1,7 @@
 name: Documentation
 
 # The build runs on every change to the docs so a broken page is caught in review.
-# Publishing to GitHub Pages is a repository setting; this workflow builds the docs.
+# A push to main that changes the docs also publishes the site to GitHub Pages.
 on:
   pull_request:
     branches: [main]
@@ -62,8 +62,8 @@ jobs:
 
   deploy:
     name: Publish to Pages
-    # Manual: run it once Pages is enabled in the repository settings.
-    if: github.event_name == 'workflow_dispatch'
+    # Every push to main that changes the docs publishes them; a manual run does too.
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
     needs: build
     runs-on: ubuntu-latest
     permissions:
