@@ -32,7 +32,7 @@ pnpm local:stop      # exports data on the way out
 
 ## Invoice files
 
-Not on `pnpm dev:emulator`: `docker-compose.local.yml` does not expose Storage (`docker-compose.yml` publishes port 19199 for it), so attaching an invoice file to a cost or an
+Not on `pnpm dev:emulator`: `docker-compose.local.yml` starts only Auth and Firestore (`--only auth,firestore`) and mounts no `storage.rules`; `docker-compose.yml` also runs Storage, on port 19199. So attaching an invoice file to a cost or an
 invoice fails there. The mock backend (`pnpm dev`) holds invoice files in memory.
 
 ## Where your data lives
@@ -91,8 +91,8 @@ scopes: **`data:read`** and **`data:write`**. Clients discover them from
 
 Creating an API key (`/api/keys`) and approving a remote client
 (`/api/oauth/authorize`) call `isOwner` on the emulator too, so for either one your
-uid has to be in `apps/web/src/lib/owner-uid.ts`. The UI and the stdio MCP server
-work with any local account.
+uid has to be in `apps/web/src/lib/owner-uid.ts`. Everything else in the UI, and
+the stdio MCP server, work with any local account.
 
 Try it without a client:
 

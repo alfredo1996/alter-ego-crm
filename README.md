@@ -8,8 +8,8 @@ Alter Ego CRM is the management app of an Italian SRL (a small consultancy, for
 one owner), built on Next.js 16. It covers:
 
 - **CRM** — the sales pipeline, clients, contracts and their amendments,
-  collaborators, tasks, deadlines, and the Plan: capacity, hours, the runway
-  and the quarters.
+  collaborators, tasks, deadlines, and the Plan: capacity and hours (the runway
+  appears with Books, the quarters with Books and Invoicing).
 - **Invoicing** — invoices and credit notes, unbilled hours, invoice files
   (FatturaPA XML, signed or not, or PDF) and the accountant's package.
 - **Books** — the cash book over the company accounts (with the workbook
@@ -62,8 +62,9 @@ Sign in with a valid email and a password of six or more characters — the mock
 Data lives in the browser tab and is gone on reload — fine for a look around,
 not for real use.
 
-On a real backend, sign-in admits one user id, set in `apps/web/src/lib/owner-uid.ts`
-and in the rules; see [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
+On a real backend, any Auth account can sign in, but the Firestore rules admit
+one user id (set in `apps/web/src/lib/owner-uid.ts` and in the rules) and deny
+the rest; see [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
 
 ### Self-hosted, with data that persists
 

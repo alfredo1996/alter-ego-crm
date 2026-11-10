@@ -63,7 +63,7 @@ import { collection, getDocs } from "firebase/firestore"
 
 ## Currency
 
-Company money is euro. Format it with `eur` (whole euros) or `eurShort` (cents kept when there are any) from `@alter-ego/kernel/currency`; never build an `Intl.NumberFormat` in a component:
+Company money is euro. Format it with `eur` (whole euros) or `eurShort` (cents kept when there are any) from `@alter-ego/kernel/currency`; a component builds its own `Intl.NumberFormat` only for a form the kernel lacks:
 
 ```typescript
 import { eur } from "@alter-ego/kernel/currency"

@@ -41,16 +41,23 @@ const PNPM_BUILTINS = new Set([
 ]); // prettier-ignore
 
 // Only these prefixes are relative to apps/web.
-const WEB_RELATIVE = /^(src|e2e|scripts)\//;
+const WEB_RELATIVE = /^(src|e2e)\//;
 
 // Ceiling: only inline code and links are checked. A path inside a fenced block
-// (a file tree, a shell snippet) is not, so those can still go stale.
+// (a file tree, a shell snippet) is not, so those can still go stale. A bare file
+// name is checked only when it is a root-level kind (BARE_FILE below): any other
+// bare name, such as `package.json`, is not.
 
 // Written by the reader on their own machine, never committed.
 const LOCAL_ONLY = new Set(["apps/web/.env.local"]);
 
 const REPO_PATH =
   /^(apps|packages|firestore|docker|scripts|docs|content|docs-site|\.github|src|e2e)\//;
+
+// A bare name (no slash) of a config, rules or root file; it lives at the root,
+// in apps/web or in firestore/.
+const BARE_FILE = /^(?:[\w.-]+\.(?:ya?ml|rules)|\.nvmrc|LICENSE)$/;
+const BARE_DIRS = ["", "apps/web", "firestore"];
 
 function lines(file: string) {
   return readFileSync(file, "utf8")
@@ -90,13 +97,18 @@ describe("documentation matches the repository", () => {
     const bad = offenders((text) =>
       [...text.matchAll(/`([^`\s]+)`/g)]
         .map((m) => m[1])
-        .filter((p) => REPO_PATH.test(p) && !/[*<>{}$|…]|\.\.\./.test(p))
+        .filter(
+          (p) =>
+            (REPO_PATH.test(p) || BARE_FILE.test(p)) &&
+            !/[*<>{}$|…]|\.\.\./.test(p),
+        )
         .map((p) => p.replace(/:\d+$/, "").replace(/[/.,]+$/, ""))
         .filter(
           (p) =>
             !LOCAL_ONLY.has(p) &&
             !existsSync(join(ROOT, p)) &&
-            !(WEB_RELATIVE.test(p) && existsSync(join(ROOT, "apps/web", p))),
+            !(WEB_RELATIVE.test(p) && existsSync(join(ROOT, "apps/web", p))) &&
+            !(BARE_FILE.test(p) && BARE_DIRS.some((d) => existsSync(join(ROOT, d, p)))),
         ),
     );
     expect(bad).toEqual([]);

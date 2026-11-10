@@ -50,7 +50,7 @@ jobs:
           count=$(find out -name index.html | wc -l)
           echo "$count pages"
           # 20 MDX files across two languages, plus the root and language redirects.
-          # Raise this when a page is added.
+          # Change this when a page is added or removed.
           if [ "$count" -ne 23 ]; then
             echo "::error::Expected 23 pages, found $count"
             exit 1

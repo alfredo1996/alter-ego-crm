@@ -63,7 +63,7 @@ import { collection, getDocs } from "firebase/firestore"
 
 ## Valuta
 
-Il denaro aziendale è in euro. Formattalo con `eur` (euro interi) o `eurShort` (centesimi se ci sono) da `@alter-ego/kernel/currency`; non costruire mai un `Intl.NumberFormat` in un componente:
+Il denaro aziendale è in euro. Formattalo con `eur` (euro interi) o `eurShort` (centesimi se ci sono) da `@alter-ego/kernel/currency`; un componente costruisce un proprio `Intl.NumberFormat` solo per una forma che il kernel non offre:
 
 ```typescript
 import { eur } from "@alter-ego/kernel/currency"

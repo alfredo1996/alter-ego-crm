@@ -10,7 +10,7 @@ pnpm --dir docs-site build   # static output in docs-site/out
 
 ## Why this is a second app
 
-The main app cannot be exported. It has six API route handlers and a middleware,
+The main app cannot be exported. It has API route handlers and a middleware,
 and `output: "export"` supports neither. This app carries only the docs routes and
 reads the same `../content/docs`, so there is one copy of the prose and no risk of
 the two drifting.
@@ -22,8 +22,8 @@ resolve `next/package.json` from here.
 
 `.github/workflows/docs.yml` builds on every change to the docs and asserts the
 export produced exactly the expected number of pages (the count is in the
-workflow), so a broken or missing page is caught in review. Raise the count when
-a page is added.
+workflow), so a broken or missing page is caught in review. Change the count when
+a page is added or removed.
 
 **Publishing is manual for now.** GitHub Pages has to be enabled in the
 repository settings first. Then run the workflow by hand from the Actions tab,
