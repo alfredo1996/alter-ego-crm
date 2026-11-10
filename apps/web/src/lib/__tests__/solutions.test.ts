@@ -1,23 +1,27 @@
 import { describe, expect, it } from "vitest"
 
 import {
+  completeStep,
   contractState,
   filledSections,
   filterSolutions,
   historyEntries,
   lineLabel,
   missingSections,
+  nowStep,
+  sectionsFor,
+  stepContract,
   solutionFilters,
   solutionNameTaken,
   usedStack,
 } from "@/lib/solutions"
 import { normalizeSolutionSections } from "@/types/schemas"
 
-import type { Solution } from "@/types"
+import type { Solution, SolutionStep } from "@/types"
 
 /** Made-up data: Nordwind Retail S.p.A.'s product knowledge graph and a second, older solution. */
 const solution = (o: Partial<Solution> & Pick<Solution, "id">): Solution => ({
-  userId: "u1", clientId: "c1", engagementId: null, name: o.id, status: "proposed", domain: null, stack: [],
+  userId: "u1", clientId: "c1", engagementId: null, name: o.id, status: "proposed", kind: "product", target: null, steps: [], domain: null, stack: [],
   sections: normalizeSolutionSections({}), entities: [], relations: [],
   createdAt: new Date(2026, 0, 1), updatedAt: new Date(2026, 0, 1), ...o,
 })
@@ -90,7 +94,8 @@ describe("missingSections", () => {
   it("lists the sections with no text in their order, a blank one included", () => {
     const sections = normalizeSolutionSections({ purpose: "One graph for the catalog", kpis: "  \n", results: "Search time halved" })
     expect(missingSections({ sections })).toEqual(["requirements", "kpis", "sources", "model", "architecture", "steps", "history"])
-    expect(missingSections(GRAPH)).toHaveLength(9)
+    // A solution carries its kind, and a product no longer asks for Steps and History.
+    expect(missingSections(GRAPH)).toHaveLength(7)
   })
 })
 
@@ -167,5 +172,74 @@ describe("lineLabel", () => {
     expect(lineLabel("10:30 standup with the catalogue team")).toBeNull()
     expect(lineLabel("A label that runs on for far too long to be one: text")).toBeNull()
     expect(lineLabel("Ends with a colon:")).toBeNull()
+  })
+})
+
+// ─── The road of steps ───────────────────────────────────────────────────────
+
+const stp = (title: string, state: SolutionStep["state"], over: Partial<SolutionStep> = {}): SolutionStep => ({
+  title, state, fromMonth: "2026-03", toMonth: null, paidBy: null, goal: null, outcome: null, doneOn: null, ...over,
+})
+
+describe("completeStep", () => {
+  const road = [stp("Audit", "done", { doneOn: "2026-04-02" }), stp("Tune", "now"), stp("Review", "next"), stp("Hand over", "later")]
+
+  it("marks the Now step Done with its outcome and the day, and makes the next step Now", () => {
+    const out = completeStep(road, 1, "Reports under 2 s", "2026-05-20")
+    expect(out.map((s) => s.state)).toEqual(["done", "done", "now", "later"])
+    expect(out[1]).toMatchObject({ outcome: "Reports under 2 s", doneOn: "2026-05-20" })
+    expect(road[1].state).toBe("now")
+  })
+
+  it("moves Now past a step that is already Done, and to nobody after the last", () => {
+    const skipped = [stp("A", "now"), stp("B", "done"), stp("C", "later")]
+    expect(completeStep(skipped, 0, "ok", "2026-05-20").map((s) => s.state)).toEqual(["done", "done", "now"])
+    expect(completeStep([stp("A", "now")], 0, "ok", "2026-05-20").map((s) => s.state)).toEqual(["done"])
+  })
+
+  it("leaves Now where it is when a step that was not Now is completed", () => {
+    expect(completeStep(road, 3, "ok", "2026-05-20").map((s) => s.state)).toEqual(["done", "now", "next", "done"])
+  })
+})
+
+describe("nowStep", () => {
+  it("is the Now step, or undefined", () => {
+    expect(nowStep([stp("A", "done"), stp("B", "now")])?.title).toBe("B")
+    expect(nowStep([stp("A", "next")])).toBeUndefined()
+  })
+})
+
+describe("stepContract", () => {
+  const opportunities = [{ id: "o1", engagementId: "e1" }, { id: "o2", engagementId: null }]
+
+  it.each([
+    ["a won opportunity gives its contract", { type: "opportunity", id: "o1" }, { type: "contract", id: "e1" }],
+    ["an open opportunity stays the opportunity", { type: "opportunity", id: "o2" }, { type: "opportunity", id: "o2" }],
+    ["a contract stays the contract", { type: "contract", id: "e9" }, { type: "contract", id: "e9" }],
+    ["an opportunity no longer there stays as stored", { type: "opportunity", id: "gone" }, { type: "opportunity", id: "gone" }],
+  ] as const)("%s", (_, paidBy, expected) => {
+    expect(stepContract(stp("A", "next", { paidBy }), opportunities)).toEqual(expected)
+  })
+
+  it("is null for a step nobody pays for", () => {
+    expect(stepContract(stp("A", "next"), opportunities)).toBeNull()
+  })
+})
+
+describe("sectionsFor", () => {
+  it("lists the kind's sections in order, an Advisory's results as Results and Lessons", () => {
+    expect(sectionsFor("advisory").map((s) => [s.key, s.label])).toEqual([
+      ["purpose", "Purpose and Target"], ["kpis", "KPIs"], ["results", "Results and Lessons"],
+    ])
+    expect(sectionsFor("product").map((s) => s.key)).toEqual(["purpose", "requirements", "kpis", "sources", "model", "architecture", "results"])
+    expect(sectionsFor("product").find((s) => s.key === "results")?.label).toBe("Results")
+  })
+})
+
+describe("missingSections by kind", () => {
+  it("asks only the kind's sections, and every section when the kind is not known", () => {
+    const sections = normalizeSolutionSections({ purpose: "Why" })
+    expect(missingSections({ sections, kind: "advisory" })).toEqual(["kpis", "results"])
+    expect(missingSections({ sections, kind: "product" })).toEqual(["requirements", "kpis", "sources", "model", "architecture", "results"])
   })
 })

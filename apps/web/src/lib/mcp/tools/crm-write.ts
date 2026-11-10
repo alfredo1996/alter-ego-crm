@@ -103,6 +103,7 @@ import {
   resolveInvoice,
   resolveInvoiceContract,
   resolveSolution,
+  resolveStepPayer,
   planMonths,
   resolveSupplierInvoice,
   resolveTask,
@@ -113,7 +114,7 @@ import {
 import { fileHolder, fileTargetInput, fileText, ownFolder } from "@/lib/mcp/tools/invoice-files"
 import { healthByContract } from "@/lib/meetings"
 import { isOpen, STAGE_LABELS, STAGE_PROBABILITY } from "@/lib/opportunities"
-import { solutionNameTaken } from "@/lib/solutions"
+import { completeStep, sectionsFor, solutionNameTaken, stepIndex } from "@/lib/solutions"
 import { MAX_LABELS, statusOf, taskClientId, taskStatusUpdate } from "@/lib/tasks"
 import { cellLimits, HOURS_AHEAD_MONTHS, hoursRefusal, lastLoggableDay, limitMessage, limitRefusal, monthPlanDays, planWarning } from "@/lib/timecards"
 import { z } from "@/lib/zod"
@@ -140,8 +141,10 @@ import {
   SOLUTION_SECTION_MAX,
   SOLUTION_SECTIONS,
   solutionFields,
+  solutionKindSchema,
   solutionSectionKeySchema,
   solutionStatusSchema,
+  SOLUTION_TARGET_MAX,
   updateMeetingSchema,
 } from "@/types/schemas"
 
@@ -163,6 +166,7 @@ import type {
   Meeting,
   Opportunity,
   Solution,
+  SolutionStep,
   Timecard,
   UpdateCollaboratorInput,
   UpdateInvoiceInput,
@@ -464,7 +468,9 @@ function refuseInvalidSolution(s: Solution, update: UpdateSolutionInput): void {
     if (!(e instanceof z.ZodError)) throw e
     const entities = update.entities ?? s.entities
     const relations = update.relations ?? s.relations
+    const steps = update.steps ?? s.steps
     const said = e.issues.map(({ path: [list, k], message }) => {
+      if (list === "steps" && typeof k === "number") return `Step ${k + 1}${steps[k] ? ` "${steps[k].title}"` : ""}: ${message}`
       const r = list === "relations" ? relations[k as number] : undefined
       if (r) return `Relation ${r.from} -${r.type}-> ${r.to}: ${message}${update.relations ? "" : " (a stored relation: send relations too, without it)"}`
       const entity = list === "entities" ? entities[k as number] : undefined
@@ -4363,9 +4369,12 @@ export function registerCrmWriteTools(server: McpServer): void {
         "pre-sales. Not a contract (convert_to_engagement) nor a call (log_meeting). «documentiamo il progetto di " +
         "Acme» → client + name. client and name are required, and a name the client already has is refused: update " +
         "that one. engagementId links it to one of that client's contracts (id or name, closed ones too); without " +
-        "it the solution is pre-sales. status defaults to proposed (building, delivered, retired); domain is one word " +
-        "to group by ('retail'); stack lists the technologies as lowercase tags ('neo4j', 'kafka'). It starts with " +
-        "every section empty, and the reply lists the nine sections with one question each: the end-of-project " +
+        "it the solution is pre-sales. status defaults to proposed (building, delivered, retired); kind is product " +
+        "(the default: something built) or advisory (help given, such as tuning the client's queries); target is the " +
+        `end state the work leads to, up to ${SOLUTION_TARGET_MAX} characters; the road of steps to it is added with ` +
+        "update_solution. domain is one word to group by ('retail'); stack lists the technologies as lowercase tags " +
+        "('neo4j', 'kafka'). It starts with every section empty, and the reply lists the sections its kind asks for " +
+        "(a product seven, an advisory three: purpose, kpis, results) with one question each: the end-of-project " +
         "interview. Ask the owner ONE question at a time, in that order; after each answer call update_solution with " +
         "the section and the answer as text (the owner's facts, in the language they used, nothing added), then ask " +
         "the next. For model, send entities and relations too. Skip a section the owner has nothing for.",
@@ -4374,16 +4383,20 @@ export function registerCrmWriteTools(server: McpServer): void {
         name: z.string().trim().min(1).max(200),
         engagementId: z.string().min(1).optional(),
         status: solutionStatusSchema.optional(),
+        kind: solutionKindSchema.optional(),
+        // Over the cap is refused with the schema's message, not the SDK's.
+        target: z.string().optional(),
         domain: z.string().max(60).optional(),
         stack: z.array(z.string().max(40)).max(MAX_SOLUTION_STACK).optional(),
       }),
     },
     async (input, ctx) =>
       audited(ctx, "create_solution", input, async (userId) => {
-        const [clients, engagements, solutions] = await Promise.all([
+        const [clients, engagements, solutions, opportunities] = await Promise.all([
           db().getClients(userId),
           db().getEngagements(userId),
           db().getSolutions(userId),
+          db().getOpportunities(userId),
         ])
         // Archived clients too: a past project is documented after the client has gone.
         const client = resolveClient(clients, input.client, true)
@@ -4398,6 +4411,8 @@ export function registerCrmWriteTools(server: McpServer): void {
             name: input.name,
             engagementId: engagement?.id ?? null,
             status: input.status,
+            kind: input.kind,
+            target: input.target?.trim() || null,
             domain: input.domain?.trim() || null,
             stack: input.stack,
           }),
@@ -4405,11 +4420,11 @@ export function registerCrmWriteTools(server: McpServer): void {
         return {
           payload: {
             summary:
-              `Solution "${created.name}" created for ${client.name}` +
+              `Solution "${created.name}" (${created.kind}) created for ${client.name}` +
               `${engagement ? `, contract ${engagementLabel(engagement)}` : " (pre-sales)"}, status ${created.status}. ` +
               "Every section is empty: start the interview.",
-            solution: solutionCard(created, clients, engagements),
-            interview: SOLUTION_SECTIONS.map(({ key, label, question }) => ({ section: key, label, question })),
+            solution: solutionCard(created, clients, engagements, opportunities),
+            interview: sectionsFor(created.kind).map(({ key, label, question }) => ({ section: key, label, question })),
             next:
               "Ask the owner one question at a time, in this order. After each answer call update_solution with " +
               `solution "${created.id}", the section and the answer as text, then ask the next question. ` +
@@ -4438,10 +4453,30 @@ export function registerCrmWriteTools(server: McpServer): void {
         "(null removes it). solution is a name or id; client narrows it when two clients have one by that name. " +
         "During the interview create_solution started, call it after each answer: the reply lists the sections still " +
         "empty with their questions. «aggiungi alla storia che a maggio siamo passati a Kafka» → section history, " +
-        "append true.",
+        "append true. kind (product or advisory) and target (the end state, up to " +
+        `${SOLUTION_TARGET_MAX} characters; null removes it) change as they are. The road to the target is steps, ` +
+        "one step per call: step is its number (1 is the first) or its title, and a title no step has adds a new " +
+        "step at the end (it needs fromMonth, YYYY-MM). With step, any of stepTitle (renames), stepState (done, now, " +
+        "next, later; the default for a new step is next), fromMonth, toMonth (never before fromMonth; null = " +
+        "open-ended), paidBy (a contract or opportunity of this client, id or name; null = none; an opportunity " +
+        "follows its contract once it is won), goal and outcome (null clears). At most 20 steps and one Now: moving " +
+        "a second to now is refused. Marking a step done needs its outcome; if it was the Now step, the next open " +
+        "step becomes Now. removeStep (number or title) deletes one. «siamo passati alla fase due» → mark the Now " +
+        "step done with its outcome.",
       inputSchema: z.object({
         solution: z.string().trim().min(1),
         client: z.string().min(1).optional(),
+        kind: solutionKindSchema.optional(),
+        target: z.string().nullable().optional(),
+        step: z.union([z.number().int().min(1), z.string().trim().min(1)]).optional(),
+        stepTitle: z.string().trim().min(1).max(200).optional(),
+        stepState: z.enum(["done", "now", "next", "later"]).optional(),
+        fromMonth: z.string().optional(),
+        toMonth: z.string().nullable().optional(),
+        paidBy: z.string().nullable().optional(),
+        goal: z.string().nullable().optional(),
+        outcome: z.string().nullable().optional(),
+        removeStep: z.union([z.number().int().min(1), z.string().trim().min(1)]).optional(),
         section: solutionSectionKeySchema.optional(),
         // Over the cap is refused in the handler, with the length: never cut.
         text: z.string().nullable().optional(),
@@ -4461,9 +4496,15 @@ export function registerCrmWriteTools(server: McpServer): void {
       audited(ctx, "update_solution", input, async (userId) => {
         // Kept off the Zod schema for the same reason as update_task's guard.
         const { solution: query, client: clientQuery, section, text, append, ...fields } = input
-        if (section === undefined && text === undefined && Object.values(fields).every((v) => v === undefined)) {
+        const { step: stepRef, stepTitle, stepState, fromMonth, toMonth, paidBy, goal, outcome, removeStep, ...rest } = fields
+        const stepFields = { stepTitle, stepState, fromMonth, toMonth, paidBy, goal, outcome }
+        if (stepRef === undefined && Object.values(stepFields).some((v) => v !== undefined)) {
+          throw new ToolInputError("Pass step (its number, or the title of a new one) with stepTitle, stepState, fromMonth, toMonth, paidBy, goal or outcome.")
+        }
+        if (stepRef !== undefined && removeStep !== undefined) throw new ToolInputError("Pass step or removeStep, not both.")
+        if (section === undefined && text === undefined && stepRef === undefined && removeStep === undefined && Object.values(rest).every((v) => v === undefined)) {
           throw new ToolInputError(
-            "Nothing to change: pass section with text, entities, relations, stack, status, engagementId, name or domain."
+            "Nothing to change: pass section with text, entities, relations, stack, status, kind, target, step, removeStep, engagementId, name or domain."
           )
         }
         if (text !== undefined && !section) {
@@ -4472,10 +4513,11 @@ export function registerCrmWriteTools(server: McpServer): void {
         if (section && text === undefined) throw new ToolInputError(`Pass text for ${section} ("" or null clears it).`)
         if (append && !text?.trim()) throw new ToolInputError("append needs text: there is nothing to add.")
 
-        const [solutions, clients, engagements] = await Promise.all([
+        const [solutions, clients, engagements, opportunities] = await Promise.all([
           db().getSolutions(userId),
           db().getClients(userId),
           db().getEngagements(userId),
+          db().getOpportunities(userId),
         ])
         const narrowed = clientQuery ? resolveClient(clients, clientQuery, true) : null
         const s = resolveSolution(solutions, clients, query, narrowed?.id)
@@ -4502,6 +4544,60 @@ export function registerCrmWriteTools(server: McpServer): void {
           update.sections = { [section]: next }
           if (!added) textBefore = before
           changes.push(next === null ? `${label} cleared` : `${label}${added ? ": a line added" : " written"} (${next.length} characters)`)
+        }
+        if (fields.kind) {
+          update.kind = fields.kind
+          changes.push(`kind ${fields.kind}`)
+        }
+        if (fields.target !== undefined) {
+          update.target = fields.target?.trim() || null
+          changes.push(update.target ? "target set" : "target removed")
+        }
+        if (stepRef !== undefined || removeStep !== undefined) {
+          const steps = [...s.steps]
+          const list = `There ${steps.length === 1 ? "is 1 step" : `are ${steps.length} steps`}${steps.length ? `: ${steps.map((x, k) => `${k + 1} ${x.title}`).join("; ")}` : ""}.`
+          const notFound = (ref: number | string) => new ToolInputError(`No single step is "${ref}". ${list}`)
+          if (removeStep !== undefined) {
+            const at = stepIndex(steps, removeStep)
+            if (at < 0) throw notFound(removeStep)
+            changes.push(`step ${at + 1} "${steps[at].title}" removed`)
+            steps.splice(at, 1)
+          } else {
+            const found = stepIndex(steps, stepRef!)
+            // A title no step has adds one; a number past the end, or a title two steps share, does not.
+            const isNew = found < 0 && typeof stepRef === "string" && !steps.some((x) => x.title.trim().toLowerCase() === stepRef.trim().toLowerCase())
+            if (found < 0 && !isNew) throw notFound(stepRef!)
+            if (isNew && !fromMonth) throw new ToolInputError(`"${stepRef}" is a new step: pass fromMonth (YYYY-MM).`)
+            const at = isNew ? steps.length : found
+            const payer = paidBy ? resolveStepPayer(client!, engagements, opportunities, paidBy) : paidBy === null ? null : undefined
+            const before: SolutionStep = isNew
+              ? { title: stepRef as string, state: "next", fromMonth: fromMonth!, toMonth: null, paidBy: null, goal: null, outcome: null, doneOn: null }
+              : steps[at]
+            const edited: SolutionStep = {
+              ...before,
+              ...(stepTitle !== undefined && { title: stepTitle }),
+              ...(stepState !== undefined && { state: stepState }),
+              ...(fromMonth !== undefined && { fromMonth }),
+              ...(toMonth !== undefined && { toMonth }),
+              ...(payer !== undefined && { paidBy: payer }),
+              ...(goal !== undefined && { goal: goal?.trim() || null }),
+              ...(outcome !== undefined && { outcome: outcome?.trim() || null }),
+            }
+            const label = `step ${at + 1} "${edited.title}"`
+            if (stepState === "done" && before.state !== "done") {
+              if (!edited.outcome) throw new ToolInputError(`Marking ${label} done needs its outcome: what came of it.`)
+              // Kept at its former state until here, so completeStep knows whether it was the Now step.
+              const staged = isNew ? [...steps, { ...edited, state: before.state }] : steps.map((x, k) => (k === at ? { ...edited, state: before.state } : x))
+              const done = completeStep(staged, at, edited.outcome, isoDate(new Date()))
+              const moved = done.findIndex((x, k) => x.state === "now" && staged[k].state !== "now")
+              changes.push(`${label} done` + (moved >= 0 ? `, step ${moved + 1} "${done[moved].title}" is now Now` : ""))
+              steps.splice(0, steps.length, ...done)
+            } else {
+              changes.push(`${label} ${isNew ? "added" : "changed"}`)
+              steps.splice(at, 1, edited)
+            }
+          }
+          update.steps = steps
         }
         if (fields.entities) {
           update.entities = fields.entities.map((e) => ({ name: e.name, source: e.source?.trim() || null, notes: e.notes?.trim() || null }))
@@ -4539,16 +4635,16 @@ export function registerCrmWriteTools(server: McpServer): void {
         refuseInvalidSolution(s, update)
 
         const updated = await db().updateSolution(userId, s.id, update)
-        const card = solutionCard(updated, clients, engagements)
+        const card = solutionCard(updated, clients, engagements, opportunities)
         return {
           payload: {
             summary:
               `"${updated.name}" updated: ${changes.join(", ")}. ` +
-              (card.missingSections.length ? `Still empty: ${card.missingSections.join(", ")}.` : "All nine sections are written."),
+              (card.missingSections.length ? `Still empty: ${card.missingSections.join(", ")}.` : `All ${sectionsFor(updated.kind).length} sections are written.`),
             solution: card,
             // A replace cannot be undone from the audit (it keeps params only), so hand back the old text.
             ...(textBefore !== null && { textBefore }),
-            interview: SOLUTION_SECTIONS.filter(({ key }) => card.missingSections.includes(key)).map(
+            interview: sectionsFor(updated.kind).filter(({ key }) => card.missingSections.includes(key)).map(
               ({ key, label, question }) => ({ section: key, label, question }),
             ),
           },

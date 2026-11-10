@@ -1473,6 +1473,12 @@ export function describeAdapterContract(name: string, setup: ContractSetup) {
         ],
       }
 
+      const road = [
+        { title: "Audit", state: "done", fromMonth: "2026-03", toMonth: "2026-03", paidBy: null, goal: "Find the slow queries", outcome: "Nine found", doneOn: "2026-04-02" },
+        { title: "Tune", state: "now", fromMonth: "2026-04", toMonth: null, paidBy: { type: "opportunity", id: "opp-1" }, goal: null, outcome: null, doneOn: null },
+        { title: "Hand over", state: "later", fromMonth: "2026-09", toMonth: null, paidBy: null, goal: null, outcome: null, doneOn: null },
+      ] as const
+
       it("creates and reads back every field, and fills in what a bare one omits", async () => {
         const contract = await contractOf("solution-client")
         const full = await db.createSolution(userId, {
@@ -1483,6 +1489,9 @@ export function describeAdapterContract(name: string, setup: ContractSetup) {
           domain: "retail",
           stack: ["neo4j", "gds", "kafka"],
           sections: { purpose: "180,000 SKUs in three systems.", history: "2026-02-10 Kickoff" },
+          kind: "advisory",
+          target: "Every report under 2 s",
+          steps: [...road],
           ...graph,
         })
         const bare = await db.createSolution(userId, { clientId: "solution-client", name: "Search pilot" })
@@ -1496,6 +1505,9 @@ export function describeAdapterContract(name: string, setup: ContractSetup) {
           domain: "retail",
           stack: ["neo4j", "gds", "kafka"],
           sections: { ...noSections, purpose: "180,000 SKUs in three systems.", history: "2026-02-10 Kickoff" },
+          kind: "advisory",
+          target: "Every report under 2 s",
+          steps: road,
           ...graph,
         }
         expect(full).toMatchObject(expected)
@@ -1506,6 +1518,8 @@ export function describeAdapterContract(name: string, setup: ContractSetup) {
         const bareExpected = {
           clientId: "solution-client", engagementId: null, name: "Search pilot", status: "proposed", domain: null,
           stack: [], sections: noSections, entities: [], relations: [],
+          // A solution filed with no kind reads as a product with no target and no road.
+          kind: "product", target: null, steps: [],
         }
         expect(bare).toMatchObject(bareExpected)
         expect(await solutionById(bare.id)).toMatchObject(bareExpected)
@@ -1542,6 +1556,11 @@ export function describeAdapterContract(name: string, setup: ContractSetup) {
           [{ engagementId: b.id }, { engagementId: b.id }],
           [{ engagementId: null }, { engagementId: null, clientId: "solution-edit" }],
           [{ domain: null, stack: [] }, { domain: null, stack: [] }],
+          [{ kind: "advisory" }, { kind: "advisory" }],
+          [{ target: "Every report under 2 s" }, { target: "Every report under 2 s" }],
+          [{ steps: [...road] }, { steps: road, kind: "advisory", target: "Every report under 2 s" }],
+          [{ steps: [] }, { steps: [] }],
+          [{ target: null, kind: "product" }, { target: null, kind: "product" }],
         ]
         for (const [input, expected] of steps) {
           expect(await db.updateSolution(userId, created.id, input), JSON.stringify(input)).toMatchObject(expected)

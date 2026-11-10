@@ -9,13 +9,19 @@ import {
   createSolutionSchema,
   MAX_SOLUTION_ENTITIES,
   MAX_SOLUTION_RELATIONS,
+  MAX_SOLUTION_STEPS,
   MAX_SOLUTION_STACK,
   normalizeSolutionDomain,
   normalizeSolutionGraph,
+  normalizeSolutionKind,
+  normalizeSolutionSteps,
+  normalizeSolutionTarget,
   normalizeSolutionSections,
   normalizeSolutionStack,
   SOLUTION_SECTION_MAX,
+  SOLUTION_KIND_SECTIONS,
   SOLUTION_SECTIONS,
+  SOLUTION_TARGET_MAX,
   solutionFields,
   updateCompanyExpenseSchema,
   updateCompanyLoanSchema,
@@ -418,5 +424,69 @@ describe("the invoice file on a cost and an invoice", () => {
 
   it("drops a key the pointer does not have, so it is never stored", () => {
     expect(createCompanyExpenseSchema.parse({ ...cost, file: { ...file, extra: 1 } }).file).toEqual(file)
+  })
+})
+
+// ─── A solution's kind, target and road of steps ─────────────────────────────
+
+const step = (title: string, state: "done" | "now" | "next" | "later" = "next", over = {}) => ({
+  title, state, fromMonth: "2026-03", toMonth: null, paidBy: null, goal: null, outcome: null, doneOn: null, ...over,
+})
+
+describe("SOLUTION_KIND_SECTIONS", () => {
+  it("asks an Advisory for purpose, kpis and results only, a Product for seven without steps and history", () => {
+    expect(SOLUTION_KIND_SECTIONS.advisory).toEqual(["purpose", "kpis", "results"])
+    expect(SOLUTION_KIND_SECTIONS.product).toEqual(["purpose", "requirements", "kpis", "sources", "model", "architecture", "results"])
+  })
+})
+
+describe("a solution's kind, target and steps", () => {
+  const base = { clientId: "c1", name: "Query tuning" }
+  const refused = (over: object) => createSolutionSchema.safeParse({ ...base, ...over })
+
+  it("accepts a kind, a target and a road, and reads a solution with none as a product with no target and no steps", () => {
+    const road = [step("Audit", "done", { doneOn: "2026-04-02", outcome: "Slow queries found" }), step("Tune", "now"), step("Review", "later")]
+    expect(createSolutionSchema.safeParse({ ...base, kind: "advisory", target: "Every report under 2 s", steps: road }).success).toBe(true)
+    expect(solutionFields(base)).toMatchObject({ kind: "product", target: null, steps: [] })
+  })
+
+  it.each([
+    ["two Now steps", { steps: [step("A", "now"), step("B", "now")] }],
+    ["a to month before the from month", { steps: [step("A", "next", { toMonth: "2026-02" })] }],
+    [`${MAX_SOLUTION_STEPS + 1} steps`, { steps: Array.from({ length: MAX_SOLUTION_STEPS + 1 }, (_, i) => step(`S${i}`)) }],
+    ["an unknown kind", { kind: "service" }],
+    [`a target over ${SOLUTION_TARGET_MAX} characters`, { target: "x".repeat(SOLUTION_TARGET_MAX + 1) }],
+    ["an unknown state", { steps: [step("A", "paused" as "now")] }],
+    ["a from month that is not a month", { steps: [step("A", "next", { fromMonth: "2026-13" })] }],
+  ])("refuses %s", (_, over) => {
+    expect(refused(over).success).toBe(false)
+  })
+
+  it("accepts exactly 20 steps, one Now, and a to month equal to the from month", () => {
+    const steps = Array.from({ length: MAX_SOLUTION_STEPS }, (_, i) => step(`S${i}`, i === 3 ? "now" : "next", { toMonth: "2026-03" }))
+    expect(refused({ steps }).success).toBe(true)
+  })
+
+  it("is checked on an update too", () => {
+    expect(updateSolutionSchema.safeParse({ steps: [step("A", "now"), step("B", "now")] }).success).toBe(false)
+    expect(updateSolutionSchema.safeParse({ kind: "advisory", target: null }).success).toBe(true)
+  })
+})
+
+describe("normalizeSolutionKind, Target and Steps", () => {
+  it("reads a missing or unknown kind as a product, and a blank target as none", () => {
+    expect(normalizeSolutionKind(undefined)).toBe("product")
+    expect(normalizeSolutionKind("service")).toBe("product")
+    expect(normalizeSolutionKind("advisory")).toBe("advisory")
+    expect(normalizeSolutionTarget(" Under 2 s ")).toBe("Under 2 s")
+    expect(normalizeSolutionTarget("  ")).toBeNull()
+    expect(normalizeSolutionTarget(3)).toBeNull()
+  })
+
+  it("keeps the steps that parse, the first Now only and at most 20, so a stored road never breaks a later write", () => {
+    expect(normalizeSolutionSteps("nope")).toEqual([])
+    const read = normalizeSolutionSteps([step("A", "now"), { title: "" }, step("B", "now"), step("C", "done")])
+    expect(read.map((s) => [s.title, s.state])).toEqual([["A", "now"], ["B", "next"], ["C", "done"]])
+    expect(normalizeSolutionSteps(Array.from({ length: 25 }, (_, i) => step(`S${i}`)))).toHaveLength(MAX_SOLUTION_STEPS)
   })
 })

@@ -7,7 +7,7 @@
  */
 
 /** What both transports (HTTP route, stdio script) report as the server version. */
-export const MCP_VERSION = "0.39.0"
+export const MCP_VERSION = "0.40.0"
 
 /** The MCP endpoint's path, and the path component of the RFC 9728 resource identifier. */
 export const MCP_PATH = "/api/mcp"

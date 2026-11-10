@@ -51,8 +51,11 @@ import {
   normalizePriceChanges,
   normalizeSolutionDomain,
   normalizeSolutionGraph,
+  normalizeSolutionKind,
   normalizeSolutionSections,
   normalizeSolutionStack,
+  normalizeSolutionSteps,
+  normalizeSolutionTarget,
   SOLUTION_SECTIONS,
 } from "@/types/schemas"
 
@@ -465,6 +468,9 @@ function mapSolution(d: DocumentData & { id: string }): Solution {
     engagementId: (d.engagementId as string | null) ?? null,
     name: d.name as string,
     status: d.status as SolutionStatus,
+    kind: normalizeSolutionKind(d.kind),
+    target: normalizeSolutionTarget(d.target),
+    steps: normalizeSolutionSteps(d.steps),
     domain: normalizeSolutionDomain(d.domain),
     stack: normalizeSolutionStack(d.stack),
     sections: normalizeSolutionSections(d.sections),
@@ -1409,6 +1415,9 @@ function createFirebaseDbAdapter(): DatabaseAdapter {
         engagementId: input.engagementId ?? null,
         name: input.name.trim(),
         status: input.status ?? "proposed",
+        kind: input.kind ?? "product",
+        target: input.target ?? null,
+        steps: input.steps ?? [],
         domain: input.domain ?? null,
         stack: input.stack ?? [],
         sections: normalizeSolutionSections(input.sections),
@@ -1426,6 +1435,9 @@ function createFirebaseDbAdapter(): DatabaseAdapter {
       if (input.engagementId !== undefined) updates.engagementId = input.engagementId
       if (input.name !== undefined) updates.name = input.name.trim()
       if (input.status !== undefined) updates.status = input.status
+      if (input.kind !== undefined) updates.kind = input.kind
+      if (input.target !== undefined) updates.target = input.target
+      if (input.steps !== undefined) updates.steps = input.steps
       if (input.domain !== undefined) updates.domain = input.domain
       if (input.stack !== undefined) updates.stack = input.stack
       // One field path per section named, so the others stay as stored.

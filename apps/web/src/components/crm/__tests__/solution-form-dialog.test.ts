@@ -13,7 +13,7 @@ const ENGAGEMENTS = [
 ]
 const at = new Date(2026, 0, 1)
 const OPENED: Solution = {
-  id: "s1", userId: "u1", clientId: "c1", engagementId: "e1", name: "Product knowledge graph", status: "building",
+  id: "s1", userId: "u1", clientId: "c1", engagementId: "e1", name: "Product knowledge graph", status: "building", kind: "product", target: null, steps: [],
   domain: "retail", stack: ["neo4j", "kafka"], sections: normalizeSolutionSections({}), entities: [], relations: [],
   createdAt: at, updatedAt: at,
 }

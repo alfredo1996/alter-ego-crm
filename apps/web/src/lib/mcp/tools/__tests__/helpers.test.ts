@@ -34,6 +34,7 @@ import {
   resolveEstimate,
   resolveInvoice,
   resolveSolution,
+  resolveStepPayer,
   resolveSupplierInvoice,
   resolveTask,
   revenueCells,
@@ -56,6 +57,7 @@ import type {
   CompanyMovement,
   Engagement,
   Invoice,
+  Opportunity,
   Solution,
   Timecard,
 } from "@/types"
@@ -245,7 +247,7 @@ describe("resolveSolution", () => {
   // Made-up catalog: Nordwind Retail S.p.A.'s graph, and a second client with a solution of the same name.
   const clients = [client("c1", "Nordwind Retail S.p.A."), client("c2", "Sudwind Logistics"), client("c3", "Ostwind Foods")]
   const solution = (id: string, clientId: string, name: string): Solution => ({
-    id, userId: "u", clientId, engagementId: null, name, status: "proposed", domain: null, stack: [],
+    id, userId: "u", clientId, engagementId: null, name, status: "proposed", kind: "product", target: null, steps: [], domain: null, stack: [],
     sections: normalizeSolutionSections({}), entities: [], relations: [], ...ts,
   })
   const solutions = [
@@ -294,10 +296,40 @@ describe("resolveSolution", () => {
 
   it("solutionCard names the client and contract, Pre-sales without one, and the empty sections", () => {
     const linked = { ...solutions[0], engagementId: "e1", sections: normalizeSolutionSections({ purpose: "One graph" }) }
-    const card = solutionCard(linked, clients, [engagement("e1", { name: "Product graph" })])
+    const card = solutionCard(linked, clients, [engagement("e1", { name: "Product graph" })], [])
     expect(card).toMatchObject({ client: "Nordwind Retail S.p.A.", contract: "Product graph", contractState: "Active" })
     expect(card.missingSections).not.toContain("purpose")
-    expect(solutionCard(solutions[1], clients, [])).toMatchObject({ contract: null, contractState: "Pre-sales" })
+    expect(solutionCard(solutions[1], clients, [], [])).toMatchObject({ contract: null, contractState: "Pre-sales" })
+  })
+
+  const step = (title: string, state: "done" | "now" | "next" | "later", paidBy: { type: "contract" | "opportunity"; id: string } | null = null) => ({
+    title, state, fromMonth: "2026-03", toMonth: null, paidBy, goal: null, outcome: null, doneOn: null,
+  })
+  const opp = (id: string, clientId: string, title: string, engagementId: string | null = null) =>
+    ({ id, clientId, title, engagementId }) as Opportunity
+
+  it("solutionCard numbers the steps, names what pays for each (a won opportunity as its contract) and gives the Now step", () => {
+    const road = { ...solutions[0], steps: [step("Audit", "done"), step("Tune", "now", { type: "opportunity", id: "o1" }), step("Review", "next", { type: "opportunity", id: "o2" })] }
+    const card = solutionCard(road, clients, [engagement("e1", { name: "Product graph" })], [opp("o1", "c1", "Phase two", "e1"), opp("o2", "c1", "Phase three")])
+    expect(card.steps.map((x) => [x.number, x.paidBy])).toEqual([
+      [1, null],
+      [2, { type: "contract", id: "e1", name: "Product graph" }],
+      [3, { type: "opportunity", id: "o2", name: "Phase three" }],
+    ])
+    expect(card.nowStep).toMatchObject({ number: 2, title: "Tune" })
+    expect(solutionCard(solutions[0], clients, [], [])).toMatchObject({ kind: "product", target: null, steps: [], nowStep: null })
+  })
+
+  it("resolveStepPayer finds the client's contract or opportunity by id, name or part of one, and refuses another client's", () => {
+    const own = [engagement("e1", { clientId: "c1", name: "Product graph" }), engagement("e2", { clientId: "c2", name: "Fleet graph" })]
+    const opps = [opp("o1", "c1", "Phase two"), opp("o2", "c2", "Fleet phase two")]
+    const c1 = clients[0]
+    expect(resolveStepPayer(c1, own, opps, "e1")).toEqual({ type: "contract", id: "e1" })
+    expect(resolveStepPayer(c1, own, opps, "product GRAPH")).toEqual({ type: "contract", id: "e1" })
+    expect(resolveStepPayer(c1, own, opps, "phase")).toEqual({ type: "opportunity", id: "o1" })
+    expect(() => resolveStepPayer(c1, own, opps, "Fleet graph")).toThrow(/No contract or opportunity of Nordwind Retail S.p.A. matches "Fleet graph"/)
+    expect(() => resolveStepPayer(c1, own, opps, "o2")).toThrow(/matches "o2"/)
+    expect(() => resolveStepPayer(c1, own, opps, "  ")).toThrow(/matches/)
   })
 })
 

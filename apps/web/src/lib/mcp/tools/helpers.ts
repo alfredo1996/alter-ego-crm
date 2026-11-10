@@ -41,7 +41,7 @@ import {
 import { healthByContract } from "@/lib/meetings"
 import { monthNotEnded } from "@/lib/month-end"
 import { buildProjection, costsFor, countedWhenPaid, nearestPaymentMonth, priceIn } from "@/lib/projection"
-import { contractState, missingSections } from "@/lib/solutions"
+import { contractState, missingSections, nowStep, stepContract } from "@/lib/solutions"
 import { monthHours, planCells } from "@/lib/timecards"
 
 import type { CashRow, ChaseItem, SupplierDocument } from "@/lib/cash-book"
@@ -63,7 +63,10 @@ import type {
   Invoice,
   InvoiceFile,
   Meeting,
+  Opportunity,
   Solution,
+  SolutionStep,
+  SolutionStepPayer,
   Task,
   Timecard,
 } from "@/types"
@@ -728,9 +731,49 @@ export function resolveSolution(solutions: Solution[], clients: Client[], query:
   )
 }
 
-/** A solution as every solution tool returns it: its client and contract named, and the sections still empty. */
-export function solutionCard(s: Solution, clients: Client[], engagements: Engagement[]) {
+/**
+ * The contract or opportunity of `client` a step is paid by: an id, a name or a title, exact first, then part
+ * of one that only one of the client's contracts and opportunities has. Another client's never matches, so it
+ * is refused with the client's own list.
+ */
+export function resolveStepPayer(
+  client: Client,
+  engagements: Engagement[],
+  opportunities: Opportunity[],
+  query: string,
+): SolutionStepPayer {
+  const q = query.trim().toLowerCase()
+  const pool = [
+    ...engagements.filter((e) => e.clientId === client.id).map((e) => ({ type: "contract" as const, id: e.id, name: engagementLabel(e) })),
+    ...opportunities.filter((o) => o.clientId === client.id).map((o) => ({ type: "opportunity" as const, id: o.id, name: o.title })),
+  ]
+  const describe = (x: (typeof pool)[number]) => `${x.type} ${x.name} (id ${x.id})`
+  if (q) {
+    for (const match of [pool.filter((x) => x.id === query.trim()), pool.filter((x) => x.name.toLowerCase() === q), pool.filter((x) => x.name.toLowerCase().includes(q))]) {
+      if (match.length === 1) return { type: match[0].type, id: match[0].id }
+      if (match.length > 1) throw new ToolInputError(`Several match "${query}": ${match.map(describe).join("; ")}. Pass the id.`)
+    }
+  }
+  throw new ToolInputError(`No contract or opportunity of ${client.name} matches "${query}". ${pool.map(describe).join("; ") || "It has none"}.`)
+}
+
+/** A solution as every solution tool returns it: its client and contract named, the road with what pays for each step, and the sections still empty. */
+export function solutionCard(s: Solution, clients: Client[], engagements: Engagement[], opportunities: Opportunity[]) {
   const e = s.engagementId ? engagements.find((x) => x.id === s.engagementId) : undefined
+  const step = (x: SolutionStep, i: number) => {
+    // A won opportunity reads as its contract (nothing is written at conversion).
+    const payer = stepContract(x, opportunities)
+    const name = payer?.type === "contract"
+      ? engagements.find((c) => c.id === payer.id)
+      : opportunities.find((o) => o.id === payer?.id)
+    return {
+      number: i + 1,
+      ...x,
+      paidBy: payer && { ...payer, name: name ? ("title" in name ? name.title : engagementLabel(name)) : null },
+    }
+  }
+  const steps = s.steps.map(step)
+  const now = nowStep(s.steps)
   return {
     id: s.id,
     name: s.name,
@@ -740,6 +783,10 @@ export function solutionCard(s: Solution, clients: Client[], engagements: Engage
     contract: e ? engagementLabel(e) : null,
     contractState: contractState(e),
     status: s.status,
+    kind: s.kind,
+    target: s.target,
+    steps,
+    nowStep: now ? steps[s.steps.indexOf(now)] : null,
     domain: s.domain,
     stack: s.stack,
     updatedAt: isoDate(s.updatedAt),

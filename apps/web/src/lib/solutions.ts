@@ -6,9 +6,9 @@
  */
 import { format } from "date-fns"
 
-import { SOLUTION_SECTIONS } from "@/types/schemas"
+import { SOLUTION_KIND_SECTIONS, SOLUTION_SECTIONS } from "@/types/schemas"
 
-import type { Engagement, Solution, SolutionSectionKey, SolutionStatus } from "@/types"
+import type { Engagement, Opportunity, Solution, SolutionKind, SolutionSectionKey, SolutionStatus, SolutionStep, SolutionStepPayer } from "@/types"
 
 /** The solution's own lifecycle, in order, with each status's label and pill tone. */
 export const SOLUTION_STATUS: Record<SolutionStatus, { label: string; tone: "info" | "warning" | "success" | "neutral" }> = {
@@ -74,14 +74,65 @@ export function usedStack(solutions: Pick<Solution, "stack">[]): string[] {
   return [...new Set(solutions.flatMap((s) => s.stack))].sort()
 }
 
-/** The sections with no text yet, in order: what the MCP interview still has to ask. */
-export function missingSections(solution: Pick<Solution, "sections">): SolutionSectionKey[] {
-  return SOLUTION_SECTIONS.filter(({ key }) => !solution.sections[key]?.trim()).map(({ key }) => key)
+/**
+ * The sections a kind asks for, in order. An Advisory's results are presented as
+ * "Results and Lessons"; the stored key stays `results`.
+ */
+export function sectionsFor(kind: SolutionKind): { key: SolutionSectionKey; label: string; question: string }[] {
+  return SOLUTION_KIND_SECTIONS[kind].map((key) => {
+    const section = SOLUTION_SECTIONS.find((x) => x.key === key)!
+    return kind === "advisory" && key === "results" ? { ...section, label: "Results and Lessons" } : { ...section }
+  })
+}
+
+/** The sections with no text yet, in order: what the MCP interview still has to ask. Only the kind's own when it is known. */
+export function missingSections(solution: Pick<Solution, "sections"> & Partial<Pick<Solution, "kind">>): SolutionSectionKey[] {
+  const asked = solution.kind ? sectionsFor(solution.kind) : SOLUTION_SECTIONS
+  return asked.filter(({ key }) => !solution.sections[key]?.trim()).map(({ key }) => key)
 }
 
 /** How many of the nine sections have text: the list's "4/9". */
 export function filledSections(solution: Pick<Solution, "sections">): number {
-  return SOLUTION_SECTIONS.length - missingSections(solution).length
+  return SOLUTION_SECTIONS.filter(({ key }) => solution.sections[key]?.trim()).length
+}
+
+/** The step the work is on now, if any: a solution has at most one. */
+export function nowStep(steps: SolutionStep[]): SolutionStep | undefined {
+  return steps.find((s) => s.state === "now")
+}
+
+/** The index of the step a number (1-based) or a title (any case) names; -1 when there is none or the title is shared. */
+export function stepIndex(steps: SolutionStep[], ref: number | string): number {
+  if (typeof ref === "number") return ref >= 1 && ref <= steps.length ? ref - 1 : -1
+  const key = ref.trim().toLowerCase()
+  const hits = steps.flatMap((s, i) => (s.title.trim().toLowerCase() === key ? [i] : []))
+  return hits.length === 1 ? hits[0] : -1
+}
+
+/**
+ * Marks step `index` Done with its outcome and the day. When it was the Now step, the next step
+ * still open (Next or Later) becomes Now; none after it, none is Now. Returns a new list.
+ */
+export function completeStep(steps: SolutionStep[], index: number, outcome: string, today: string): SolutionStep[] {
+  const wasNow = steps[index].state === "now"
+  const next = wasNow ? steps.findIndex((s, i) => i > index && s.state !== "done") : -1
+  return steps.map((s, i) =>
+    i === index ? { ...s, state: "done", outcome, doneOn: today } : i === next ? { ...s, state: "now" } : s,
+  )
+}
+
+/**
+ * What a step is paid by today: its contract once its opportunity is won (read from
+ * opportunity.engagementId, nothing is written at conversion), else the opportunity as stored.
+ */
+export function stepContract(
+  step: Pick<SolutionStep, "paidBy">,
+  opportunities: Pick<Opportunity, "id" | "engagementId">[],
+): SolutionStepPayer | null {
+  const { paidBy } = step
+  if (paidBy?.type !== "opportunity") return paidBy
+  const won = opportunities.find((o) => o.id === paidBy.id)?.engagementId
+  return won ? { type: "contract", id: won } : paidBy
 }
 
 /** The contract's own state, shown beside the solution's status: "Pre-sales" while there is none. */

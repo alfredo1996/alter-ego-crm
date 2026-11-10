@@ -33,8 +33,11 @@ import {
   normalizeMonthDays,
   normalizeSolutionDomain,
   normalizeSolutionGraph,
+  normalizeSolutionKind,
   normalizeSolutionSections,
   normalizeSolutionStack,
+  normalizeSolutionSteps,
+  normalizeSolutionTarget,
   solutionFields,
 } from "@/types/schemas"
 
@@ -1199,6 +1202,9 @@ function mapSolution(d: DocumentData & { id: string }): Solution {
     engagementId: (d.engagementId as string | null) ?? null,
     name: d.name as string,
     status: d.status as SolutionStatus,
+    kind: normalizeSolutionKind(d.kind),
+    target: normalizeSolutionTarget(d.target),
+    steps: normalizeSolutionSteps(d.steps),
     domain: normalizeSolutionDomain(d.domain),
     stack: normalizeSolutionStack(d.stack),
     sections: normalizeSolutionSections(d.sections),

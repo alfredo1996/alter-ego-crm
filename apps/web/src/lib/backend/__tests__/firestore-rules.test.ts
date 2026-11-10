@@ -32,8 +32,10 @@ import {
   MAX_SOLUTION_ENTITIES,
   MAX_SOLUTION_RELATIONS,
   MAX_SOLUTION_STACK,
+  MAX_SOLUTION_STEPS,
   MEETING_TEXT_MAX,
   SOLUTION_SECTION_MAX,
+  SOLUTION_TARGET_MAX,
   SOLUTION_SECTIONS,
 } from "@/types/schemas"
 
@@ -117,7 +119,7 @@ const meetingWithout = (field: string) => {
 // Every field, as every writer writes them: the Nordwind fixture, sections all null.
 const validSolution = (o: Record<string, unknown> = {}) => ({
   userId: uid, clientId: "c1", engagementId: "e1", name: "Product knowledge graph", status: "delivered",
-  domain: "retail", stack: ["neo4j", "kafka"],
+  domain: "retail", stack: ["neo4j", "kafka"], kind: "product", target: null, steps: [],
   sections: Object.fromEntries(SOLUTION_SECTIONS.map((s) => [s.key, null])),
   entities: [{ name: "Product", source: "SAP MARA", notes: null }, { name: "Category", source: "Akeneo", notes: null }],
   relations: [{ from: "Product", to: "Category", type: "IN_CATEGORY" }],
@@ -1129,6 +1131,40 @@ describe("solution validation", () => {
     const ref = mine("solutions")
     await setDoc(ref, validSolution())
     await expect(updateDoc(ref, { status: "archived" })).rejects.toThrow()
+  })
+  // kind, target and steps came later: a solution stored without them must stay editable, and an old bundle can still create one.
+  it("accepts a solution with no kind, target or steps, and updates it", async () => {
+    const legacy: Record<string, unknown> = validSolution()
+    for (const k of ["kind", "target", "steps"]) delete legacy[k]
+    const ref = mine("solutions")
+    await setDoc(ref, legacy)
+    await updateDoc(ref, { name: "Renamed" })
+    await updateDoc(ref, { kind: "advisory", target: "Every report under 2 s", steps: [] })
+  })
+  it("rejects an unknown kind, on create and on update", async () => {
+    await expect(setDoc(mine("solutions"), validSolution({ kind: "service" }))).rejects.toThrow()
+    const ref = mine("solutions")
+    await setDoc(ref, validSolution())
+    await expect(updateDoc(ref, { kind: "service" })).rejects.toThrow()
+    await updateDoc(ref, { kind: "advisory" })
+  })
+  it("checks the target is text of at most its cap or null, on create and on update", async () => {
+    await setDoc(mine("solutions"), validSolution({ target: "x".repeat(SOLUTION_TARGET_MAX) }))
+    await expect(setDoc(mine("solutions"), validSolution({ target: "x".repeat(SOLUTION_TARGET_MAX + 1) }))).rejects.toThrow()
+    await expect(setDoc(mine("solutions"), validSolution({ target: 3 }))).rejects.toThrow()
+    const ref = mine("solutions")
+    await setDoc(ref, validSolution())
+    await expect(updateDoc(ref, { target: "x".repeat(SOLUTION_TARGET_MAX + 1) })).rejects.toThrow()
+  })
+  it("checks steps is a list of at most its cap, on create and on update", async () => {
+    const steps = (n: number) => Array.from({ length: n }, (_, i) => ({ title: `S${i}`, state: "next", fromMonth: "2026-03" }))
+    await setDoc(mine("solutions"), validSolution({ steps: steps(MAX_SOLUTION_STEPS) }))
+    await expect(setDoc(mine("solutions"), validSolution({ steps: steps(MAX_SOLUTION_STEPS + 1) }))).rejects.toThrow()
+    await expect(setDoc(mine("solutions"), validSolution({ steps: "Audit, tune" }))).rejects.toThrow()
+    const ref = mine("solutions")
+    await setDoc(ref, validSolution())
+    await updateDoc(ref, { steps: steps(MAX_SOLUTION_STEPS) })
+    await expect(updateDoc(ref, { steps: steps(MAX_SOLUTION_STEPS + 1) })).rejects.toThrow()
   })
   // Written with the app's constants, so changing one without the rule fails here.
   it.each([
