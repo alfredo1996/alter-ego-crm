@@ -9,7 +9,7 @@ The mock backend stores all data in memory and starts empty on every page load. 
 
 ## Features
 
-- Accepts any email and password, and starts empty
+- Accepts a valid email and a password of six or more characters, and starts empty
 - Holds invoice files in memory, too
 - Full implementation of all `DatabaseAdapter` methods
 - `__resetMockState()` for test isolation
@@ -27,10 +27,9 @@ No additional configuration needed — just run `pnpm dev`.
 The mock backend is used in all Vitest unit tests. Call `__resetMockState()` in `beforeEach` to ensure clean state between tests:
 
 ```typescript
-import { getBackend } from "@/lib/backend"
+import { __resetMockState } from "@/lib/backend/mock"
 
 beforeEach(() => {
-  const backend = getBackend() as MockBackend
-  backend.__resetMockState()
+  __resetMockState()
 })
 ```

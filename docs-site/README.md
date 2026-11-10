@@ -21,12 +21,13 @@ resolve `next/package.json` from here.
 ## Publishing
 
 `.github/workflows/docs.yml` builds on every change to the docs and asserts the
-export produced at least 50 pages, so a broken page is caught in review.
+export produced exactly the expected number of pages (the count is in the
+workflow), so a broken or missing page is caught in review. Raise the count when
+a page is added.
 
-**Publishing is manual for now.** GitHub Pages needs either a public repository or
-a paid plan, and this one is private. Run the workflow by hand from the Actions
-tab, or — once the accounting product lives in its own public repository — change
-the `deploy` job's condition to run on pushes to `main`.
+**Publishing is manual for now.** GitHub Pages has to be enabled in the
+repository settings first. Then run the workflow by hand from the Actions tab,
+or change the `deploy` job's condition to run on pushes to `main`.
 
 `DOCS_BASE_PATH` is the sub-path a project site is served from, `/alter-ego-crm` for
 `<user>.github.io/alter-ego-crm`. The workflow sets it from the repository name. Leave it

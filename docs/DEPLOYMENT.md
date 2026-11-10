@@ -54,5 +54,4 @@ Firebase console (Authentication), then put its uid in all three places and run
 - **MCP server:** set `MCP_PUBLIC_ORIGIN` in `apphosting.yaml` to the canonical public
   origin. It is also the OAuth issuer, so it must match the URL the connector uses.
 - **Custom domain:** `firebase apphosting:domains` or the console.
-- **Local and self-hosted:** see [SELF-HOSTING.md](SELF-HOSTING.md) and
-  [LOCAL-DEVELOPMENT.md](LOCAL-DEVELOPMENT.md).
+- **Local and self-hosted:** see [SELF-HOSTING.md](SELF-HOSTING.md).

@@ -1,5 +1,6 @@
 {
   "name": "alter-ego-crm",
+  "license": "MIT",
   "version": "0.22.0",
   "private": true,
   "packageManager": "pnpm@10.34.1",
@@ -27,8 +28,7 @@
     "local:stop": "docker compose -f docker-compose.local.yml down",
     "local:logs": "docker compose -f docker-compose.local.yml logs -f",
     "mcp:stdio": "pnpm --filter @alter-ego/web mcp:stdio",
-    "prepare": "husky",
-    "setup": "pnpm --filter @alter-ego/web setup"
+    "prepare": "husky"
   },
   "lint-staged": {
     "*.{ts,tsx}": [

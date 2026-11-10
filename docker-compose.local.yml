@@ -5,7 +5,7 @@
 # command and a volume.
 #
 #   pnpm local:start   # emulator up, data restored from ./.emulator-data
-#   pnpm dev:local     # the app, pointed at it
+#   pnpm dev:emulator  # the app, pointed at it
 #   pnpm local:stop    # emulator down, data exported on the way out
 #
 # Production admits one uid (#389), and no local user has it: `pnpm local:start`

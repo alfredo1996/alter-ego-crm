@@ -5,7 +5,7 @@ description: Testing strategy and patterns
 
 ## Unit Tests (Vitest)
 
-**354+ unit tests** cover utilities, business logic, and the mock backend adapter.
+Unit tests cover utilities, business logic, and the mock backend adapter.
 
 ```bash
 # Watch mode
@@ -23,14 +23,13 @@ pnpm test --run --coverage
 Tests live in `__tests__/` directories next to the code they test:
 
 ```
-src/lib/__tests__/
-  ├── dates.test.ts
-  ├── export.test.ts
-  ├── merchants.test.ts
-  ├── net-worth.test.ts
-  ├── amortization.test.ts
+apps/web/src/lib/__tests__/
+  ├── cash-book.test.ts
+  ├── invoices.test.ts
+  ├── projection.test.ts
+  ├── month-end.test.ts
   └── ...
-src/lib/backend/__tests__/
+apps/web/src/lib/backend/__tests__/
   ├── adapter-contract.ts  # Shared contract tests
   ├── mock.test.ts
   ├── mock.adapter.test.ts
@@ -42,17 +41,16 @@ src/lib/backend/__tests__/
 Always reset state between tests:
 
 ```typescript
-import { getBackend } from "@/lib/backend"
+import { __resetMockState } from "@/lib/backend/mock"
 
 beforeEach(() => {
-  const backend = getBackend()
-  ;(backend as any).__resetMockState()
+  __resetMockState()
 })
 ```
 
 ### Contract Tests
 
-The adapter contract test suite (`adapter-contract.ts`) defines 97 shared tests that any backend adapter must pass. They run against the mock adapter on every `pnpm test`, and against Firebase under the emulator with `pnpm test:firebase:docker`.
+The adapter contract test suite (`adapter-contract.ts`) defines the shared tests that any backend adapter must pass. They run against the mock adapter on every `pnpm test`, and against Firebase under the emulator with `pnpm test:firebase:docker`.
 
 ## E2E Tests (Playwright)
 
@@ -61,6 +59,10 @@ E2E tests cover critical user flows using the mock backend, against a production
 ```bash
 pnpm test:e2e
 ```
+
+Playwright serves the build on port 3001. For quick iteration, start a dev server on that port first (`NEXT_PUBLIC_BACKEND=mock pnpm dev --port 3001`) and Playwright reuses it instead of building (outside CI).
+
+The mock answers every read at once, so a loading state is gone before a test can see it. To slow it down, a spec sets `window.__MOCK_LATENCY_MS__` (with `page.evaluate` or `page.addInitScript`) and every mock db call then waits that long. `e2e/loading-states.spec.ts` uses it.
 
 A deployment with Invoicing and Solutions switched off is a build of its own: `pnpm test:e2e:modules` runs `modules.spec.ts` against it.
 

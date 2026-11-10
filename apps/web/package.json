@@ -17,8 +17,7 @@
     "shots": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/shots.mjs",
     "local:rules": "tsx scripts/local-rules.ts",
     "seed:demo": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/seed-demo.mjs",
-    "mcp:stdio": "tsx scripts/mcp-stdio.ts",
-    "setup": "./scripts/setup-backend.sh"
+    "mcp:stdio": "tsx scripts/mcp-stdio.ts"
   },
   "dependencies": {
     "@alter-ego/kernel": "workspace:*",

@@ -5,7 +5,7 @@ description: Strategia e pattern di testing
 
 ## Test Unitari (Vitest)
 
-**354+ test unitari** coprono utility, logica di business e l'adapter del backend mock.
+I test unitari coprono utility, logica di business e l'adapter del backend mock.
 
 ```bash
 # Modalità watch
@@ -23,14 +23,13 @@ pnpm test --run --coverage
 I test risiedono nelle directory `__tests__/` accanto al codice che testano:
 
 ```
-src/lib/__tests__/
-  ├── dates.test.ts
-  ├── export.test.ts
-  ├── merchants.test.ts
-  ├── net-worth.test.ts
-  ├── amortization.test.ts
+apps/web/src/lib/__tests__/
+  ├── cash-book.test.ts
+  ├── invoices.test.ts
+  ├── projection.test.ts
+  ├── month-end.test.ts
   └── ...
-src/lib/backend/__tests__/
+apps/web/src/lib/backend/__tests__/
   ├── adapter-contract.ts  # Test contrattuali condivisi
   ├── mock.test.ts
   ├── mock.adapter.test.ts
@@ -42,17 +41,16 @@ src/lib/backend/__tests__/
 Resetta sempre lo stato tra i test:
 
 ```typescript
-import { getBackend } from "@/lib/backend"
+import { __resetMockState } from "@/lib/backend/mock"
 
 beforeEach(() => {
-  const backend = getBackend()
-  ;(backend as any).__resetMockState()
+  __resetMockState()
 })
 ```
 
 ### Test Contrattuali
 
-La suite di test contrattuali dell'adapter (`adapter-contract.ts`) definisce 97 test condivisi che qualsiasi adapter backend deve superare. Vengono eseguiti contro l'adapter mock a ogni `pnpm test`, e contro Firebase sull'emulatore con `pnpm test:firebase:docker`.
+La suite di test contrattuali dell'adapter (`adapter-contract.ts`) definisce i test condivisi che qualsiasi adapter backend deve superare. Vengono eseguiti contro l'adapter mock a ogni `pnpm test`, e contro Firebase sull'emulatore con `pnpm test:firebase:docker`.
 
 ## Test E2E (Playwright)
 
@@ -61,6 +59,10 @@ I test E2E coprono i flussi utente critici usando il backend mock, contro una bu
 ```bash
 pnpm test:e2e
 ```
+
+Playwright serve la build sulla porta 3001. Per iterare in fretta, avvia prima un server di sviluppo su quella porta (`NEXT_PUBLIC_BACKEND=mock pnpm dev --port 3001`) e Playwright lo riusa invece di fare la build (fuori da CI).
+
+Il mock risponde a ogni lettura subito, quindi uno stato di caricamento sparisce prima che un test possa vederlo. Per rallentarlo, una spec imposta `window.__MOCK_LATENCY_MS__` (con `page.evaluate` o `page.addInitScript`) e ogni chiamata db del mock attende quel tempo. Lo usa `e2e/loading-states.spec.ts`.
 
 Un'installazione senza Fatturazione e Soluzioni è una build a sé: `pnpm test:e2e:modules` esegue `modules.spec.ts` contro di essa.
 
