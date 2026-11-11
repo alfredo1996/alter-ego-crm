@@ -83,7 +83,7 @@ import {
   weightedPipelineMonthly,
 } from "@/lib/opportunities"
 import { margin as quarterMargin, quarterRows } from "@/lib/quarters"
-import { filterSolutions } from "@/lib/solutions"
+import { filterSolutions, sectionsFor } from "@/lib/solutions"
 import { isTaskOverdue, normalizeLabels, sortTasks, statusOf, taskClientId } from "@/lib/tasks"
 import { hoursAction, monthHours, planCells } from "@/lib/timecards"
 import { z } from "@/lib/zod"
@@ -1684,8 +1684,10 @@ export function registerCrmReadTools(server: McpServer): void {
         "The solution catalog: what was built, or proposed, for each client, documented for reuse in pre-sales. A " +
         "solution is the work itself, not its contract (get_client) nor its calls (list_meetings). One row per " +
         "solution, the most recently updated first: name, client, contract (contractState Pre-sales while there is " +
-        "none), the solution's own status (proposed, building, delivered, retired), stack, purpose (the first line " +
-        "of its Purpose and Target section) and missingSections, the sections not written yet. «cosa abbiamo fatto " +
+        "none), the solution's own status (proposed, building, delivered, retired), kind (product or advisory), " +
+        "target (the end state it leads to), steps (the road: number, title, state done/now/next/later, months, what " +
+        "pays for it, goal, outcome) with nowStep, stack, purpose (the first line of its Purpose and Target section) " +
+        "and missingSections, the sections its kind asks for that are not written yet. «cosa abbiamo fatto " +
         "con Neo4j?» → stack 'neo4j' (one technology, any case); «le soluzioni per Acme» → client; 'have we built " +
         "anything for recommendations?' → query, matched in the name, domain, stack and every section's text. " +
         "status keeps one status. get_solution reads one whole.",
@@ -1699,16 +1701,17 @@ export function registerCrmReadTools(server: McpServer): void {
     async (input, ctx) => {
       try {
         const userId = userIdOf(ctx)
-        const [solutions, clients, engagements] = await Promise.all([
+        const [solutions, clients, engagements, opportunities] = await Promise.all([
           db().getSolutions(userId),
           db().getClients(userId),
           db().getEngagements(userId),
+          db().getOpportunities(userId),
         ])
         // Archived clients too: the catalog outlives the client.
         const client = input.client ? resolveClient(clients, input.client, true) : null
         const stack = input.stack?.toLowerCase() ?? null
         const rows = filterSolutions(solutions, { client: client?.id ?? null, status: input.status ?? null, stack, q: input.query ?? null })
-          .map((s) => ({ ...solutionCard(s, clients, engagements), purpose: s.sections.purpose?.trim().split("\n")[0] || null }))
+          .map((s) => ({ ...solutionCard(s, clients, engagements, opportunities), purpose: s.sections.purpose?.trim().split("\n")[0] || null }))
         const filters = [
           client && `client ${client.name}`,
           input.status && `status ${input.status}`,
@@ -1735,8 +1738,9 @@ export function registerCrmReadTools(server: McpServer): void {
     {
       title: "Solution Details",
       description:
-        "One solution of the catalog, whole: name, client, contract, status, domain, stack; the nine sections in " +
-        "order with their text (null = not written yet); the data model as entities (each with its source, the " +
+        "One solution of the catalog, whole: name, client, contract, status, kind (product or advisory), target, " +
+        "the road of steps and the Now step, domain, stack; the nine sections in order with their text (null = not " +
+        "written yet; Steps and History hold older text, the road replaces them); the data model as entities (each with its source, the " +
         "client's system or dataset it comes from, and notes) and relations (from, type, to); and missingSections. " +
         "With a contract, also its health (green/yellow/red) as of contractHealthAsOf and the date of its last " +
         "meeting, read from the meetings as list_meetings reports them; left out in pre-sales or before a first " +
@@ -1754,24 +1758,27 @@ export function registerCrmReadTools(server: McpServer): void {
     async (input, ctx) => {
       try {
         const userId = userIdOf(ctx)
-        const [solutions, clients, engagements, meetings] = await Promise.all([
+        const [solutions, clients, engagements, meetings, opportunities] = await Promise.all([
           db().getSolutions(userId),
           db().getClients(userId),
           db().getEngagements(userId),
           db().getMeetings(userId),
+          db().getOpportunities(userId),
         ])
         const client = input.client ? resolveClient(clients, input.client, true) : null
         const s = resolveSolution(solutions, clients, input.solution, client?.id)
-        const card = solutionCard(s, clients, engagements)
+        const card = solutionCard(s, clients, engagements, opportunities)
         // Read from the verbali, as get_client does: the catalog never copies the contract's status.
         const status = s.engagementId ? contractStatus(meetings)(s.engagementId) : null
         const met = status?.lastMeetingDate ? status : null
         const wanted = new Set(input.sections ?? SOLUTION_SECTIONS.map((x) => x.key))
-        const written = SOLUTION_SECTIONS.length - card.missingSections.length
+        const asked = sectionsFor(s.kind).length
+        const written = asked - card.missingSections.length
         return ok({
           summary:
-            `${s.name} (${card.client}, ${card.contract ? `contract ${card.contract}` : "pre-sales"}): ${s.status}, ` +
-            `${written} of ${SOLUTION_SECTIONS.length} sections written.` +
+            `${s.name} (${card.client}, ${card.contract ? `contract ${card.contract}` : "pre-sales"}): ${s.kind}, ${s.status}, ` +
+            `${written} of ${asked} sections written.` +
+            (card.nowStep ? ` Now: step ${card.nowStep.number}, ${card.nowStep.title}.` : "") +
             (met ? ` Contract ${met.health ? `${met.health} since ${met.healthAsOf}` : "with no status"}, last meeting ${met.lastMeetingDate}.` : ""),
           solution: {
             ...card,
@@ -1779,7 +1786,7 @@ export function registerCrmReadTools(server: McpServer): void {
           },
           sections: SOLUTION_SECTIONS.filter(({ key }) => wanted.has(key)).map(({ key, label }) => ({
             key,
-            label,
+            label: sectionsFor(s.kind).find((x) => x.key === key)?.label ?? label,
             text: s.sections[key]?.trim() ? s.sections[key] : null,
           })),
           entities: s.entities,

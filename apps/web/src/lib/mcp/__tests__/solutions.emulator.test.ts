@@ -5,6 +5,7 @@
  *
  * Runs under the Firebase emulator (vitest.emulator.ts).
  */
+import { isoDate } from "@alter-ego/kernel/dates"
 import { createUserWithEmailAndPassword } from "firebase/auth"
 import { beforeAll, describe, expect, it } from "vitest"
 
@@ -15,7 +16,7 @@ import { POST as token } from "@/app/api/oauth/token/route"
 import * as admin from "@/lib/backend/firebase-admin"
 import { getFirebaseAuth } from "@/lib/firebase-client"
 import { s256 } from "@/lib/oauth/pkce"
-import { SOLUTION_SECTIONS } from "@/types/schemas"
+import { SOLUTION_KIND_SECTIONS, SOLUTION_SECTIONS } from "@/types/schemas"
 
 const ORIGIN = "https://mcp.test"
 const REDIRECT = "https://claude.ai/api/mcp/auth_callback"
@@ -118,7 +119,7 @@ beforeAll(async () => {
 })
 
 describe("create_solution", () => {
-  it("creates an empty solution and replies with the nine sections, one interview question each", async () => {
+  it("creates an empty product and replies with the seven sections it asks for, one interview question each", async () => {
     const out = await callTool("create_solution", {
       client: "Nordwind",
       name: "Product knowledge graph",
@@ -136,9 +137,11 @@ describe("create_solution", () => {
       domain: "retail",
       stack: ["neo4j", "gds", "kafka"],
     })
-    expect(out.solution.missingSections).toHaveLength(9)
+    expect(out.solution).toMatchObject({ kind: "product", target: null, steps: [], nowStep: null })
+    expect(out.solution.missingSections).toEqual(SOLUTION_KIND_SECTIONS.product)
+    // Steps and History are not asked: the road and the journal replace them.
     expect(out.interview).toEqual(
-      SOLUTION_SECTIONS.map(({ key, label, question }) => ({ section: key, label, question }))
+      SOLUTION_SECTIONS.filter((x) => SOLUTION_KIND_SECTIONS.product.includes(x.key)).map(({ key, label, question }) => ({ section: key, label, question }))
     )
     expect(out.next).toContain("one question at a time")
     expect(out.next).toContain("update_solution")
@@ -176,7 +179,7 @@ describe("update_solution", () => {
     expect(s.sections.kpis).toBe("Search time from 4 s to 0.5 s.")
     expect(out.summary).toContain("KPIs written")
     // The interview goes on: the reply lists what is still empty, with its question.
-    expect(out.solution.missingSections).toEqual(["requirements", "sources", "model", "architecture", "steps", "history", "results"])
+    expect(out.solution.missingSections).toEqual(["requirements", "sources", "model", "architecture", "results"])
     expect(out.interview[0]).toEqual({ section: "requirements", label: "Requirements", question: SOLUTION_SECTIONS[1].question })
   })
 
@@ -286,7 +289,7 @@ describe("list_solutions and get_solution", () => {
     ])
     const graph = out.solutions[2]
     expect(graph).toMatchObject({ contract: "Product graph", purpose: "One graph of every product." })
-    expect(graph.missingSections).toEqual(["requirements", "kpis", "sources", "model", "architecture", "steps", "results"])
+    expect(graph.missingSections).toEqual(["requirements", "kpis", "sources", "model", "architecture", "results"])
     expect(out.solutions[1]).toMatchObject({ contract: null, contractState: "Pre-sales", purpose: null })
   })
 
@@ -338,7 +341,7 @@ describe("list_solutions and get_solution", () => {
     ])
     expect(out.relations).toEqual([{ from: "Product", to: "Category", type: "IN_CATEGORY" }])
     expect(out.missingSections).toEqual(out.solution.missingSections)
-    expect(out.summary).toContain("2 of 9 sections written")
+    expect(out.summary).toContain("1 of 7 sections written")
     expect(out.summary).toContain("green since 2026-09-01, last meeting 2026-09-15")
   })
 
@@ -376,5 +379,120 @@ describe("list_solutions and get_solution", () => {
     const out = await callTool("update_solution", { solution: graphId, name: "PRODUCT knowledge graph" })
     expect(out.solution.name).toBe("PRODUCT knowledge graph")
     expect((await stored(graphId)).name).toBe("PRODUCT knowledge graph")
+  })
+})
+
+describe("a solution's kind, target and road", () => {
+  let tuningId = ""
+  let productGraphId = ""
+
+  beforeAll(async () => {
+    const [nordwind, sudwind] = await admin.getClients(userId)
+    const [graphContract] = (await admin.getEngagements(userId)).filter((e) => e.name === "Product graph")
+    productGraphId = graphContract.id
+    const opp = { stage: "proposal", probability: 50, dailyRate: 900, estimatedDaysPerMonth: 5, estimatedDurationMonths: 3, vatApplicable: true } as const
+    await admin.createOpportunity(userId, { ...opp, clientId: nordwind.id, title: "Phase two" })
+    const won = await admin.createOpportunity(userId, { ...opp, clientId: nordwind.id, title: "Phase three" })
+    await admin.updateOpportunity(userId, won.id, { engagementId: graphContract.id })
+    await admin.createOpportunity(userId, { ...opp, clientId: sudwind.id, title: "Fleet phase two" })
+  })
+
+  const road = async () => (await stored(tuningId)).steps.map((x) => [x.title, x.state])
+
+  it("create_solution with kind advisory stores kind and target and asks three questions", async () => {
+    const out = await callTool("create_solution", { client: "Nordwind", name: "Query tuning", kind: "advisory", target: "Every report under 2 s" })
+    tuningId = out.solution.id
+    expect(out.solution).toMatchObject({ kind: "advisory", target: "Every report under 2 s", steps: [], nowStep: null })
+    expect(out.interview.map((q: Payload) => [q.section, q.label])).toEqual([
+      ["purpose", "Purpose and Target"], ["kpis", "KPIs"], ["results", "Results and Lessons"],
+    ])
+    expect(await stored(tuningId)).toMatchObject({ kind: "advisory", target: "Every report under 2 s" })
+  })
+
+  it("update_solution changes kind and target, and clears the target with null", async () => {
+    await callTool("update_solution", { solution: tuningId, kind: "product", target: "Reports under 1 s" })
+    expect(await stored(tuningId)).toMatchObject({ kind: "product", target: "Reports under 1 s" })
+    await callTool("update_solution", { solution: tuningId, kind: "advisory", target: null })
+    expect(await stored(tuningId)).toMatchObject({ kind: "advisory", target: null })
+    expect(await refusal("update_solution", { solution: tuningId, target: "x".repeat(501) })).toContain("At most 500 characters")
+  })
+
+  it("a new title adds a step, in order, paid by one of the client's opportunities", async () => {
+    await callTool("update_solution", { solution: tuningId, step: "Audit", fromMonth: "2026-03", toMonth: "2026-03", stepState: "now", goal: "Find the slow queries" })
+    const out = await callTool("update_solution", { solution: tuningId, step: "Tune", fromMonth: "2026-04", paidBy: "Phase two" })
+    await callTool("update_solution", { solution: tuningId, step: "Hand over", fromMonth: "2026-09", stepState: "later" })
+    expect(await road()).toEqual([["Audit", "now"], ["Tune", "next"], ["Hand over", "later"]])
+    expect(out.solution.steps[1]).toMatchObject({ number: 2, title: "Tune", paidBy: { type: "opportunity", name: "Phase two" } })
+    expect(out.solution.nowStep).toMatchObject({ number: 1, title: "Audit" })
+    expect((await stored(tuningId)).steps[0]).toMatchObject({ toMonth: "2026-03", goal: "Find the slow queries", outcome: null, doneOn: null })
+  })
+
+  it("refuses a second Now step, a new step with no from month, and a step number that is not there, and writes nothing", async () => {
+    expect(await refusal("update_solution", { solution: tuningId, step: "Tune", stepState: "now" })).toContain("Only one step can be Now")
+    expect(await refusal("update_solution", { solution: tuningId, step: "Review" })).toContain("fromMonth")
+    expect(await refusal("update_solution", { solution: tuningId, step: 9, stepState: "next" })).toContain("There are 3 steps")
+    expect(await refusal("update_solution", { solution: tuningId, step: "Tune", toMonth: "2026-01" })).toContain("The end is before the start")
+    expect(await road()).toEqual([["Audit", "now"], ["Tune", "next"], ["Hand over", "later"]])
+  })
+
+  it("asks for the outcome to mark a step Done, then moves Now to the next step", async () => {
+    expect(await refusal("update_solution", { solution: tuningId, step: "Audit", stepState: "done" })).toContain("outcome")
+    expect(await road()).toEqual([["Audit", "now"], ["Tune", "next"], ["Hand over", "later"]])
+    const out = await callTool("update_solution", { solution: tuningId, step: 1, stepState: "done", outcome: "Nine slow queries found" })
+    expect(await road()).toEqual([["Audit", "done"], ["Tune", "now"], ["Hand over", "later"]])
+    expect((await stored(tuningId)).steps[0]).toMatchObject({ outcome: "Nine slow queries found", doneOn: isoDate(new Date()) })
+    expect(out.solution.nowStep).toMatchObject({ number: 2, title: "Tune" })
+    expect(out.summary).toContain('step 1 "Audit" done')
+    expect(out.summary).toContain('"Tune" is now')
+  })
+
+  it("follows a won opportunity to its contract when read, and refuses another client's contract or opportunity", async () => {
+    await callTool("update_solution", { solution: tuningId, step: "Hand over", paidBy: "Phase three" })
+    const out = await callTool("get_solution", { solution: tuningId })
+    expect(out.solution.steps.map((x: Payload) => x.paidBy)).toEqual([
+      null,
+      expect.objectContaining({ type: "opportunity", name: "Phase two" }),
+      { type: "contract", id: productGraphId, name: "Product graph" },
+    ])
+    for (const other of ["Fleet graph", "Fleet phase two"]) {
+      expect(await refusal("update_solution", { solution: tuningId, step: "Tune", paidBy: other })).toContain("No contract or opportunity of Nordwind Retail S.p.A. matches")
+    }
+    expect((await stored(tuningId)).steps[1].paidBy).toMatchObject({ type: "opportunity" })
+    await callTool("update_solution", { solution: tuningId, step: "Tune", paidBy: null })
+    expect((await stored(tuningId)).steps[1].paidBy).toBeNull()
+  })
+
+  it("a Done step keeps its outcome; reopening it clears the outcome and the day, and doing it again asks for a new outcome", async () => {
+    expect(await refusal("update_solution", { solution: tuningId, step: "Audit", outcome: null })).toContain("outcome")
+    expect((await stored(tuningId)).steps[0]).toMatchObject({ outcome: "Nine slow queries found", doneOn: isoDate(new Date()) })
+    await callTool("update_solution", { solution: tuningId, step: "Audit", stepState: "later" })
+    expect((await stored(tuningId)).steps[0]).toMatchObject({ state: "later", outcome: null, doneOn: null })
+    expect(await refusal("update_solution", { solution: tuningId, step: "Audit", stepState: "done" })).toContain("outcome")
+    await callTool("update_solution", { solution: tuningId, step: "Audit", stepState: "done", outcome: "Eleven slow queries found" })
+    expect((await stored(tuningId)).steps[0]).toMatchObject({ state: "done", outcome: "Eleven slow queries found", doneOn: isoDate(new Date()) })
+  })
+
+  it("refuses an empty paidBy instead of ignoring it", async () => {
+    // A schema refusal, so it never reaches the handler: its text is not the JSON the handler's errors are.
+    const result = await rpc("update_solution", { solution: tuningId, step: "Tune", paidBy: "" })
+    expect(result.isError).toBe(true)
+    expect(result.content[0].text).toContain("paidBy")
+  })
+
+  it("removeStep deletes one by title or number", async () => {
+    await callTool("update_solution", { solution: tuningId, removeStep: "Hand over" })
+    expect(await road()).toEqual([["Audit", "done"], ["Tune", "now"]])
+    await callTool("update_solution", { solution: tuningId, removeStep: 1 })
+    expect(await road()).toEqual([["Tune", "now"]])
+  })
+
+  it("list_solutions and get_solution return kind, target, steps and the Now step", async () => {
+    await callTool("update_solution", { solution: tuningId, target: "Every report under 2 s" })
+    const row = (await callTool("list_solutions", { client: "Nordwind", query: "tuning" })).solutions[0]
+    expect(row).toMatchObject({ name: "Query tuning", kind: "advisory", target: "Every report under 2 s", nowStep: { number: 1, title: "Tune" } })
+    expect(row.steps).toHaveLength(1)
+    const out = await callTool("get_solution", { solution: tuningId })
+    expect(out.solution).toMatchObject({ kind: "advisory", nowStep: { title: "Tune" } })
+    expect(out.summary).toContain("0 of 3 sections written")
   })
 })

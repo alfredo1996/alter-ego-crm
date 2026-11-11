@@ -425,6 +425,28 @@ describe("solutions", () => {
     expect((await ref.get()).data()).toMatchObject({ domain: null, stack: ["neo4j", "kafka"] })
   })
 
+  // Filed before kinds did, or written by the client SDK, which parses nothing.
+  it("reads a document with no kind as a product with no target and no steps, and mends a hand-written road", async () => {
+    const old = await userSub("solutions").add({
+      userId, clientId: "c1", engagementId: null, name: "Filed before kinds", status: "delivered", domain: null,
+      stack: [], sections: {}, entities: [], relations: [], createdAt: new Date(), updatedAt: new Date(),
+    })
+    expect((await admin.getSolutions(userId))[0]).toMatchObject({ kind: "product", target: null, steps: [] })
+    const step = { title: "Tune", state: "now", fromMonth: "2026-03", toMonth: null, paidBy: null, goal: null, outcome: null, doneOn: null }
+    await old.update({ kind: "service", target: "  ", steps: [step, { ...step, title: "Review" }, { title: "" }] })
+    const [read] = await admin.getSolutions(userId)
+    expect(read).toMatchObject({ kind: "product", target: null })
+    expect(read.steps.map((x) => [x.title, x.state])).toEqual([["Tune", "now"], ["Review", "next"]])
+    expect(await admin.updateSolution(userId, old.id, { status: "retired" })).toMatchObject({ status: "retired", steps: read.steps })
+  })
+
+  it("refuses a road with two Now steps, and writes nothing", async () => {
+    const step = { title: "A", state: "now", fromMonth: "2026-03", toMonth: null, paidBy: null, goal: null, outcome: null, doneOn: null } as const
+    const created = await admin.createSolution(userId, { clientId: "c1", name: "Road" })
+    await expect(admin.updateSolution(userId, created.id, { steps: [step, { ...step, title: "B" }] })).rejects.toThrow(/Only one step/)
+    expect((await admin.getSolutions(userId))[0].steps).toEqual([])
+  })
+
   it("update of a missing solution throws", async () => {
     await expect(admin.updateSolution(userId, "nope", { name: "x" })).rejects.toThrow("Solution not found")
   })

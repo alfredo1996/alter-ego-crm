@@ -19,7 +19,7 @@ export const contract = (id: string, clientId: string, name: string, isActive = 
   createdAt: at, updatedAt: at,
 })
 export const solution = (o: Partial<Solution> & Pick<Solution, "id" | "clientId" | "name">): Solution => ({
-  userId: "u1", engagementId: null, status: "proposed", domain: null, stack: [],
+  userId: "u1", engagementId: null, status: "proposed", kind: "product", target: null, steps: [], domain: null, stack: [],
   sections: normalizeSolutionSections({}), entities: [], relations: [], createdAt: at, updatedAt: at, ...o,
 })
 const meeting = (o: Partial<Meeting> & Pick<Meeting, "id" | "clientId" | "date">): Meeting => ({

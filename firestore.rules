@@ -420,6 +420,11 @@ service cloud.firestore {
       // malformed one on read. sections may hold only the nine keys of
       // SOLUTION_SECTIONS, each text or null. The caps are the constants in
       // schemas.ts; the rules tests pin the two.
+      //
+      // kind, target and steps (the road to the target) came later: they are keys but
+      // not required, so a stored solution without them stays editable and reads as a
+      // product with no target and no steps. steps is checked for type and size only,
+      // like the lists above: zod checks each step and the one-Now rule on every write.
 
       match /solutions/{solutionId} {
         function validSections(s) {
@@ -437,7 +442,7 @@ service cloud.firestore {
         }
         function solutionKeys() {
           return ['userId', 'clientId', 'engagementId', 'name', 'status', 'domain', 'stack', 'sections', 'entities',
-                  'relations', 'createdAt', 'updatedAt'];
+                  'relations', 'kind', 'target', 'steps', 'createdAt', 'updatedAt'];
         }
         function solutionRequired() {
           return ['userId', 'clientId', 'engagementId', 'name', 'status', 'domain', 'stack', 'sections', 'entities',
@@ -453,6 +458,9 @@ service cloud.firestore {
             && validSections(d.sections)
             && d.entities is list && d.entities.size() <= 100
             && d.relations is list && d.relations.size() <= 300
+            && d.get('kind', 'product') in ['product', 'advisory']
+            && isOptionalString(d.get('target', null), 500)
+            && d.get('steps', []) is list && d.get('steps', []).size() <= 20
             && isStamped(d);
         }
         allow read, delete: if isOwner(userId);

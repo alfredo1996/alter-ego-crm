@@ -213,6 +213,37 @@ export type UpdateMeetingInput = Partial<Omit<CreateMeetingInput, "clientId">>
 
 export type SolutionStatus = "proposed" | "building" | "delivered" | "retired"
 
+/** Product: something built for the client. Advisory: help given (tuning their queries, say). */
+export type SolutionKind = "product" | "advisory"
+
+export type SolutionStepState = "done" | "now" | "next" | "later"
+
+/** What pays for a step: one contract, or one opportunity, of the solution's client. */
+export interface SolutionStepPayer {
+  type: "contract" | "opportunity"
+  id: string
+}
+
+/**
+ * One step of the road to the target. At most one step of a solution is Now. An
+ * opportunity that has been won is followed to its contract at read time
+ * (stepContract): nothing is written when it converts.
+ */
+export interface SolutionStep {
+  title: string
+  state: SolutionStepState
+  /** "YYYY-MM". */
+  fromMonth: string
+  /** "YYYY-MM", never before fromMonth; null = open-ended. */
+  toMonth: string | null
+  paidBy: SolutionStepPayer | null
+  goal: string | null
+  /** What came of it; asked for when the step is marked Done. */
+  outcome: string | null
+  /** "YYYY-MM-DD", the day it was marked Done. */
+  doneOn: string | null
+}
+
 /** The nine fixed sections; SOLUTION_SECTIONS in schemas.ts holds each one's label and interview question. */
 export type SolutionSectionKey =
   | "purpose"
@@ -262,6 +293,12 @@ export interface Solution {
   /** The contract; null in pre-sales, or once the contract is deleted. */
   engagementId: string | null
   name: string
+  /** A stored solution with no kind reads as "product". */
+  kind: SolutionKind
+  /** The end state the road leads to, up to 500 characters; null = none. */
+  target: string | null
+  /** The road to the target, in order, at most 20. */
+  steps: SolutionStep[]
   /** The solution's own lifecycle, not its contract's. */
   status: SolutionStatus
   /** One word to group by ("retail"); null = none. */
@@ -283,6 +320,12 @@ export interface CreateSolutionInput {
   engagementId?: string | null
   /** Omitted = "proposed". */
   status?: SolutionStatus
+  /** Omitted = "product". */
+  kind?: SolutionKind
+  /** Omitted = null. */
+  target?: string | null
+  /** Omitted = none; an update replaces the whole road. */
+  steps?: SolutionStep[]
   domain?: string | null
   stack?: string[]
   /** The sections omitted are null. */

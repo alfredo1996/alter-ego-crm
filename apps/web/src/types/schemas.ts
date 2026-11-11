@@ -14,8 +14,10 @@ import type {
   Solution,
   SolutionEntity,
   SolutionRelation,
+  SolutionKind,
   SolutionSectionKey,
   SolutionSections,
+  SolutionStep,
   UpdateCollaboratorInput,
   UpdateSolutionInput,
 } from "./crm"
@@ -432,7 +434,48 @@ export const MAX_SOLUTION_STACK = 30
 export const MAX_SOLUTION_ENTITIES = 100
 export const MAX_SOLUTION_RELATIONS = 300
 
+export const MAX_SOLUTION_STEPS = 20
+export const SOLUTION_TARGET_MAX = 500
+
 export const solutionStatusSchema = z.enum(["proposed", "building", "delivered", "retired"])
+
+export const solutionKindSchema = z.enum(["product", "advisory"])
+
+/**
+ * The sections each kind asks for, in order (the MCP interview, what is missing). The other
+ * sections stay available on request, and text stored in Steps and History stays readable:
+ * the road and the journal replace them.
+ */
+export const SOLUTION_KIND_SECTIONS: Record<SolutionKind, readonly SolutionSectionKey[]> = {
+  product: ["purpose", "requirements", "kpis", "sources", "model", "architecture", "results"],
+  advisory: ["purpose", "kpis", "results"],
+}
+
+const stepMonth = z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/, "Pick a month")
+
+// Every field present, null when unused, like a contract amendment.
+export const solutionStepSchema = z
+  .object({
+    title: z.string().trim().min(1, "Name the step").max(200),
+    state: z.enum(["done", "now", "next", "later"]),
+    fromMonth: stepMonth,
+    toMonth: stepMonth.nullable(),
+    paidBy: z.object({ type: z.enum(["contract", "opportunity"]), id: z.string().min(1) }).nullable(),
+    goal: z.string().trim().min(1).max(1000).nullable(),
+    outcome: z.string().trim().min(1).max(1000).nullable(),
+    doneOn: z.iso.date().nullable(),
+  })
+  .superRefine((s, ctx) => {
+    if (s.toMonth && s.toMonth < s.fromMonth) ctx.addIssue({ code: "custom", path: ["toMonth"], message: "The end is before the start" })
+  })
+
+export const solutionStepsSchema = z
+  .array(solutionStepSchema)
+  .max(MAX_SOLUTION_STEPS, `At most ${MAX_SOLUTION_STEPS} steps`)
+  .superRefine((steps, ctx) => {
+    const now = steps.flatMap((s, i) => (s.state === "now" ? [i] : []))
+    if (now.length > 1) ctx.addIssue({ code: "custom", path: [now[1], "state"], message: "Only one step can be Now" })
+  })
 
 /** One of the nine section keys, for the sections map and the MCP tools' section input. */
 export const solutionSectionKeySchema = z.enum(SOLUTION_SECTIONS.map((s) => s.key) as [SolutionSectionKey, ...SolutionSectionKey[]])
@@ -457,6 +500,9 @@ const solutionShape = z.object({
   name: z.string().trim().min(1, "Name is required").max(200),
   engagementId: z.string().min(1).nullish(),
   status: solutionStatusSchema.optional(),
+  kind: solutionKindSchema.optional(),
+  target: z.string().trim().min(1).max(SOLUTION_TARGET_MAX, `At most ${SOLUTION_TARGET_MAX} characters`).nullish(),
+  steps: solutionStepsSchema.optional(),
   domain: z.string().trim().min(1).max(60).nullish(),
   stack: z
     .array(solutionTagSchema)
@@ -521,6 +567,9 @@ export function solutionFields(
     engagementId: v.engagementId ?? null,
     name: v.name,
     status: v.status ?? "proposed",
+    kind: v.kind ?? "product",
+    target: v.target ?? null,
+    steps: v.steps ?? [],
     domain: v.domain ?? null,
     stack: v.stack ?? [],
     sections: normalizeSolutionSections(v.sections),
@@ -541,6 +590,37 @@ export function normalizeSolutionStack(raw: unknown): string[] {
     return parsed.success ? [parsed.data] : []
   })
   return [...new Set(tags)]
+}
+
+/** A stored kind: anything but "advisory" reads as a product, as a solution filed before kinds did. */
+export function normalizeSolutionKind(raw: unknown): SolutionKind {
+  return raw === "advisory" ? "advisory" : "product"
+}
+
+/** A stored target as zod writes it: trimmed, and null when blank. */
+export function normalizeSolutionTarget(raw: unknown): string | null {
+  return typeof raw === "string" ? raw.trim() || null : null
+}
+
+/**
+ * A stored road as the app may read it: the steps that parse, at most 20, and only the first Now
+ * (a later one reads as Next). The rules check the list's type and size only, so this keeps a
+ * hand-written step from reaching a page or a tool, and a later parse (solutionFields) from throwing.
+ */
+export function normalizeSolutionSteps(raw: unknown): SolutionStep[] {
+  let seenNow = false
+  return (Array.isArray(raw) ? raw : [])
+    .flatMap((r) => {
+      const parsed = solutionStepSchema.safeParse(r)
+      return parsed.success ? [parsed.data] : []
+    })
+    .slice(0, MAX_SOLUTION_STEPS)
+    .map((s) => {
+      if (s.state !== "now") return s
+      if (seenNow) return { ...s, state: "next" as const }
+      seenNow = true
+      return s
+    })
 }
 
 /** A stored domain as zod writes it: trimmed, and null when blank. */

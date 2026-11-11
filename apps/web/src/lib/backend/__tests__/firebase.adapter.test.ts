@@ -11,6 +11,7 @@
  */
 import { createUserWithEmailAndPassword, deleteUser } from "firebase/auth"
 import { addDoc, collection } from "firebase/firestore"
+import { describe, expect, it } from "vitest"
 
 import { createFirebaseAdapter } from "@/lib/backend/firebase"
 import { getFirebaseAuth, getFirebaseDb } from "@/lib/firebase-client"
@@ -52,4 +53,18 @@ describeAdapterContract("firebase", async () => {
       await deleteUser(user).catch(() => {})
     },
   }
+})
+
+describe("firebase adapter, a document written before kind, target and steps existed", () => {
+  it("reads as a product with no target and no steps", async () => {
+    const { user } = await createUserWithEmailAndPassword(getFirebaseAuth(), `legacy-solution-${Date.now()}@example.com`, "Test1234!")
+    // Through the client SDK with rules enforced: exactly what the old app bundle wrote.
+    await addDoc(collection(getFirebaseDb(), `users/${user.uid}/solutions`), {
+      userId: user.uid, clientId: "c1", engagementId: null, name: "Old graph", status: "building", domain: null,
+      stack: [], sections: {}, entities: [], relations: [], createdAt: new Date(), updatedAt: new Date(),
+    })
+    const [old] = await createFirebaseAdapter().db.getSolutions(user.uid)
+    expect(old).toMatchObject({ name: "Old graph", kind: "product", target: null, steps: [] })
+    await deleteUser(user).catch(() => {})
+  })
 })
