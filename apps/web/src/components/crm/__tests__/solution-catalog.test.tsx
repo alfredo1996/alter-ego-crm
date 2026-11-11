@@ -92,8 +92,8 @@ describe("the Solutions catalog", () => {
     expect(graph).toHaveTextContent(/One graph for the catalog,\s+so search/)
     expect(graph).toHaveTextContent("neo4jgdskafka")
     expect(graph).toHaveTextContent("Product graph · Active")
-    expect(within(graph).getByText("4 of 9 sections written")).toHaveClass("sr-only")
-    expect(graph).toHaveTextContent("4/9")
+    expect(within(graph).getByText("4 of 7 sections written")).toHaveClass("sr-only")
+    expect(graph).toHaveTextContent("4/7")
     expect(graph).toHaveTextContent(/2 entities · 1 relation · updated 1 Oct/)
     expect(card("Store search")).toHaveTextContent("Pre-sales")
     expect(card("Churn model")).toHaveTextContent("Retainer · Closed")
@@ -245,10 +245,27 @@ describe("New Solution", () => {
     fireEvent.click(within(dialog).getByRole("button", { name: "Create Solution" }))
     await waitFor(() =>
       expect(writes.createSolution).toHaveBeenCalledWith("u1", {
-        clientId: "c1", name: "Price graph", engagementId: "e1", status: "proposed", domain: null, stack: ["neo4j", "kafka"],
+        clientId: "c1", name: "Price graph", engagementId: "e1", status: "proposed", kind: "product", target: null, domain: null, stack: ["neo4j", "kafka"],
       }),
     )
     await waitFor(() => expect(push).toHaveBeenCalledWith("/solutions/s9"))
+  })
+
+  it("sets the kind and the target without the MCP, and refuses a target over 500 characters", async () => {
+    await show("?client=c1")
+    fireEvent.click(screen.getByRole("button", { name: "New Solution" }))
+    const dialog = await screen.findByRole("dialog", { name: "New Solution" })
+    type(within(dialog).getByLabelText("Name"), "Pricing advice")
+    await pick(within(dialog).getByRole("combobox", { name: "Kind" }), "Advisory")
+    type(within(dialog).getByLabelText("Target (optional)"), "x".repeat(501))
+    fireEvent.click(within(dialog).getByRole("button", { name: "Create Solution" }))
+    expect(await within(dialog).findByText("At most 500 characters")).toHaveAttribute("role", "alert")
+    expect(writes.createSolution).not.toHaveBeenCalled()
+    type(within(dialog).getByLabelText("Target (optional)"), " Prices set by one team ")
+    fireEvent.click(within(dialog).getByRole("button", { name: "Create Solution" }))
+    await waitFor(() =>
+      expect(writes.createSolution).toHaveBeenCalledWith("u1", expect.objectContaining({ kind: "advisory", target: "Prices set by one team" })),
+    )
   })
 })
 

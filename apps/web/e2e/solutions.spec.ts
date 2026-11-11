@@ -116,7 +116,7 @@ test.describe("Solutions", () => {
     // Back on the catalog by the breadcrumb, the card says how much is written.
     await main.getByRole("link", { name: "Back to Solutions" }).click()
     await expect(page).toHaveURL("/solutions")
-    await expect(page.getByRole("article", { name: NAME })).toContainText("2/9")
+    await expect(page.getByRole("article", { name: NAME })).toContainText("2/7")
     if (isMobile) await noSideScroll(page)
 
     // "Reload": away to Clients and back through its link, the list read again.
@@ -181,7 +181,7 @@ test.describe("Solutions", () => {
     await main.getByRole("link", { name: "Back to Solutions" }).click()
     await ask.getByRole("button", { name: "Discard Changes" }).click()
     await expect(page).toHaveURL("/solutions")
-    await expect(page.getByRole("article", { name: NAME })).toContainText("0/9")
+    await expect(page.getByRole("article", { name: NAME })).toContainText("0/7")
   })
 
   test("the road: add three steps, make the second Now, finish it, reorder, and a reload keeps it", async ({ page, isMobile }) => {
@@ -215,24 +215,22 @@ test.describe("Solutions", () => {
     // The second step becomes Now.
     await step("Add indexes").click()
     let dialog = page.getByRole("dialog", { name: "Edit Step" })
-    await dialog.getByRole("combobox", { name: "State" }).click()
-    await page.getByRole("option", { name: "Now" }).click()
+    await dialog.getByRole("radio", { name: "Now" }).click()
     await dialog.getByRole("button", { name: "Save Step" }).click()
     await expect(dialog).toBeHidden()
-    await expect(main.getByRole("heading", { level: 2, name: "Now · Step 2" })).toBeVisible()
+    await expect(main.getByText("Now · Step 2", { exact: true })).toBeVisible()
     await expect(road.getByText("Step 2 of 3")).toBeVisible()
 
     // Done asks for its outcome; the third step becomes Now.
     await step("Add indexes").click()
     dialog = page.getByRole("dialog", { name: "Edit Step" })
-    await dialog.getByRole("combobox", { name: "State" }).click()
-    await page.getByRole("option", { name: "Done" }).click()
+    await dialog.getByRole("radio", { name: "Done" }).click()
     await dialog.getByRole("button", { name: "Save Step" }).click()
     await expect(dialog.getByRole("alert")).toHaveText("Say what came of it to mark the step Done")
     await dialog.getByRole("textbox", { name: "Outcome" }).fill("p95 from 38 s to 4 s")
     await dialog.getByRole("button", { name: "Save Step" }).click()
     await expect(dialog).toBeHidden()
-    await expect(main.getByRole("heading", { level: 2, name: "Now · Step 3" })).toBeVisible()
+    await expect(main.getByText("Now · Step 3", { exact: true })).toBeVisible()
     await expect(road.getByText("p95 from 38 s to 4 s")).toBeVisible()
 
     // Reorder: the first step moves later, from the keyboard's buttons.
@@ -255,6 +253,35 @@ test.describe("Solutions", () => {
     await page.getByRole("link", { name: "1 solution", exact: true }).click()
     await page.getByRole("link", { name: NAME }).click()
     await expect(road.getByRole("listitem").filter({ has: page.getByRole("button") })).toHaveText([/Add indexes/, /Profile the queries/, /Load test/])
-    await expect(main.getByRole("heading", { level: 2, name: "Now · Step 3" })).toBeVisible()
+    await expect(main.getByText("Now · Step 3", { exact: true })).toBeVisible()
+    // The outcome written on the way survived the round trip.
+    await expect(road.getByText("p95 from 38 s to 4 s")).toBeVisible()
+  })
+
+  test("History: Add an Entry opens with today's date, typed straight away the entry goes on top", async ({ page }) => {
+    const clientId = await seedClient(page)
+    const id = await page.evaluate(
+      async ({ clientId, name }) => {
+        const backend = (window as Window & { __mockBackend?: BackendAdapter }).__mockBackend!
+        const u = (await backend.auth.getCurrentUser())!.id
+        const sections = { history: "2026-02-10 Kickoff, 40-day contract.\n2026-07-15 Go-live." }
+        return (await backend.db.createSolution(u, { clientId, name, sections })).id
+      },
+      { clientId, name: NAME },
+    )
+    await navigateTo(page, "Solutions", "/solutions")
+    type NextWindow = Window & { next: { router: { push: (href: string) => void } } }
+    await page.evaluate((id) => (window as unknown as NextWindow).next.router.push(`/solutions/${id}`), id)
+    const main = page.getByRole("main")
+    await expect(main.getByRole("region", { name: "History" }).getByRole("listitem")).toHaveText([
+      /^2026-07-15\s*Go-live\.$/,
+      /^2026-02-10\s*Kickoff, 40-day contract\.$/,
+    ])
+    await main.getByRole("button", { name: "Add an Entry" }).click()
+    await expect(main.getByRole("textbox", { name: "History" })).toBeFocused()
+    await page.keyboard.type("Pilot signed off.")
+    await main.getByRole("button", { name: "Save History" }).click()
+    const today = new Date().toLocaleDateString("en-CA")
+    await expect(main.getByRole("region", { name: "History" }).getByRole("listitem").first()).toHaveText(new RegExp(`^${today}\\s*Pilot signed off\\.$`))
   })
 })

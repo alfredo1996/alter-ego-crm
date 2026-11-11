@@ -194,12 +194,13 @@ export function stepUsage(
   return usage && { used: usage.used, total: usage.total }
 }
 
-/** The steps an open opportunity pays for (a won one has become a contract), with their 1-based number on the road. */
+/** The Next and Later steps an open opportunity pays for (a won one has become a contract), with their 1-based number on the road. */
 export function pipelineSteps(
   steps: SolutionStep[],
   opportunities: Pick<Opportunity, "id" | "stage" | "engagementId">[],
 ): { number: number; step: SolutionStep; opportunity: Pick<Opportunity, "id" | "stage" | "engagementId"> }[] {
   return steps.flatMap((step, i) => {
+    if (step.state === "done" || step.state === "now") return []
     const payer = stepContract(step, opportunities)
     const opportunity = payer?.type === "opportunity" ? opportunities.find((o) => o.id === payer.id) : undefined
     return opportunity && isOpen(opportunity as Opportunity) ? [{ number: i + 1, step, opportunity }] : []
@@ -256,7 +257,8 @@ export function saveStep(
     toMonth: draft.toMonth || null,
     paidBy: draft.paidBy,
     goal: draft.goal.trim() || null,
-    outcome: draft.state === "done" ? outcome : null,
+    // Only reopening a Done step clears its outcome; another step may carry one (the MCP allows it).
+    outcome: previous?.state === "done" && draft.state !== "done" ? null : outcome,
     doneOn: draft.state === "done" ? (previous?.state === "done" ? previous.doneOn : today) : null,
   }
   let next: SolutionStep[]

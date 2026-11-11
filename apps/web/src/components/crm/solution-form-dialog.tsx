@@ -14,6 +14,7 @@ import {
 import { Input } from "@alter-ego/ui/ui/input"
 import { Label } from "@alter-ego/ui/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@alter-ego/ui/ui/select"
+import { Textarea } from "@alter-ego/ui/ui/textarea"
 import { X } from "lucide-react"
 import { useLayoutEffect, useRef, useState, type RefObject } from "react"
 
@@ -24,12 +25,13 @@ import { engagementLabel } from "@/lib/engagements"
 import { SOLUTION_STATUS, SOLUTION_STATUSES, solutionNameTaken } from "@/lib/solutions"
 import {
   MAX_SOLUTION_STACK,
+  SOLUTION_TARGET_MAX,
   createSolutionSchema,
   normalizeSolutionStack,
   updateSolutionSchema,
 } from "@/types/schemas"
 
-import type { Client, Engagement, Solution, SolutionStatus, UpdateSolutionInput } from "@/types"
+import type { Client, Engagement, Solution, SolutionKind, SolutionStatus, UpdateSolutionInput } from "@/types"
 
 /** A Radix Select item cannot hold "" or null: the Contract choice for pre-sales. */
 const PRE_SALES = "none"
@@ -42,6 +44,9 @@ export interface SolutionForm {
   /** null = pre-sales. */
   engagementId: string | null
   status: SolutionStatus
+  kind: SolutionKind
+  /** "" = none. */
+  target: string
   /** "" = none. */
   domain: string
   stack: string[]
@@ -49,12 +54,14 @@ export interface SolutionForm {
 
 /** A new solution starts proposed and in pre-sales, on the client the list is filtered by. */
 export function solutionForm(solution: Solution | null, clientId: string | null): SolutionForm {
-  if (!solution) return { name: "", clientId: clientId ?? "", engagementId: null, status: "proposed", domain: "", stack: [] }
+  if (!solution) return { name: "", clientId: clientId ?? "", engagementId: null, status: "proposed", kind: "product", target: "", domain: "", stack: [] }
   return {
     name: solution.name,
     clientId: solution.clientId,
     engagementId: solution.engagementId,
     status: solution.status,
+    kind: solution.kind,
+    target: solution.target ?? "",
     domain: solution.domain ?? "",
     stack: solution.stack,
   }
@@ -78,9 +85,12 @@ export function withClient(
 export function solutionUpdate(opened: Solution, form: SolutionForm): UpdateSolutionInput {
   const input: UpdateSolutionInput = {}
   const domain = form.domain.trim() || null
+  const target = form.target.trim() || null
   if (form.name.trim() !== opened.name) input.name = form.name
   if (form.engagementId !== opened.engagementId) input.engagementId = form.engagementId
   if (form.status !== opened.status) input.status = form.status
+  if (form.kind !== opened.kind) input.kind = form.kind
+  if (target !== opened.target) input.target = target
   if (domain !== opened.domain) input.domain = domain
   if (form.stack.join(",") !== opened.stack.join(",")) input.stack = form.stack
   return input
@@ -212,7 +222,7 @@ function SolutionFormBody({
       if (nameTaken(parsed.data.name)) return
       updateSolution.mutate({ id: solution.id, input: parsed.data }, { onSuccess: onClose })
     } else {
-      const parsed = createSolutionSchema.safeParse({ ...values, domain: values.domain.trim() || null })
+      const parsed = createSolutionSchema.safeParse({ ...values, target: values.target.trim() || null, domain: values.domain.trim() || null })
       if (!parsed.success) return setErrors(fieldErrors(parsed.error.issues))
       if (nameTaken(parsed.data.name)) return
       createSolution.mutate(parsed.data, {
@@ -331,6 +341,36 @@ function SolutionFormBody({
               </SelectContent>
             </Select>
           </div>
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="solution-kind">Kind</Label>
+          <Select value={form.kind} onValueChange={(value) => set({ kind: value as SolutionKind })}>
+            <SelectTrigger id="solution-kind">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="product">Product</SelectItem>
+              <SelectItem value="advisory">Advisory</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="solution-target">Target (optional)</Label>
+          <Textarea
+            id="solution-target"
+            rows={2}
+            value={form.target}
+            placeholder="Where the road ends, in a sentence"
+            aria-invalid={!!errors.target}
+            aria-describedby={errors.target ? "solution-target-error" : undefined}
+            onChange={(e) => set({ target: e.target.value })}
+          />
+          <p className="text-xs tabular-nums text-muted-foreground">
+            {form.target.length} / {SOLUTION_TARGET_MAX}
+          </p>
+          <FieldError id="solution-target-error" message={errors.target} />
         </div>
 
         <div className="space-y-2">

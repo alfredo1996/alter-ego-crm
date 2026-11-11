@@ -26,13 +26,13 @@ import {
   SOLUTION_STATUS,
   SOLUTION_STATUSES,
   contractState,
-  filledSections,
   filterSolutions,
+  missingSections,
+  sectionsFor,
   shortDay,
   solutionFilters,
   usedStack,
 } from "@/lib/solutions"
-import { SOLUTION_SECTIONS } from "@/types/schemas"
 
 import type { Engagement, Solution } from "@/types"
 
@@ -72,8 +72,10 @@ export function SolutionCard({
   level?: 2 | 3
 }) {
   const Heading = level === 2 ? "h2" : "h3"
-  const filled = filledSections(s)
-  const total = SOLUTION_SECTIONS.length
+  // The kind's own sections, as the solution's page counts them.
+  const asked = sectionsFor(s.kind)
+  const total = asked.length
+  const filled = total - missingSections(s).length
   const purpose = s.sections.purpose?.trim()
   const titleId = `solution-${s.id}`
   const edited = s.updatedAt.getTime() > s.createdAt.getTime()

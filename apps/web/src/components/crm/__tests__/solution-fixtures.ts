@@ -52,6 +52,8 @@ const step = (title: string, state: SolutionStep["state"], over: Partial<Solutio
 })
 /** A capped contract (11 days) with 6.5 days logged, and a road of five steps on it. */
 export const CAPPED = { ...contract("e4", "c1", "Guest MVP"), contractedDays: 11 }
+/** An hourly contract capped at 5 days (40 hours), with 44 hours logged: over budget. */
+export const HOURLY = { ...contract("e5", "c1", "Hourly pilot"), contractedDays: 5, unit: "hour" as const }
 export const ROAD = solution({
   id: "s4", clientId: "c1", engagementId: "e4", name: "Guest 360", status: "building",
   target: "One guest record on the front desk's screen.",
@@ -68,14 +70,18 @@ const task = (id: string, title: string, over: Partial<Task> = {}): Task =>
 
 export const DATA: Record<string, unknown> = {
   getClients: [client("c1", "Nordwind Retail S.p.A."), client("c2", "Lumen Srl")],
-  getEngagements: [contract("e1", "c1", "Product graph"), CAPPED, contract("e2", "c1", "Search pilot", false), contract("e3", "c2", "Retainer", false)],
+  getEngagements: [contract("e1", "c1", "Product graph"), CAPPED, HOURLY, contract("e2", "c1", "Search pilot", false), contract("e3", "c2", "Retainer", false)],
   getSolutions: [GRAPH, CHURN, SEARCH],
-  getOpportunities: [opportunity("o1", "Front-desk card", "proposal"), opportunity("o2", "Segments", "lead"), opportunity("o3", "Assistant", "lost")],
+  getOpportunities: [
+    opportunity("o1", "Front-desk card", "proposal"), opportunity("o2", "Segments", "lead"), opportunity("o3", "Assistant", "lost"),
+    { ...opportunity("o4", "Graph build", "won"), engagementId: "e1" },
+  ],
   // 52 h = 6.5 days on the capped contract; a day in the future and another contract's hours do not count.
   getTimecards: [
     { id: "t1", userId: "u1", engagementId: "e4", date: "2026-10-05", hours: 52 },
     { id: "t2", userId: "u1", engagementId: "e4", date: "2099-01-01", hours: 8 },
     { id: "t3", userId: "u1", engagementId: "e1", date: "2026-10-05", hours: 8 },
+    { id: "t4", userId: "u1", engagementId: "e5", date: "2026-10-05", hours: 44 },
   ],
   getTasks: [
     task("k1", "Back up and restore", { dueDate: new Date(2026, 10, 12) }),
@@ -88,5 +94,8 @@ export const DATA: Record<string, unknown> = {
     meeting({ id: "m1", clientId: "c1", engagementId: "e1", date: "2026-09-20", health: "yellow" }),
     meeting({ id: "m2", clientId: "c1", engagementId: "e1", date: "2026-10-09", health: "green" }),
     meeting({ id: "m3", clientId: "c1", engagementId: "e1", date: "2026-10-12" }),
+    // The Guest MVP's newest stated status is yellow; its last call, a later one, stated none.
+    meeting({ id: "m4", clientId: "c1", engagementId: "e4", date: "2026-10-20", health: "yellow" }),
+    meeting({ id: "m5", clientId: "c1", engagementId: "e4", date: "2026-10-25" }),
   ],
 }

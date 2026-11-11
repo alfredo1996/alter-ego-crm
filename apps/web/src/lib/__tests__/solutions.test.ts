@@ -286,6 +286,8 @@ describe("pipelineSteps", () => {
       stp("D", "later", { paidBy: { type: "opportunity", id: "o3" } }),
       stp("E", "later"),
       stp("F", "later", { paidBy: { type: "opportunity", id: "o2" } }),
+      stp("G", "now", { paidBy: { type: "opportunity", id: "o1" } }),
+      stp("H", "done", { paidBy: { type: "opportunity", id: "o1" }, outcome: "ok", doneOn: "2026-04-02" }),
     ]
     expect(pipelineSteps(road, opps).map((p) => [p.number, p.step.title, p.opportunity.id])).toEqual([
       [3, "C", "o1"],
@@ -344,6 +346,16 @@ describe("saveStep", () => {
     expect(kept[0]).toMatchObject({ outcome: "Better", doneOn: "2026-04-02" })
     const reopened = steps(saveStep(road, 0, draft({ title: "A", state: "next", outcome: "Better" }), "2026-05-20"))
     expect(reopened[0]).toMatchObject({ state: "next", outcome: null, doneOn: null })
+  })
+
+  it("adds a step as Now at the end and sends the old Now to Next", () => {
+    const out = steps(saveStep(road, null, draft({ title: "D", state: "now" }), "2026-05-20"))
+    expect(out.map((s) => s.state)).toEqual(["done", "next", "next", "now"])
+  })
+
+  it("keeps the outcome of a step that is not Done when it is edited", () => {
+    const withOutcome = [stp("A", "now", { outcome: "Draft findings" }), stp("B", "next")]
+    expect(steps(saveStep(withOutcome, 0, draft({ title: "A2", state: "now", outcome: "Draft findings" }), "2026-05-20"))[0]).toMatchObject({ title: "A2", outcome: "Draft findings", doneOn: null })
   })
 
   it("makes another step Now by moving the current Now to Next", () => {

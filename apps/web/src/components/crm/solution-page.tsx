@@ -40,7 +40,7 @@ import { useOpportunities } from "@/hooks/use-opportunities"
 import { useDeleteSolution, useSolutions, useUpdateSolution } from "@/hooks/use-solutions"
 import { useTasks } from "@/hooks/use-tasks"
 import { useTimecards } from "@/hooks/use-timecards"
-import { contractUnit, countIn, engagementLabel, inContractUnit } from "@/lib/engagements"
+import { contractUnit, countIn, engagementLabel, inContractUnit, isOverBudget } from "@/lib/engagements"
 import { MEETING_HEALTH, formatMeetingDate, healthByContract, sortMeetings } from "@/lib/meetings"
 import { OPEN_STAGES, STAGE_LABELS, STAGE_TONE } from "@/lib/opportunities"
 import { SOLUTION_STATUS, contractState, historyEntries, lineLabel, moveStep, nowStep, pipelineSteps, sectionsFor, shortDay, stepContract, stepUsage } from "@/lib/solutions"
@@ -61,6 +61,7 @@ import type {
   Opportunity,
   Solution,
   SolutionStep,
+  SolutionStepPayer,
   Task,
   Timecard,
   SolutionSectionKey,
@@ -324,6 +325,8 @@ function SolutionBody({
   const nowUsage = nowContract && stepUsage(nowContract, timecards, today)
   const nowHealth = nowContract && healthByContract(meetings).get(nowContract.id)
   const nowCall = nowContract && sortMeetings(meetings.filter((m) => m.engagementId === nowContract.id))[0]
+  const nowUnit = nowContract ? contractUnit(nowContract) : "day"
+  const nowLine = nowUsage ? `${inContractUnit(nowUsage.used, nowUnit)} of ${countIn(nowUsage.total, nowUnit)} used` : null
   const nowTasks = nowContract ? sortTasks(tasks.filter((t) => !t.isDone && t.engagementId === nowContract.id)) : []
   const pipeline = pipelineSteps(solution.steps, opportunities)
   /** The client's contracts and open opportunities: what a step can be paid by. */
@@ -335,6 +338,13 @@ function SolutionBody({
       .filter((o) => o.clientId === solution.clientId && (OPEN_STAGES as readonly string[]).includes(o.stage))
       .map((o) => ({ type: "opportunity" as const, id: o.id, label: `Opportunity · ${o.title} · ${STAGE_LABELS[o.stage]}` })),
   ]
+  /** Paid by for a payer the client does not list as open: a won opportunity reads as the contract it became. */
+  const payerLabel = (p: SolutionStepPayer) => {
+    const o = p.type === "opportunity" ? opportunities.find((x) => x.id === p.id) : undefined
+    const won = o?.engagementId ? engagements.find((e) => e.id === o.engagementId) : undefined
+    if (won) return `Won · Contract ${engagementLabel(won)}`
+    return o ? `Opportunity · ${o.title} · ${STAGE_LABELS[o.stage]}` : "No longer listed"
+  }
   const changed = (key: SolutionSectionKey) => drafts[key] !== undefined && drafts[key] !== opened[key]
   const modelChanged = !same(model, base)
   const dirty = modelChanged || SOLUTION_SECTIONS.some(({ key }) => changed(key))
@@ -391,7 +401,8 @@ function SolutionBody({
   }
 
   async function moveTo(from: number, to: number) {
-    if (from === to) return
+    // A second write built from the stale road would undo the first.
+    if (from === to || saves.road === "saving") return
     // Edit Step follows its step to the new place.
     if (await write("road", { steps: moveStep(solution.steps, from, to) })) setStepEdit((e) => (e && e.index === from ? { ...e, index: to } : e))
   }
@@ -899,6 +910,9 @@ function SolutionBody({
       )}
       <SolutionRoad
         steps={solution.steps}
+        target={solution.target}
+        nowLine={nowLine}
+        busy={saves.road === "saving"}
         engagements={engagements}
         opportunities={opportunities}
         canAdd={solution.steps.length < MAX_SOLUTION_STEPS}
@@ -907,13 +921,15 @@ function SolutionBody({
         onMove={moveTo}
       />
 
+      {/* The Now card and the pipeline side by side on a desktop. */}
+      <div className={cn("grid gap-6", now && pipeline.length > 0 && "lg:grid-cols-2 lg:items-start")}>
       {now && (
-        <ContentCard as="section" labelledBy="solution-now" variant="warning" className="flex flex-col gap-4 border-warning">
+        <ContentCard as="section" labelledBy="solution-now" className="flex flex-col gap-4">
           <div className="flex flex-col gap-1">
-            <h2 id="solution-now" className="text-xs font-semibold tracking-[0.08em] uppercase">
-              Now · Step {nowIndex + 1}
+            <p className="text-xs font-semibold tracking-[0.08em] text-warning-soft-foreground uppercase">Now · Step {nowIndex + 1}</p>
+            <h2 id="solution-now" className="text-lg font-semibold [overflow-wrap:anywhere]">
+              {now.title}
             </h2>
-            <p className="text-lg font-semibold [overflow-wrap:anywhere]">{now.title}</p>
             {now.goal && <p className="text-[15px] leading-[1.6] [overflow-wrap:anywhere]">{now.goal}</p>}
           </div>
           {nowContract ? (
@@ -921,29 +937,26 @@ function SolutionBody({
               <div className="flex flex-col gap-1.5">
                 {nowUsage ? (
                   <>
-                    <p className="text-sm font-medium tabular-nums">
-                      {inContractUnit(nowUsage.used, contractUnit(nowContract))} of {countIn(nowUsage.total, contractUnit(nowContract))} used
-                    </p>
+                    <p className="text-sm font-medium tabular-nums">{nowLine}</p>
                     <ProgressBar
                       value={nowUsage.used / nowUsage.total}
-                      tone={nowUsage.used > nowUsage.total ? "danger" : "default"}
-                      label="Days used"
+                      tone={isOverBudget(nowUsage) ? "danger" : "default"}
+                      label={nowUnit === "hour" ? "Hours used" : "Days used"}
                     />
                   </>
                 ) : (
                   <p className="text-sm font-medium">Time and materials, no cap</p>
                 )}
-                <p className="text-sm">
-                  Contract {engagementLabel(nowContract)} ·{" "}
-                  {nowHealth
-                    ? `last call ${formatMeetingDate(nowHealth.date)} · ${nowHealth.health}`
-                    : nowCall
-                      ? `last call ${formatMeetingDate(nowCall.date)}`
-                      : contractState(nowContract)}
-                </p>
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
+                  <span>
+                    Contract {engagementLabel(nowContract)} · {contractState(nowContract)}
+                    {nowCall && ` · last call ${formatMeetingDate(nowCall.date)}`}
+                  </span>
+                  {nowHealth?.health && <StatusDot tone={MEETING_HEALTH[nowHealth.health].tone}>{MEETING_HEALTH[nowHealth.health].label}</StatusDot>}
+                </div>
               </div>
               <div className="flex flex-col gap-2">
-                <p className="text-xs font-semibold tracking-[0.08em] uppercase">Open tasks</p>
+                <p className="text-xs font-semibold tracking-[0.08em] text-muted-foreground uppercase">Open tasks</p>
                 {nowTasks.length === 0 ? (
                   <p className="text-sm">No open tasks on this contract.</p>
                 ) : (
@@ -995,12 +1008,13 @@ function SolutionBody({
           </ul>
           <p className="text-sm text-muted-foreground">
             Each step names the opportunity behind it. Once won, the step follows its contract: days, invoices and health.{" "}
-            <Link href="/pipeline" className="underline underline-offset-2">
+            <Link href={`/pipeline?client=${solution.clientId}`} className="underline underline-offset-2">
               Open in Pipeline
             </Link>
           </p>
         </section>
       )}
+      </div>
 
       <h2 className="-mb-2 text-xl font-semibold tracking-tight">What We Know</h2>
 
@@ -1081,6 +1095,8 @@ function SolutionBody({
         steps={solution.steps}
         solutionName={solution.name}
         payers={payers}
+        payerLabel={payerLabel}
+        busy={saves.road === "saving"}
         today={today}
         onSave={saveRoad}
         onMove={moveTo}

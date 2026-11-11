@@ -1,15 +1,19 @@
 "use client"
 
+import { formatYearMonth, parseYearMonth } from "@alter-ego/kernel/dates"
 import { Button } from "@alter-ego/ui/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@alter-ego/ui/ui/dialog"
 import { Input } from "@alter-ego/ui/ui/input"
 import { Label } from "@alter-ego/ui/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@alter-ego/ui/ui/select"
 import { Textarea } from "@alter-ego/ui/ui/textarea"
+import { cn } from "@alter-ego/ui/utils"
+import { format, subMonths } from "date-fns"
 import { ArrowLeft, ArrowRight } from "lucide-react"
-import { useState } from "react"
+import { useRef, useState } from "react"
 
 import { STEP_STATE } from "@/components/crm/solution-road"
+import { monthsFrom } from "@/lib/engagement-burndown"
 import { saveStep, type StepDraft } from "@/lib/solutions"
 
 import type { SolutionStep, SolutionStepPayer } from "@/types"
@@ -20,6 +24,65 @@ export interface StepPayerOption extends SolutionStepPayer {
 }
 
 const NONE = "none"
+const STATES = Object.entries(STEP_STATE) as [StepDraft["state"], string][]
+
+/** State as four segments: a radio group, so the arrow keys move and choose. */
+function StateRadios({ value, onChange }: { value: StepDraft["state"]; onChange: (state: StepDraft["state"]) => void }) {
+  const refs = useRef<(HTMLButtonElement | null)[]>([])
+  return (
+    <div role="radiogroup" aria-labelledby="step-state" className="grid grid-cols-4 gap-1 rounded-lg bg-muted p-1">
+      {STATES.map(([state, label], i) => (
+        <button
+          key={state}
+          ref={(el) => {
+            refs.current[i] = el
+          }}
+          type="button"
+          role="radio"
+          aria-checked={value === state}
+          tabIndex={value === state ? 0 : -1}
+          onClick={() => onChange(state)}
+          onKeyDown={(e) => {
+            const step = e.key === "ArrowRight" || e.key === "ArrowDown" ? 1 : e.key === "ArrowLeft" || e.key === "ArrowUp" ? -1 : 0
+            if (!step) return
+            e.preventDefault()
+            const to = (i + step + STATES.length) % STATES.length
+            onChange(STATES[to][0])
+            refs.current[to]?.focus()
+          }}
+          className={cn(
+            "min-h-11 rounded-md px-2 text-sm font-medium transition-colors focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none sm:min-h-9",
+            value === state ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground",
+          )}
+        >
+          {label}
+        </button>
+      ))}
+    </div>
+  )
+}
+
+/** A month as a Select (a month input is a free-text box in some desktop browsers): a year back to three ahead, and the value it holds. */
+function MonthSelect({ id, value, today, optional, onChange }: { id: string; value: string; today: string; optional?: boolean; onChange: (month: string) => void }) {
+  const start = format(subMonths(parseYearMonth(today.slice(0, 7)), 12), "yyyy-MM")
+  const months = [...new Set([...monthsFrom(start, 49), ...(value ? [value] : [])])].sort()
+  return (
+    <Select value={value || NONE} onValueChange={(v) => onChange(v === NONE ? "" : v)}>
+      <SelectTrigger id={id}>
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent>
+        {optional && <SelectItem value={NONE}>No end</SelectItem>}
+        {months.map((m) => (
+          <SelectItem key={m} value={m}>
+            {formatYearMonth(m)}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  )
+}
+
 const key = (p: SolutionStepPayer) => `${p.type}:${p.id}`
 
 interface Props {
@@ -30,6 +93,10 @@ interface Props {
   steps: SolutionStep[]
   solutionName: string
   payers: StepPayerOption[]
+  /** How a payer the client does not list as open reads in Paid by (a won opportunity: its contract). */
+  payerLabel: (payer: SolutionStepPayer) => string
+  /** The road is being written: Move Earlier and Move Later wait. */
+  busy: boolean
   today: string
   /** Writes the road. False when it failed. */
   onSave: (steps: SolutionStep[]) => Promise<boolean>
@@ -46,7 +113,7 @@ export function StepDialog({ index, session, ...rest }: Props) {
   )
 }
 
-function StepBody({ index, steps, solutionName, payers, today, onSave, onMove, onDelete, onClose }: Omit<Props, "session" | "index"> & { index: number | "new" }) {
+function StepBody({ index, steps, solutionName, payers, payerLabel, busy, today, onSave, onMove, onDelete, onClose }: Omit<Props, "session" | "index"> & { index: number | "new" }) {
   const step = index === "new" ? undefined : steps[index]
   const [draft, setDraft] = useState<StepDraft>({
     title: step?.title ?? "",
@@ -62,7 +129,7 @@ function StepBody({ index, steps, solutionName, payers, today, onSave, onMove, o
   const set = (patch: Partial<StepDraft>) => setDraft((d) => ({ ...d, ...patch }))
   const position = index === "new" ? steps.length + 1 : index + 1
   // A payer the step already has but the client no longer offers (a lost opportunity) stays choosable.
-  const options = step?.paidBy && !payers.some((p) => key(p) === key(step.paidBy!)) ? [...payers, { ...step.paidBy, label: "No longer listed" }] : payers
+  const options = step?.paidBy && !payers.some((p) => key(p) === key(step.paidBy!)) ? [...payers, { ...step.paidBy, label: payerLabel(step.paidBy) }] : payers
 
   async function submit() {
     const result = saveStep(steps, index === "new" ? null : index, draft, today)
@@ -95,31 +162,22 @@ function StepBody({ index, steps, solutionName, payers, today, onSave, onMove, o
           <Input id="step-title" value={draft.title} maxLength={200} autoFocus={index === "new"} onChange={(e) => set({ title: e.target.value })} />
         </div>
         <div className="space-y-2">
-          <Label htmlFor="step-state">State</Label>
-          <Select value={draft.state} onValueChange={(v) => set({ state: v as StepDraft["state"] })}>
-            <SelectTrigger id="step-state">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {Object.entries(STEP_STATE).map(([value, label]) => (
-                <SelectItem key={value} value={value}>
-                  {label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <span id="step-state" className="text-sm leading-none font-medium">
+            State
+          </span>
+          <StateRadios value={draft.state} onChange={(state) => set({ state })} />
           <p className="text-xs text-muted-foreground">
             One step is Now at a time. Marking it Done asks for its outcome and moves Now to the next step.
           </p>
         </div>
         <div className="grid grid-cols-2 gap-3">
-          <div className="space-y-2">
+          <div className="min-w-0 space-y-2">
             <Label htmlFor="step-from">From</Label>
-            <Input id="step-from" type="month" value={draft.fromMonth} onChange={(e) => set({ fromMonth: e.target.value })} />
+            <MonthSelect id="step-from" value={draft.fromMonth} today={today} onChange={(fromMonth) => set({ fromMonth })} />
           </div>
-          <div className="space-y-2">
+          <div className="min-w-0 space-y-2">
             <Label htmlFor="step-to">To (optional)</Label>
-            <Input id="step-to" type="month" value={draft.toMonth} onChange={(e) => set({ toMonth: e.target.value })} />
+            <MonthSelect id="step-to" value={draft.toMonth} today={today} optional onChange={(toMonth) => set({ toMonth })} />
           </div>
         </div>
         <div className="space-y-2">
@@ -171,10 +229,10 @@ function StepBody({ index, steps, solutionName, payers, today, onSave, onMove, o
         )}
         {index !== "new" && (
           <div className="flex flex-wrap gap-2">
-            <Button type="button" variant="outline" disabled={index === 0} onClick={() => onMove(index, index - 1)}>
+            <Button type="button" variant="outline" disabled={busy || index === 0} onClick={() => onMove(index, index - 1)}>
               <ArrowLeft aria-hidden /> Move Earlier
             </Button>
-            <Button type="button" variant="outline" disabled={index === steps.length - 1} onClick={() => onMove(index, index + 1)}>
+            <Button type="button" variant="outline" disabled={busy || index === steps.length - 1} onClick={() => onMove(index, index + 1)}>
               Move Later <ArrowRight aria-hidden />
             </Button>
           </div>
