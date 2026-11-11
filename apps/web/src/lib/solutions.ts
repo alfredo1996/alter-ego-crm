@@ -4,11 +4,14 @@
  * solution's own status (the two are separate on purpose: a delivered solution
  * on a closed contract is the normal end of the story).
  */
+import { formatYearMonth } from "@alter-ego/kernel/dates"
 import { format } from "date-fns"
 
-import { SOLUTION_KIND_SECTIONS, SOLUTION_SECTIONS } from "@/types/schemas"
+import { contractUsage } from "@/lib/engagements"
+import { isOpen } from "@/lib/opportunities"
+import { SOLUTION_KIND_SECTIONS, SOLUTION_SECTIONS, solutionStepsSchema } from "@/types/schemas"
 
-import type { Engagement, Opportunity, Solution, SolutionKind, SolutionSectionKey, SolutionStatus, SolutionStep, SolutionStepPayer } from "@/types"
+import type { Engagement, Opportunity, Solution, Timecard, SolutionKind, SolutionSectionKey, SolutionStatus, SolutionStep, SolutionStepPayer } from "@/types"
 
 /** The solution's own lifecycle, in order, with each status's label and pill tone. */
 export const SOLUTION_STATUS: Record<SolutionStatus, { label: string; tone: "info" | "warning" | "success" | "neutral" }> = {
@@ -176,4 +179,92 @@ export function historyEntries(text: string | null): HistoryEntry[] | null {
  */
 export function lineLabel(line: string): string | null {
   return /^[^:,.;!?]{1,40}:(?=\s+\S)/.exec(line)?.[0] ?? null
+}
+
+/**
+ * The days a contract has used of its total, the client page's way (contractUsage): hours logged up to
+ * today, over 8. The burn-down cells only shape the bar, so none are passed. null for a contract with no cap.
+ */
+export function stepUsage(
+  contract: Pick<Engagement, "id" | "contractedDays"> & Parameters<typeof contractUsage>[0]["engagement"],
+  timecards: Pick<Timecard, "engagementId" | "date" | "hours">[],
+  today: string,
+): { used: number; total: number } | null {
+  const usage = contractUsage({ engagement: contract, timecards, cells: [], today })
+  return usage && { used: usage.used, total: usage.total }
+}
+
+/** The steps an open opportunity pays for (a won one has become a contract), with their 1-based number on the road. */
+export function pipelineSteps(
+  steps: SolutionStep[],
+  opportunities: Pick<Opportunity, "id" | "stage" | "engagementId">[],
+): { number: number; step: SolutionStep; opportunity: Pick<Opportunity, "id" | "stage" | "engagementId"> }[] {
+  return steps.flatMap((step, i) => {
+    const payer = stepContract(step, opportunities)
+    const opportunity = payer?.type === "opportunity" ? opportunities.find((o) => o.id === payer.id) : undefined
+    return opportunity && isOpen(opportunity as Opportunity) ? [{ number: i + 1, step, opportunity }] : []
+  })
+}
+
+/** The list with step `from` moved to position `to`; out of range, the list as it was. */
+export function moveStep<T>(steps: T[], from: number, to: number): T[] {
+  if (from < 0 || from >= steps.length || to < 0 || to >= steps.length || from === to) return steps
+  const next = [...steps]
+  next.splice(to, 0, ...next.splice(from, 1))
+  return next
+}
+
+/** "Oct – Nov 2026", "Oct 2026", "From Oct 2026": the months a step spans, the year once where it ends (or twice if it differs). */
+export function stepWhen({ fromMonth, toMonth }: Pick<SolutionStep, "fromMonth" | "toMonth">): string {
+  if (!toMonth) return `From ${formatYearMonth(fromMonth, "MMM yyyy")}`
+  if (toMonth === fromMonth) return formatYearMonth(fromMonth, "MMM yyyy")
+  const sameYear = fromMonth.slice(0, 4) === toMonth.slice(0, 4)
+  return `${formatYearMonth(fromMonth, sameYear ? "MMM" : "MMM yyyy")} – ${formatYearMonth(toMonth, "MMM yyyy")}`
+}
+
+/** Edit Step's fields as the dialog holds them: "" for an optional one left empty. */
+export interface StepDraft {
+  title: string
+  state: SolutionStep["state"]
+  fromMonth: string
+  toMonth: string
+  paidBy: SolutionStepPayer | null
+  goal: string
+  outcome: string
+}
+
+/**
+ * The road after Save Step: step `index` rewritten from the draft, or the draft added at the end when
+ * `index` is null. Done asks for its outcome; a step newly Done follows completeStep (Now moves on);
+ * one reopened loses its outcome and day; making a step Now sends the old Now to Next. The result is
+ * parsed by solutionStepsSchema: the Firebase client adapter does not, so while it reports anything
+ * nothing is written.
+ */
+export function saveStep(
+  steps: SolutionStep[],
+  index: number | null,
+  draft: StepDraft,
+  today: string,
+): { steps: SolutionStep[] } | { errors: string[] } {
+  const previous = index === null ? undefined : steps[index]
+  const outcome = draft.outcome.trim() || null
+  if (draft.state === "done" && !outcome) return { errors: ["Say what came of it to mark the step Done"] }
+  const step: SolutionStep = {
+    title: draft.title.trim(),
+    state: draft.state,
+    fromMonth: draft.fromMonth,
+    toMonth: draft.toMonth || null,
+    paidBy: draft.paidBy,
+    goal: draft.goal.trim() || null,
+    outcome: draft.state === "done" ? outcome : null,
+    doneOn: draft.state === "done" ? (previous?.state === "done" ? previous.doneOn : today) : null,
+  }
+  let next: SolutionStep[]
+  if (index === null) next = [...steps, step]
+  else if (draft.state === "done" && previous?.state !== "done") next = completeStep(steps.map((s, i) => (i === index ? { ...step, state: previous!.state } : s)), index, outcome!, today) // keeps the edits
+  else next = steps.map((s, i) => (i === index ? step : s))
+  // Marking one Now: the Now it replaces waits as Next.
+  if (draft.state === "now") next = next.map((s, i) => (s.state === "now" && i !== (index ?? steps.length) ? { ...s, state: "next" } : s))
+  const parsed = solutionStepsSchema.safeParse(next)
+  return parsed.success ? { steps: parsed.data } : { errors: [...new Set(parsed.error.issues.map((i) => i.message))] }
 }

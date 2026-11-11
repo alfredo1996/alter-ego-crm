@@ -64,12 +64,12 @@ test.describe("Solutions", () => {
     await expect(main.getByRole("heading", { level: 1, name: NAME })).toBeVisible()
     for (const tag of ["neo4j", "gds", "kafka"]) await expect(main.getByText(tag, { exact: true })).toBeVisible()
     await expect(main).toContainText("Product graph · Active")
-    await expect(main.getByText("0 of 9 sections written")).toBeVisible()
+    await expect(main.getByText("0 of 7 sections written")).toBeVisible()
     if (isMobile) {
       // 44 px on a touch screen: the section chips, and the jump to what is still to write.
       const chip = main.getByRole("navigation", { name: "Sections" }).getByRole("link").first()
       expect((await chip.boundingBox())!.height).toBeGreaterThanOrEqual(44)
-      expect((await main.getByRole("link", { name: "Still to write: 9" }).boundingBox())!.height).toBeGreaterThanOrEqual(44)
+      expect((await main.getByRole("link", { name: "Still to write: 7" }).boundingBox())!.height).toBeGreaterThanOrEqual(44)
     }
 
     await main.getByRole("button", { name: "Write Purpose and Target" }).click()
@@ -79,26 +79,12 @@ test.describe("Solutions", () => {
     if (isMobile) expect((await save.boundingBox())!.height).toBeGreaterThanOrEqual(44)
     await save.click()
     await expect(main.getByText("One graph for the catalog.", { exact: false })).toBeVisible()
-    await expect(main.getByText("1 of 9 sections written")).toBeVisible()
+    await expect(main.getByText("1 of 7 sections written")).toBeVisible()
 
-    // History reads as a timeline, newest first, once its lines open on dates.
-    await main.getByRole("button", { name: "Write History" }).click()
-    await main.getByRole("textbox", { name: "History" }).fill("2026-02-10 Kickoff, 40-day contract.\n2026-07-15 Go-live.")
-    await main.getByRole("button", { name: "Save History" }).click()
-    await expect(main.getByRole("region", { name: "History" }).getByRole("listitem")).toHaveText([
-      /^2026-07-15\s*Go-live\.$/,
-      /^2026-02-10\s*Kickoff, 40-day contract\.$/,
-    ])
-    // Add an Entry opens with the caret after today's date: typed straight away, the entry goes on top.
-    await main.getByRole("button", { name: "Add an Entry" }).click()
-    await expect(main.getByRole("textbox", { name: "History" })).toBeFocused()
-    await page.keyboard.type("Pilot signed off.")
-    await main.getByRole("button", { name: "Save History" }).click()
-    const today = new Date().toLocaleDateString("en-CA")
-    await expect(main.getByRole("region", { name: "History" }).getByRole("listitem").first()).toHaveText(
-      new RegExp(`^${today}\\s*Pilot signed off\\.$`),
-    )
-    await expect(main.getByText("2 of 9 sections written")).toBeVisible()
+    await main.getByRole("button", { name: "Write KPIs" }).click()
+    await main.getByRole("textbox", { name: "KPIs" }).fill("Search time: from 4 s to 1 s")
+    await main.getByRole("button", { name: "Save KPIs" }).click()
+    await expect(main.getByText("2 of 7 sections written")).toBeVisible()
 
     // An empty data model opens on its Entities; the relations are the next tab.
     await main.getByRole("button", { name: "Add Entity" }).click()
@@ -183,18 +169,92 @@ test.describe("Solutions", () => {
     const main = page.getByRole("main")
     await expect(main.getByRole("heading", { level: 1, name: NAME })).toBeVisible()
 
-    await main.getByRole("button", { name: "Write Steps" }).click()
-    await main.getByRole("textbox", { name: "Steps" }).fill("1. Load the catalog")
+    await main.getByRole("button", { name: "Write Architecture" }).click()
+    await main.getByRole("textbox", { name: "Architecture" }).fill("Kafka into Neo4j")
     await main.getByRole("link", { name: "Back to Solutions" }).click()
     const ask = page.getByRole("alertdialog", { name: "Discard Changes" })
     await ask.getByRole("button", { name: "Keep Editing" }).click()
     await expect(ask).toBeHidden()
     await expect(page).toHaveURL(`/solutions/${id}`)
-    await expect(main.getByRole("textbox", { name: "Steps" })).toHaveValue("1. Load the catalog")
+    await expect(main.getByRole("textbox", { name: "Architecture" })).toHaveValue("Kafka into Neo4j")
 
     await main.getByRole("link", { name: "Back to Solutions" }).click()
     await ask.getByRole("button", { name: "Discard Changes" }).click()
     await expect(page).toHaveURL("/solutions")
     await expect(page.getByRole("article", { name: NAME })).toContainText("0/9")
+  })
+
+  test("the road: add three steps, make the second Now, finish it, reorder, and a reload keeps it", async ({ page, isMobile }) => {
+    const clientId = await seedClient(page)
+    const id = await page.evaluate(
+      async ({ clientId, name }) => {
+        const backend = (window as Window & { __mockBackend?: BackendAdapter }).__mockBackend!
+        const u = (await backend.auth.getCurrentUser())!.id
+        return (await backend.db.createSolution(u, { clientId, name, target: "Every query under 2 seconds." })).id
+      },
+      { clientId, name: NAME },
+    )
+    await navigateTo(page, "Solutions", "/solutions")
+    type NextWindow = Window & { next: { router: { push: (href: string) => void } } }
+    await page.evaluate((id) => (window as unknown as NextWindow).next.router.push(`/solutions/${id}`), id)
+    const main = page.getByRole("main")
+    await expect(main.getByText("Every query under 2 seconds.")).toBeVisible()
+    await expect(main.getByText("No steps yet")).toBeVisible()
+
+    for (const title of ["Profile the queries", "Add indexes", "Load test"]) {
+      await main.getByRole("button", { name: "Add Step" }).click()
+      const dialog = page.getByRole("dialog", { name: "Add Step" })
+      await dialog.getByRole("textbox", { name: "Title" }).fill(title)
+      await dialog.getByRole("button", { name: "Save Step" }).click()
+      await expect(dialog).toBeHidden()
+    }
+    const road = main.getByRole("region", { name: "Roadmap" })
+    const step = (title: string) => road.getByRole("button", { name: new RegExp(title) })
+    await expect(road.getByRole("listitem").filter({ has: page.getByRole("button") })).toHaveCount(3)
+
+    // The second step becomes Now.
+    await step("Add indexes").click()
+    let dialog = page.getByRole("dialog", { name: "Edit Step" })
+    await dialog.getByRole("combobox", { name: "State" }).click()
+    await page.getByRole("option", { name: "Now" }).click()
+    await dialog.getByRole("button", { name: "Save Step" }).click()
+    await expect(dialog).toBeHidden()
+    await expect(main.getByRole("heading", { level: 2, name: "Now · Step 2" })).toBeVisible()
+    await expect(road.getByText("Step 2 of 3")).toBeVisible()
+
+    // Done asks for its outcome; the third step becomes Now.
+    await step("Add indexes").click()
+    dialog = page.getByRole("dialog", { name: "Edit Step" })
+    await dialog.getByRole("combobox", { name: "State" }).click()
+    await page.getByRole("option", { name: "Done" }).click()
+    await dialog.getByRole("button", { name: "Save Step" }).click()
+    await expect(dialog.getByRole("alert")).toHaveText("Say what came of it to mark the step Done")
+    await dialog.getByRole("textbox", { name: "Outcome" }).fill("p95 from 38 s to 4 s")
+    await dialog.getByRole("button", { name: "Save Step" }).click()
+    await expect(dialog).toBeHidden()
+    await expect(main.getByRole("heading", { level: 2, name: "Now · Step 3" })).toBeVisible()
+    await expect(road.getByText("p95 from 38 s to 4 s")).toBeVisible()
+
+    // Reorder: the first step moves later, from the keyboard's buttons.
+    await step("Profile the queries").click()
+    dialog = page.getByRole("dialog", { name: "Edit Step" })
+    await dialog.getByRole("button", { name: "Move Later" }).click()
+    await expect(dialog).toContainText("Step 2 of 3")
+    await dialog.getByRole("button", { name: "Cancel" }).click()
+    await expect(road.getByRole("listitem").filter({ has: page.getByRole("button") }).first()).toContainText("Add indexes")
+    if (isMobile) {
+      const boxes = await Promise.all(["Add indexes", "Profile the queries", "Load test"].map((t) => step(t).boundingBox()))
+      // Top to bottom on a phone.
+      expect(boxes[0]!.y).toBeLessThan(boxes[1]!.y)
+      expect(boxes[1]!.y).toBeLessThan(boxes[2]!.y)
+      await noSideScroll(page)
+    }
+
+    // "Reload": away and back, the solution read again from the backend.
+    await navigateTo(page, "Clients", "/clients")
+    await page.getByRole("link", { name: "1 solution", exact: true }).click()
+    await page.getByRole("link", { name: NAME }).click()
+    await expect(road.getByRole("listitem").filter({ has: page.getByRole("button") })).toHaveText([/Add indexes/, /Profile the queries/, /Load test/])
+    await expect(main.getByRole("heading", { level: 2, name: "Now · Step 3" })).toBeVisible()
   })
 })

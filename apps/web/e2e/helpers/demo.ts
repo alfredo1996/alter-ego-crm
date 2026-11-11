@@ -151,7 +151,7 @@ export async function seedDemo(page: Page): Promise<void> {
     const deal = (o: Omit<Parameters<typeof db.createOpportunity>[1], "vatApplicable">) => db.createOpportunity(u, { vatApplicable: true, ...o })
     await deal({ clientId: lumen, title: "Demand Forecasting PoC", stage: "lead", probability: 15, dailyRate: 500, estimatedDaysPerMonth: 6, estimatedDurationMonths: 3, expectedStartMonth: ym(-2), nextActionDate: day(0, 20), nextActionNote: "Intro call with Paolo" })
     await deal({ clientId: vela, title: "Graph RAG Assistant", stage: "proposal", probability: 40, dailyRate: 520, estimatedDaysPerMonth: 8, estimatedDurationMonths: 4, expectedStartMonth: ym(-1), nextActionDate: day(0, 17), nextActionNote: "Send revised proposal" })
-    await deal({ clientId: nordwind, title: "Store Analytics Phase 2", stage: "negotiation", probability: 70, dailyRate: 540, estimatedDaysPerMonth: 10, estimatedDurationMonths: 6, expectedStartMonth: ym(-2), nextActionDate: day(0, 22), nextActionNote: "Agree on rate with procurement" })
+    const phase2 = await deal({ clientId: nordwind, title: "Store Analytics Phase 2", stage: "negotiation", probability: 70, dailyRate: 540, estimatedDaysPerMonth: 10, estimatedDurationMonths: 6, expectedStartMonth: ym(-2), nextActionDate: day(0, 22), nextActionNote: "Agree on rate with procurement" })
     await deal({ clientId: lumen, title: "BI Dashboard Refresh", stage: "lead", probability: 20, dailyRate: 450, estimatedDaysPerMonth: 4, estimatedDurationMonths: 2, expectedStartMonth: null, nextActionDate: day(-1, 3), nextActionNote: "Wait for budget approval" })
     const won = await deal({ clientId: nordwind, title: "Product Graph", stage: "won", probability: 100, dailyRate: 520, estimatedDaysPerMonth: 8, estimatedDurationMonths: 10, expectedStartMonth: ym(3) })
     await db.updateOpportunity(u, won.id, { closedAt: day(4, 20), engagementId: graph })
@@ -184,6 +184,13 @@ export async function seedDemo(page: Page): Promise<void> {
       engagementId: graph,
       name: "Product Knowledge Graph",
       status: "building",
+      target: "Merchandising plans a promotion from one view of products, categories and stores.",
+      steps: [
+        { title: "Product master load", state: "done", fromMonth: ym(3), toMonth: ym(2), paidBy: { type: "contract", id: graph }, goal: null, outcome: "Nightly load runs; 12k products match the ERP.", doneOn: `${ym(2)}-20` },
+        { title: "Categories and promotions", state: "now", fromMonth: ym(1), toMonth: ym(-1), paidBy: { type: "contract", id: graph }, goal: "Merchandisers edit the category tree; promotions link to products.", outcome: null, doneOn: null },
+        { title: "Store app API", state: "next", fromMonth: ym(-2), toMonth: null, paidBy: { type: "opportunity", id: phase2.id }, goal: "Store managers read the plan on their tablets.", outcome: null, doneOn: null },
+        { title: "Rollout to all 140 stores", state: "later", fromMonth: ym(-4), toMonth: null, paidBy: null, goal: null, outcome: null, doneOn: null },
+      ],
       domain: "retail",
       stack: ["neo4j", "kafka", "python"],
       sections: {

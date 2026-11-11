@@ -8,7 +8,7 @@ import { MetaRow, StatusDot } from "@alter-ego/ui/page/meta-row"
 import { OnThisPage } from "@alter-ego/ui/page/on-this-page"
 import { PageHeader } from "@alter-ego/ui/page/page-header"
 import { pageState } from "@alter-ego/ui/page/page-state"
-import { SegmentedProgress } from "@alter-ego/ui/page/progress"
+import { ProgressBar, SegmentedProgress } from "@alter-ego/ui/page/progress"
 import { SectionHeader } from "@alter-ego/ui/page/section-header"
 import { StatusPill, TagList } from "@alter-ego/ui/page/status-pill"
 import { Timeline } from "@alter-ego/ui/page/timeline"
@@ -21,7 +21,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@alter-ego/ui/ui/tabs"
 import { toast } from "@alter-ego/ui/use-toast"
 import { cn } from "@alter-ego/ui/utils"
 import { format } from "date-fns"
-import { MoreHorizontal, Pencil, Plus, Trash2, X } from "lucide-react"
+import { Flag, MoreHorizontal, Pencil, Plus, Trash2, X } from "lucide-react"
+import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { Fragment, useEffect, useRef, useState, type ReactNode } from "react"
 import { flushSync } from "react-dom"
@@ -29,17 +30,25 @@ import { flushSync } from "react-dom"
 import { ConfirmDeleteDialog } from "@/components/confirm-delete-dialog"
 import { SolutionFormDialog } from "@/components/crm/solution-form-dialog"
 import { SolutionGraph } from "@/components/crm/solution-graph"
+import { SolutionRoad } from "@/components/crm/solution-road"
+import { StepDialog, type StepPayerOption } from "@/components/crm/step-dialog"
 import { useAuth } from "@/hooks/use-auth"
 import { useClients } from "@/hooks/use-clients"
 import { useEngagements } from "@/hooks/use-engagements"
 import { useMeetings } from "@/hooks/use-meetings"
+import { useOpportunities } from "@/hooks/use-opportunities"
 import { useDeleteSolution, useSolutions, useUpdateSolution } from "@/hooks/use-solutions"
-import { engagementLabel } from "@/lib/engagements"
+import { useTasks } from "@/hooks/use-tasks"
+import { useTimecards } from "@/hooks/use-timecards"
+import { contractUnit, countIn, engagementLabel, inContractUnit } from "@/lib/engagements"
 import { MEETING_HEALTH, formatMeetingDate, healthByContract, sortMeetings } from "@/lib/meetings"
-import { SOLUTION_STATUS, contractState, historyEntries, lineLabel, shortDay } from "@/lib/solutions"
+import { OPEN_STAGES, STAGE_LABELS, STAGE_TONE } from "@/lib/opportunities"
+import { SOLUTION_STATUS, contractState, historyEntries, lineLabel, moveStep, nowStep, pipelineSteps, sectionsFor, shortDay, stepContract, stepUsage } from "@/lib/solutions"
+import { sortTasks } from "@/lib/tasks"
 import {
   MAX_SOLUTION_ENTITIES,
   MAX_SOLUTION_RELATIONS,
+  MAX_SOLUTION_STEPS,
   SOLUTION_SECTIONS,
   SOLUTION_SECTION_MAX,
   updateSolutionSchema,
@@ -49,7 +58,11 @@ import type {
   Client,
   Engagement,
   Meeting,
+  Opportunity,
   Solution,
+  SolutionStep,
+  Task,
+  Timecard,
   SolutionSectionKey,
   SolutionSections,
   UpdateSolutionInput,
@@ -136,7 +149,8 @@ function Field({ label, className, children }: { label: string; className?: stri
 const PAGE_ORDER: SolutionSectionKey[] = ["purpose", "kpis", "results", "model", "requirements", "sources", "architecture", "steps", "history"]
 type Section = (typeof SOLUTION_SECTIONS)[number]
 const SECTION = Object.fromEntries(SOLUTION_SECTIONS.map((s) => [s.key, s])) as Record<SolutionSectionKey, Section>
-const SECTIONS = PAGE_ORDER.map((key) => SECTION[key])
+/** The sections an Advisory can take on request: Add Section. */
+const ADDABLE: SolutionSectionKey[] = ["requirements", "sources", "model", "architecture"]
 /** Side by side as cards (Solution.dc): what it measured beside what it delivered. */
 const CARDS: SolutionSectionKey[] = ["kpis", "results"]
 /** Under an empty card's question. Pre-sales reads Results first, so its Write is the one filled button. */
@@ -199,7 +213,10 @@ export function SolutionPage({ id }: { id: string }) {
   const clientsQuery = useClients(user?.id)
   const engagementsQuery = useEngagements(user?.id)
   const meetingsQuery = useMeetings(user?.id)
-  const gate = pageState([solutionsQuery, clientsQuery, engagementsQuery, meetingsQuery])
+  const opportunitiesQuery = useOpportunities(user?.id)
+  const timecardsQuery = useTimecards(user?.id)
+  const tasksQuery = useTasks(user?.id)
+  const gate = pageState([solutionsQuery, clientsQuery, engagementsQuery, meetingsQuery, opportunitiesQuery, timecardsQuery, tasksQuery])
   if (gate) return gate
 
   const solutions = solutionsQuery.data ?? []
@@ -223,6 +240,9 @@ export function SolutionPage({ id }: { id: string }) {
       clients={clientsQuery.data ?? []}
       engagements={engagementsQuery.data ?? []}
       meetings={meetingsQuery.data ?? []}
+      opportunities={opportunitiesQuery.data ?? []}
+      timecards={timecardsQuery.data ?? []}
+      tasks={tasksQuery.data ?? []}
     />
   )
 }
@@ -234,6 +254,9 @@ function SolutionBody({
   clients,
   engagements,
   meetings,
+  opportunities,
+  timecards,
+  tasks,
 }: {
   solution: Solution
   solutions: Solution[]
@@ -241,6 +264,9 @@ function SolutionBody({
   clients: Client[]
   engagements: Engagement[]
   meetings: Meeting[]
+  opportunities: Opportunity[]
+  timecards: Timecard[]
+  tasks: Task[]
 }) {
   const router = useRouter()
   const update = useUpdateSolution(userId)
@@ -250,7 +276,7 @@ function SolutionBody({
   /** The text each editor opened with: Unsaved changes is the draft against it, so History's line for today alone is no change. */
   const [opened, setOpened] = useState<Partial<Record<SolutionSectionKey, string>>>({})
   /** Each save running or failed, by section ("model" for the data model): saves overlap, each keeps its own outcome. */
-  const [saves, setSaves] = useState<Partial<Record<SolutionSectionKey | "model", "saving" | "failed">>>({})
+  const [saves, setSaves] = useState<Partial<Record<SolutionSectionKey | "model" | "road", "saving" | "failed">>>({})
   const stored = dataModelDraft(solution)
   const [model, setModel] = useState(stored)
   /** The stored data model the draft started from: Unsaved changes is the draft against it, never against a refetch. */
@@ -261,6 +287,11 @@ function SolutionBody({
   const [editing, setEditing] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [leaving, setLeaving] = useState(false)
+  /** Sections an Advisory took on through Add Section. */
+  const [added, setAdded] = useState<SolutionSectionKey[]>([])
+  /** Edit Step's step ("new" = Add Step) and its opening, so a draft never outlives it. */
+  const [stepEdit, setStepEdit] = useState<{ index: number | "new"; session: number } | null>(null)
+  const [deletingStep, setDeletingStep] = useState<number | null>(null)
   const moreButton = useRef<HTMLButtonElement>(null)
 
   // Another writer (a second tab, chat) changed the data model: an untouched
@@ -275,8 +306,35 @@ function SolutionBody({
   const health = contract && healthByContract(meetings).get(contract.id)
   const lastMeeting = contract && sortMeetings(meetings.filter((m) => m.engagementId === contract.id))[0]
   const edited = solution.updatedAt.getTime() > solution.createdAt.getTime()
-  const missing = SECTIONS.filter(({ key }) => !written(solution, key))
-  const filled = SECTIONS.length - missing.length
+  // The kind's own sections count; Steps and History show only while they hold text, an Advisory's others once added or written.
+  const kindKeys = sectionsFor(solution.kind).map((x) => x.key)
+  const labelOf = (key: SolutionSectionKey) => sectionsFor(solution.kind).find((x) => x.key === key)?.label ?? SECTION[key].label
+  const modelPresent = solution.entities.length > 0 || solution.relations.length > 0
+  const shown = (key: SolutionSectionKey) =>
+    kindKeys.includes(key) || written(solution, key) || added.includes(key) || drafts[key] !== undefined || (key === "model" && modelPresent)
+  const SECTIONS = PAGE_ORDER.filter(shown).map((key) => ({ ...SECTION[key], label: labelOf(key) }))
+  const missing = PAGE_ORDER.filter((key) => kindKeys.includes(key) && !written(solution, key)).map((key) => ({ ...SECTION[key], label: labelOf(key) }))
+  const filled = kindKeys.length - missing.length
+  const addable = ADDABLE.filter((key) => !shown(key))
+  const today = format(new Date(), "yyyy-MM-dd")
+  const now = nowStep(solution.steps)
+  const nowIndex = now ? solution.steps.indexOf(now) : -1
+  const nowPayer = now && stepContract(now, opportunities)
+  const nowContract = nowPayer?.type === "contract" ? engagements.find((e) => e.id === nowPayer.id) : undefined
+  const nowUsage = nowContract && stepUsage(nowContract, timecards, today)
+  const nowHealth = nowContract && healthByContract(meetings).get(nowContract.id)
+  const nowCall = nowContract && sortMeetings(meetings.filter((m) => m.engagementId === nowContract.id))[0]
+  const nowTasks = nowContract ? sortTasks(tasks.filter((t) => !t.isDone && t.engagementId === nowContract.id)) : []
+  const pipeline = pipelineSteps(solution.steps, opportunities)
+  /** The client's contracts and open opportunities: what a step can be paid by. */
+  const payers: StepPayerOption[] = [
+    ...engagements
+      .filter((e) => e.clientId === solution.clientId)
+      .map((e) => ({ type: "contract" as const, id: e.id, label: `Contract · ${engagementLabel(e)} · ${contractState(e).toLowerCase()}` })),
+    ...opportunities
+      .filter((o) => o.clientId === solution.clientId && (OPEN_STAGES as readonly string[]).includes(o.stage))
+      .map((o) => ({ type: "opportunity" as const, id: o.id, label: `Opportunity · ${o.title} · ${STAGE_LABELS[o.stage]}` })),
+  ]
   const changed = (key: SolutionSectionKey) => drafts[key] !== undefined && drafts[key] !== opened[key]
   const modelChanged = !same(model, base)
   const dirty = modelChanged || SOLUTION_SECTIONS.some(({ key }) => changed(key))
@@ -305,7 +363,7 @@ function SolutionBody({
   }
 
   /** Writes one part beside any other save still running. False when it failed. */
-  async function write(key: SolutionSectionKey | "model", input: UpdateSolutionInput) {
+  async function write(key: SolutionSectionKey | "model" | "road", input: UpdateSolutionInput) {
     setSaves((s) => ({ ...s, [key]: "saving" }))
     try {
       await update.mutateAsync({ id: solution.id, input })
@@ -323,6 +381,19 @@ function SolutionBody({
     // Only this section: the other eight, and whatever chat wrote to them, stay as stored.
     const sections: Partial<SolutionSections> = { [key]: text.trim() ? text : null }
     if (await write(key, { sections })) closeEditor(key)
+  }
+
+  /** Writes the road. Steps were parsed by saveStep; a reorder or a delete changes none of their fields. */
+  async function saveRoad(steps: SolutionStep[]) {
+    const ok = await write("road", { steps })
+    if (ok) setStepEdit(null)
+    return ok
+  }
+
+  async function moveTo(from: number, to: number) {
+    if (from === to) return
+    // Edit Step follows its step to the new place.
+    if (await write("road", { steps: moveStep(solution.steps, from, to) })) setStepEdit((e) => (e && e.index === from ? { ...e, index: to } : e))
   }
 
   async function saveModel() {
@@ -372,7 +443,7 @@ function SolutionBody({
   }
 
   /** A section's editor: `name` is what its Save saves, `labelId` the heading that names its textbox. */
-  const editor = (key: SolutionSectionKey, name: string = SECTION[key].label, labelId = `solution-section-${key}`) => (
+  const editor = (key: SolutionSectionKey, name: string = labelOf(key), labelId = `solution-section-${key}`) => (
     <InlineEditor
       id={`solution-editor-${key}`}
       labelledBy={labelId}
@@ -423,7 +494,8 @@ function SolutionBody({
 
   /** One section, the data model aside: a dashed prompt while empty, else its heading over its text or its editor. */
   function block(key: SolutionSectionKey) {
-    const { label, question } = SECTION[key]
+    const { question } = SECTION[key]
+    const label = labelOf(key)
     const headingId = `solution-section-${key}`
     const text = solution.sections[key] ?? ""
     const open = drafts[key] !== undefined
@@ -771,6 +843,7 @@ function SolutionBody({
         pills={
           <>
             <StatusPill tone={SOLUTION_STATUS[solution.status].tone}>{SOLUTION_STATUS[solution.status].label}</StatusPill>
+            <span className={cn(badgeVariants({ variant: "outline" }), "font-normal")}>{solution.kind === "advisory" ? "Advisory" : "Product"}</span>
             {solution.domain && (
               <span className={cn(badgeVariants({ variant: "outline" }), "font-normal [overflow-wrap:anywhere]")}>{solution.domain}</span>
             )}
@@ -807,12 +880,136 @@ function SolutionBody({
         more={more}
       />
 
+      {solution.target && (
+        <ContentCard as="section" labelledBy="solution-target" className="flex items-start gap-3">
+          <Flag aria-hidden className="mt-1 size-5 shrink-0 text-muted-foreground" />
+          <div className="flex min-w-0 flex-col gap-1">
+            <h2 id="solution-target" className="text-xs font-semibold tracking-[0.08em] text-muted-foreground uppercase">
+              Target
+            </h2>
+            <p className="text-[17px] leading-[1.5] [overflow-wrap:anywhere]">{solution.target}</p>
+          </div>
+        </ContentCard>
+      )}
+
+      {saves.road === "failed" && (
+        <p role="alert" className="text-sm text-destructive">
+          Saving the roadmap failed. Try again.
+        </p>
+      )}
+      <SolutionRoad
+        steps={solution.steps}
+        engagements={engagements}
+        opportunities={opportunities}
+        canAdd={solution.steps.length < MAX_SOLUTION_STEPS}
+        onOpen={(index) => setStepEdit({ index, session: Date.now() })}
+        onAdd={() => setStepEdit({ index: "new", session: Date.now() })}
+        onMove={moveTo}
+      />
+
+      {now && (
+        <ContentCard as="section" labelledBy="solution-now" variant="warning" className="flex flex-col gap-4 border-warning">
+          <div className="flex flex-col gap-1">
+            <h2 id="solution-now" className="text-xs font-semibold tracking-[0.08em] uppercase">
+              Now · Step {nowIndex + 1}
+            </h2>
+            <p className="text-lg font-semibold [overflow-wrap:anywhere]">{now.title}</p>
+            {now.goal && <p className="text-[15px] leading-[1.6] [overflow-wrap:anywhere]">{now.goal}</p>}
+          </div>
+          {nowContract ? (
+            <>
+              <div className="flex flex-col gap-1.5">
+                {nowUsage ? (
+                  <>
+                    <p className="text-sm font-medium tabular-nums">
+                      {inContractUnit(nowUsage.used, contractUnit(nowContract))} of {countIn(nowUsage.total, contractUnit(nowContract))} used
+                    </p>
+                    <ProgressBar
+                      value={nowUsage.used / nowUsage.total}
+                      tone={nowUsage.used > nowUsage.total ? "danger" : "default"}
+                      label="Days used"
+                    />
+                  </>
+                ) : (
+                  <p className="text-sm font-medium">Time and materials, no cap</p>
+                )}
+                <p className="text-sm">
+                  Contract {engagementLabel(nowContract)} ·{" "}
+                  {nowHealth
+                    ? `last call ${formatMeetingDate(nowHealth.date)} · ${nowHealth.health}`
+                    : nowCall
+                      ? `last call ${formatMeetingDate(nowCall.date)}`
+                      : contractState(nowContract)}
+                </p>
+              </div>
+              <div className="flex flex-col gap-2">
+                <p className="text-xs font-semibold tracking-[0.08em] uppercase">Open tasks</p>
+                {nowTasks.length === 0 ? (
+                  <p className="text-sm">No open tasks on this contract.</p>
+                ) : (
+                  <ul className="flex flex-col gap-1.5 text-sm">
+                    {nowTasks.slice(0, 5).map((t) => (
+                      <li key={t.id} className="flex justify-between gap-3">
+                        <span className="[overflow-wrap:anywhere]">{t.title}</span>
+                        {t.dueDate && <span className="shrink-0 tabular-nums">{format(t.dueDate, "d MMM")}</span>}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                <Link href="/tasks" className="inline-flex min-h-11 items-center self-start text-sm font-medium underline underline-offset-2">
+                  Open in Tasks
+                </Link>
+              </div>
+            </>
+          ) : (
+            <p className="text-sm">
+              {nowPayer ? "No contract yet: days and tasks follow once the opportunity is won." : "Nothing pays for this step yet."}
+            </p>
+          )}
+        </ContentCard>
+      )}
+
+      {pipeline.length > 0 && (
+        <section aria-labelledby="solution-pipeline" className="flex flex-col gap-3">
+          <SectionHeader id="solution-pipeline" variant="card" title="Next Steps in the Pipeline" description={pipeline.length} />
+          <ul className="flex flex-col gap-2">
+            {pipeline.map(({ number, step, opportunity }) => {
+              const full = opportunities.find((o) => o.id === opportunity.id)!
+              return (
+                <li key={number} className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 rounded-xl border bg-card p-4">
+                  <div className="flex min-w-0 flex-col gap-0.5">
+                    <span className="text-[15px] font-medium [overflow-wrap:anywhere]">
+                      {number}. {step.title}
+                    </span>
+                    {step.goal && <span className="text-sm text-muted-foreground [overflow-wrap:anywhere]">{step.goal}</span>}
+                  </div>
+                  <div className="flex items-center gap-3 text-sm">
+                    <StatusPill tone={STAGE_TONE[full.stage]}>{STAGE_LABELS[full.stage]}</StatusPill>
+                    <span className="tabular-nums">
+                      {countIn(full.estimatedDaysPerMonth * full.estimatedDurationMonths, full.unit ?? "day")}
+                    </span>
+                  </div>
+                </li>
+              )
+            })}
+          </ul>
+          <p className="text-sm text-muted-foreground">
+            Each step names the opportunity behind it. Once won, the step follows its contract: days, invoices and health.{" "}
+            <Link href="/pipeline" className="underline underline-offset-2">
+              Open in Pipeline
+            </Link>
+          </p>
+        </section>
+      )}
+
+      <h2 className="-mb-2 text-xl font-semibold tracking-tight">What We Know</h2>
+
       {/* How much is written: on a desktop a quiet bar with the missing sections' links, on a phone a line over full-width segments. */}
       <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-[13.5px] sm:rounded-xl sm:border sm:border-hairline sm:bg-sidebar sm:px-[18px] sm:py-3.5 sm:text-sm">
         <span className="font-medium">
-          {filled} of {SECTIONS.length} sections written
+          {filled} of {kindKeys.length} sections written
         </span>
-        <SegmentedProgress size="banner" done={filled} total={SECTIONS.length} className="max-sm:order-last max-sm:basis-full" />
+        <SegmentedProgress size="banner" done={filled} total={kindKeys.length} className="max-sm:order-last max-sm:basis-full" />
         {missing.length > 0 && (
           <>
             <span className="text-subtle-foreground max-sm:hidden">
@@ -850,11 +1047,59 @@ function SolutionBody({
             {block("kpis")}
             {block("results")}
           </div>
-          {dataModel}
-          {(["requirements", "sources", "architecture", "steps", "history"] as const).map((key) => block(key))}
+          {shown("model") && dataModel}
+          {(["requirements", "sources", "architecture", "steps", "history"] as const).filter(shown).map((key) => block(key))}
+          {addable.length > 0 && (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="lg" className="self-start">
+                  <Plus aria-hidden /> Add Section
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start">
+                {addable.map((key) => (
+                  <DropdownMenuItem
+                    key={key}
+                    onClick={() => {
+                      setAdded((a) => [...a, key])
+                      if (key === "model") setTab("entities")
+                      else openEditor(key, "")
+                    }}
+                  >
+                    {SECTION[key].label}
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
         </div>
       </div>
 
+      <StepDialog
+        index={stepEdit?.index ?? null}
+        session={stepEdit?.session ?? 0}
+        steps={solution.steps}
+        solutionName={solution.name}
+        payers={payers}
+        today={today}
+        onSave={saveRoad}
+        onMove={moveTo}
+        onDelete={setDeletingStep}
+        onClose={() => setStepEdit(null)}
+      />
+      <ConfirmDeleteDialog
+        open={deletingStep !== null}
+        onOpenChange={(o) => !o && setDeletingStep(null)}
+        title="Delete Step"
+        description={`"${deletingStep === null ? "" : solution.steps[deletingStep]?.title}" is removed from the road. This can't be undone.`}
+        confirmLabel="Delete Step"
+        isPending={saves.road === "saving"}
+        onConfirm={async () => {
+          const at = deletingStep!
+          setDeletingStep(null)
+          await saveRoad(solution.steps.filter((_, i) => i !== at))
+        }}
+      />
       <SolutionFormDialog
         open={editing}
         solution={solution}
