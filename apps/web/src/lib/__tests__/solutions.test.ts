@@ -348,9 +348,13 @@ describe("saveStep", () => {
     expect(reopened[0]).toMatchObject({ state: "next", outcome: null, doneOn: null })
   })
 
-  it("adds a step as Now at the end and sends the old Now to Next", () => {
-    const out = steps(saveStep(road, null, draft({ title: "D", state: "now" }), "2026-05-20"))
-    expect(out.map((s) => s.state)).toEqual(["done", "next", "next", "now"])
+  it("refuses to add a step as Now while another step is Now, as update_solution does", () => {
+    expect(saveStep(road, null, draft({ title: "D", state: "now" }), "2026-05-20")).toEqual({ errors: ["Step 2 is Now: mark it Done or set it to Next first"] })
+  })
+
+  it("adds a step as Now when no step is Now", () => {
+    const open = [stp("A", "done", { outcome: "ok", doneOn: "2026-04-02" }), stp("B", "next")]
+    expect(steps(saveStep(open, null, draft({ title: "D", state: "now" }), "2026-05-20")).map((s) => s.state)).toEqual(["done", "next", "now"])
   })
 
   it("keeps the outcome of a step that is not Done when it is edited", () => {
@@ -358,9 +362,9 @@ describe("saveStep", () => {
     expect(steps(saveStep(withOutcome, 0, draft({ title: "A2", state: "now", outcome: "Draft findings" }), "2026-05-20"))[0]).toMatchObject({ title: "A2", outcome: "Draft findings", doneOn: null })
   })
 
-  it("makes another step Now by moving the current Now to Next", () => {
-    const out = steps(saveStep(road, 2, draft({ title: "C", state: "now" }), "2026-05-20"))
-    expect(out.map((s) => s.state)).toEqual(["done", "next", "now"])
+  it("refuses to make another step Now while one is Now, and keeps the Now step itself editable", () => {
+    expect(saveStep(road, 2, draft({ title: "C", state: "now" }), "2026-05-20")).toEqual({ errors: ["Step 2 is Now: mark it Done or set it to Next first"] })
+    expect(steps(saveStep(road, 1, draft({ title: "B2", state: "now" }), "2026-05-20")).map((s) => [s.title, s.state])).toEqual([["A", "done"], ["B2", "now"], ["C", "next"]])
   })
 
   it("reports the schema's complaint, naming nothing written", () => {

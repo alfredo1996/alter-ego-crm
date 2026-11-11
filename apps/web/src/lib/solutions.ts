@@ -237,7 +237,8 @@ export interface StepDraft {
 /**
  * The road after Save Step: step `index` rewritten from the draft, or the draft added at the end when
  * `index` is null. Done asks for its outcome; a step newly Done follows completeStep (Now moves on);
- * one reopened loses its outcome and day; making a step Now sends the old Now to Next. The result is
+ * one reopened loses its outcome and day; making a step Now while another is Now is refused, as
+ * update_solution refuses it (owner, 2026-11-11). The result is
  * parsed by solutionStepsSchema: the Firebase client adapter does not, so while it reports anything
  * nothing is written.
  */
@@ -250,6 +251,8 @@ export function saveStep(
   const previous = index === null ? undefined : steps[index]
   const outcome = draft.outcome.trim() || null
   if (draft.state === "done" && !outcome) return { errors: ["Say what came of it to mark the step Done"] }
+  const otherNow = steps.findIndex((s, i) => s.state === "now" && i !== index)
+  if (draft.state === "now" && otherNow !== -1) return { errors: [`Step ${otherNow + 1} is Now: mark it Done or set it to Next first`] }
   const step: SolutionStep = {
     title: draft.title.trim(),
     state: draft.state,
@@ -265,8 +268,6 @@ export function saveStep(
   if (index === null) next = [...steps, step]
   else if (draft.state === "done" && previous?.state !== "done") next = completeStep(steps.map((s, i) => (i === index ? { ...step, state: previous!.state } : s)), index, outcome!, today) // keeps the edits
   else next = steps.map((s, i) => (i === index ? step : s))
-  // Marking one Now: the Now it replaces waits as Next.
-  if (draft.state === "now") next = next.map((s, i) => (s.state === "now" && i !== (index ?? steps.length) ? { ...s, state: "next" } : s))
   const parsed = solutionStepsSchema.safeParse(next)
   return parsed.success ? { steps: parsed.data } : { errors: [...new Set(parsed.error.issues.map((i) => i.message))] }
 }
