@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest"
 
+import { contractUsage } from "@/lib/engagements"
 import {
   completeStep,
   contractState,
@@ -8,9 +9,14 @@ import {
   historyEntries,
   lineLabel,
   missingSections,
+  moveStep,
   nowStep,
+  pipelineSteps,
+  saveStep,
   sectionsFor,
   stepContract,
+  stepUsage,
+  stepWhen,
   solutionFilters,
   solutionNameTaken,
   usedStack,
@@ -241,5 +247,128 @@ describe("missingSections by kind", () => {
     const sections = normalizeSolutionSections({ purpose: "Why" })
     expect(missingSections({ sections, kind: "advisory" })).toEqual(["kpis", "results"])
     expect(missingSections({ sections, kind: "product" })).toEqual(["requirements", "kpis", "sources", "model", "architecture", "results"])
+  })
+})
+
+describe("stepUsage", () => {
+  const contract = { id: "e1", contractedDays: 11 }
+  // 52 h = 6.5 days; the card's 7 h on another contract and a day after today are not counted.
+  const timecards = [
+    { engagementId: "e1", date: "2026-10-05", hours: 40 },
+    { engagementId: "e1", date: "2026-11-03", hours: 12 },
+    { engagementId: "e2", date: "2026-11-03", hours: 7 },
+    { engagementId: "e1", date: "2026-11-20", hours: 8 },
+  ]
+
+  it("is the days the client page shows for the same contract and hours", () => {
+    const page = contractUsage({ engagement: contract, timecards, cells: [{ yearMonth: "2026-11", billableDays: 3 }], today: "2026-11-10" })!
+    expect(stepUsage(contract, timecards, "2026-11-10")).toEqual({ used: page.used, total: page.total })
+    expect(stepUsage(contract, timecards, "2026-11-10")).toEqual({ used: 6.5, total: 11 })
+  })
+
+  it("is null for a contract with no cap", () => {
+    expect(stepUsage({ id: "e1", contractedDays: null }, timecards, "2026-11-10")).toBeNull()
+  })
+})
+
+describe("pipelineSteps", () => {
+  const opps = [
+    { id: "o1", stage: "proposal", engagementId: null },
+    { id: "o2", stage: "lead", engagementId: null },
+    { id: "o3", stage: "lost", engagementId: null },
+    { id: "o4", stage: "won", engagementId: "e4" },
+  ] as never
+  it("lists, with their number, only the steps paid by an open opportunity", () => {
+    const road = [
+      stp("A", "done", { paidBy: { type: "contract", id: "e1" } }),
+      stp("B", "now", { paidBy: { type: "opportunity", id: "o4" } }),
+      stp("C", "next", { paidBy: { type: "opportunity", id: "o1" } }),
+      stp("D", "later", { paidBy: { type: "opportunity", id: "o3" } }),
+      stp("E", "later"),
+      stp("F", "later", { paidBy: { type: "opportunity", id: "o2" } }),
+      stp("G", "now", { paidBy: { type: "opportunity", id: "o1" } }),
+      stp("H", "done", { paidBy: { type: "opportunity", id: "o1" }, outcome: "ok", doneOn: "2026-04-02" }),
+    ]
+    expect(pipelineSteps(road, opps).map((p) => [p.number, p.step.title, p.opportunity.id])).toEqual([
+      [3, "C", "o1"],
+      [6, "F", "o2"],
+    ])
+  })
+})
+
+describe("moveStep", () => {
+  it.each([
+    ["later", 0, 1, ["B", "A", "C"]],
+    ["earlier", 2, 1, ["A", "C", "B"]],
+    ["to the end", 0, 2, ["B", "C", "A"]],
+    ["nowhere past the end", 2, 3, ["A", "B", "C"]],
+    ["nowhere before the start", 0, -1, ["A", "B", "C"]],
+  ])("%s", (_, from, to, expected) => {
+    const road = [stp("A", "done"), stp("B", "now"), stp("C", "next")]
+    expect(moveStep(road, from, to).map((s) => s.title)).toEqual(expected)
+  })
+})
+
+describe("stepWhen", () => {
+  it.each([
+    [{ fromMonth: "2026-10", toMonth: "2026-11" }, "Oct – Nov 2026"],
+    [{ fromMonth: "2026-10", toMonth: "2026-10" }, "Oct 2026"],
+    [{ fromMonth: "2026-10", toMonth: null }, "From Oct 2026"],
+    [{ fromMonth: "2026-11", toMonth: "2027-02" }, "Nov 2026 – Feb 2027"],
+  ])("%j", (months, expected) => expect(stepWhen(months)).toBe(expected))
+})
+
+describe("saveStep", () => {
+  const road = [stp("A", "done", { outcome: "ok", doneOn: "2026-04-02" }), stp("B", "now"), stp("C", "next")]
+  const draft = (over: Partial<Parameters<typeof saveStep>[2]> = {}) => ({
+    title: "B", state: "now" as const, fromMonth: "2026-03", toMonth: "", paidBy: null, goal: "", outcome: "", ...over,
+  })
+  const steps = (r: ReturnType<typeof saveStep>) => ("steps" in r ? r.steps : [])
+
+  it("adds a step at the end, blanks stored as null", () => {
+    const out = steps(saveStep(road, null, draft({ title: " D ", state: "later", goal: " Hand over " }), "2026-05-20"))
+    expect(out).toHaveLength(4)
+    expect(out[3]).toEqual({ title: "D", state: "later", fromMonth: "2026-03", toMonth: null, paidBy: null, goal: "Hand over", outcome: null, doneOn: null })
+  })
+
+  it("marks the Now step Done with its outcome: the day is today and the next step becomes Now", () => {
+    const out = steps(saveStep(road, 1, draft({ state: "done", outcome: "Live" }), "2026-05-20"))
+    expect(out.map((s) => s.state)).toEqual(["done", "done", "now"])
+    expect(out[1]).toMatchObject({ outcome: "Live", doneOn: "2026-05-20" })
+  })
+
+  it("asks for the outcome of a step marked Done, and writes nothing without it", () => {
+    expect(saveStep(road, 1, draft({ state: "done", outcome: "  " }), "2026-05-20")).toEqual({ errors: ["Say what came of it to mark the step Done"] })
+  })
+
+  it("keeps the day of a step that stays Done, and clears day and outcome when it is reopened", () => {
+    const kept = steps(saveStep(road, 0, draft({ title: "A", state: "done", outcome: "Better" }), "2026-05-20"))
+    expect(kept[0]).toMatchObject({ outcome: "Better", doneOn: "2026-04-02" })
+    const reopened = steps(saveStep(road, 0, draft({ title: "A", state: "next", outcome: "Better" }), "2026-05-20"))
+    expect(reopened[0]).toMatchObject({ state: "next", outcome: null, doneOn: null })
+  })
+
+  it("refuses to add a step as Now while another step is Now, as update_solution does", () => {
+    expect(saveStep(road, null, draft({ title: "D", state: "now" }), "2026-05-20")).toEqual({ errors: ["Step 2 is Now: mark it Done or set it to Next first"] })
+  })
+
+  it("adds a step as Now when no step is Now", () => {
+    const open = [stp("A", "done", { outcome: "ok", doneOn: "2026-04-02" }), stp("B", "next")]
+    expect(steps(saveStep(open, null, draft({ title: "D", state: "now" }), "2026-05-20")).map((s) => s.state)).toEqual(["done", "next", "now"])
+  })
+
+  it("keeps the outcome of a step that is not Done when it is edited", () => {
+    const withOutcome = [stp("A", "now", { outcome: "Draft findings" }), stp("B", "next")]
+    expect(steps(saveStep(withOutcome, 0, draft({ title: "A2", state: "now", outcome: "Draft findings" }), "2026-05-20"))[0]).toMatchObject({ title: "A2", outcome: "Draft findings", doneOn: null })
+  })
+
+  it("refuses to make another step Now while one is Now, and keeps the Now step itself editable", () => {
+    expect(saveStep(road, 2, draft({ title: "C", state: "now" }), "2026-05-20")).toEqual({ errors: ["Step 2 is Now: mark it Done or set it to Next first"] })
+    expect(steps(saveStep(road, 1, draft({ title: "B2", state: "now" }), "2026-05-20")).map((s) => [s.title, s.state])).toEqual([["A", "done"], ["B2", "now"], ["C", "next"]])
+  })
+
+  it("reports the schema's complaint, naming nothing written", () => {
+    expect(saveStep(road, 2, draft({ title: "C", state: "next", toMonth: "2026-01" }), "2026-05-20")).toEqual({ errors: ["The end is before the start"] })
+    expect(saveStep(road, 2, draft({ title: " ", state: "next" }), "2026-05-20")).toEqual({ errors: ["Name the step"] })
   })
 })
