@@ -462,6 +462,23 @@ describe("a solution's kind, target and road", () => {
     expect((await stored(tuningId)).steps[1].paidBy).toBeNull()
   })
 
+  it("a Done step keeps its outcome; reopening it clears the outcome and the day, and doing it again asks for a new outcome", async () => {
+    expect(await refusal("update_solution", { solution: tuningId, step: "Audit", outcome: null })).toContain("outcome")
+    expect((await stored(tuningId)).steps[0]).toMatchObject({ outcome: "Nine slow queries found", doneOn: isoDate(new Date()) })
+    await callTool("update_solution", { solution: tuningId, step: "Audit", stepState: "later" })
+    expect((await stored(tuningId)).steps[0]).toMatchObject({ state: "later", outcome: null, doneOn: null })
+    expect(await refusal("update_solution", { solution: tuningId, step: "Audit", stepState: "done" })).toContain("outcome")
+    await callTool("update_solution", { solution: tuningId, step: "Audit", stepState: "done", outcome: "Eleven slow queries found" })
+    expect((await stored(tuningId)).steps[0]).toMatchObject({ state: "done", outcome: "Eleven slow queries found", doneOn: isoDate(new Date()) })
+  })
+
+  it("refuses an empty paidBy instead of ignoring it", async () => {
+    // A schema refusal, so it never reaches the handler: its text is not the JSON the handler's errors are.
+    const result = await rpc("update_solution", { solution: tuningId, step: "Tune", paidBy: "" })
+    expect(result.isError).toBe(true)
+    expect(result.content[0].text).toContain("paidBy")
+  })
+
   it("removeStep deletes one by title or number", async () => {
     await callTool("update_solution", { solution: tuningId, removeStep: "Hand over" })
     expect(await road()).toEqual([["Audit", "done"], ["Tune", "now"]])

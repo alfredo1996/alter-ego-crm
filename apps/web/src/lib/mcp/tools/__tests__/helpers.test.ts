@@ -331,6 +331,14 @@ describe("resolveSolution", () => {
     expect(() => resolveStepPayer(c1, own, opps, "o2")).toThrow(/matches "o2"/)
     expect(() => resolveStepPayer(c1, own, opps, "  ")).toThrow(/matches/)
   })
+
+  it("resolveStepPayer takes the contract when the name is shared with the opportunity it was converted from", () => {
+    const c = [engagement("e1", { clientId: "c1", name: "Product graph" })]
+    const won = { ...opp("o1", "c1", "Product graph"), engagementId: "e1" }
+    expect(resolveStepPayer(clients[0], c, [won], "product graph")).toEqual({ type: "contract", id: "e1" })
+    // An unrelated opportunity with the same name is still ambiguous.
+    expect(() => resolveStepPayer(clients[0], c, [won, opp("o2", "c1", "Product graph")], "product graph")).toThrow(/Several match/)
+  })
 })
 
 describe("resolveDeadline", () => {

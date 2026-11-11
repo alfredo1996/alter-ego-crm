@@ -4473,7 +4473,7 @@ export function registerCrmWriteTools(server: McpServer): void {
         stepState: z.enum(["done", "now", "next", "later"]).optional(),
         fromMonth: z.string().optional(),
         toMonth: z.string().nullable().optional(),
-        paidBy: z.string().nullable().optional(),
+        paidBy: z.string().trim().min(1).nullable().optional(),
         goal: z.string().nullable().optional(),
         outcome: z.string().nullable().optional(),
         removeStep: z.union([z.number().int().min(1), z.string().trim().min(1)]).optional(),
@@ -4582,6 +4582,11 @@ export function registerCrmWriteTools(server: McpServer): void {
               ...(payer !== undefined && { paidBy: payer }),
               ...(goal !== undefined && { goal: goal?.trim() || null }),
               ...(outcome !== undefined && { outcome: outcome?.trim() || null }),
+            }
+            // A completion undone takes its outcome and day with it; a Done step keeps an outcome.
+            if (before.state === "done" && edited.state !== "done") Object.assign(edited, { outcome: null, doneOn: null })
+            else if (edited.state === "done" && before.state === "done" && !edited.outcome) {
+              throw new ToolInputError(`step ${at + 1} "${edited.title}" is done: it keeps its outcome. Reopen it first to clear it.`)
             }
             const label = `step ${at + 1} "${edited.title}"`
             if (stepState === "done" && before.state !== "done") {

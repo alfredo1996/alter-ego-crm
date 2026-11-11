@@ -750,6 +750,11 @@ export function resolveStepPayer(
   const describe = (x: (typeof pool)[number]) => `${x.type} ${x.name} (id ${x.id})`
   if (q) {
     for (const match of [pool.filter((x) => x.id === query.trim()), pool.filter((x) => x.name.toLowerCase() === q), pool.filter((x) => x.name.toLowerCase().includes(q))]) {
+      // A contract converted from an opportunity carries its title: the pair is one payer, the contract.
+      const contract = match.find((x) => x.type === "contract")
+      if (contract && match.every((x) => x === contract || (x.type === "opportunity" && opportunities.find((o) => o.id === x.id)?.engagementId === contract.id))) {
+        return { type: "contract", id: contract.id }
+      }
       if (match.length === 1) return { type: match[0].type, id: match[0].id }
       if (match.length > 1) throw new ToolInputError(`Several match "${query}": ${match.map(describe).join("; ")}. Pass the id.`)
     }
