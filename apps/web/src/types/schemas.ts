@@ -10,7 +10,9 @@ import type {
   CreateAssignmentInput,
   UpdateAssignmentInput,
   CreateCollaboratorInput,
+  CreateJournalEntryInput,
   CreateSolutionInput,
+  JournalEntry,
   Solution,
   SolutionEntity,
   SolutionRelation,
@@ -19,6 +21,7 @@ import type {
   SolutionSections,
   SolutionStep,
   UpdateCollaboratorInput,
+  UpdateJournalEntryInput,
   UpdateSolutionInput,
 } from "./crm"
 
@@ -658,6 +661,85 @@ export function normalizeSolutionGraph(
     return parsed.success && names.has(parsed.data.from) && names.has(parsed.data.to) ? [parsed.data] : []
   })
   return { entities, relations }
+}
+
+// ─── Journal Schemas ────────────────────────────────────────────────────────
+//
+// Kept in step with journal in firestore/crm.rules, which repeats the caps; the rules tests pin the two.
+
+export const JOURNAL_TEXT_MAX = 5000
+export const JOURNAL_LINE_MAX = 500
+export const MAX_JOURNAL_DECISIONS = 10
+export const MAX_JOURNAL_LINKS = 10
+export const JOURNAL_LINK_MAX = 300
+export const JOURNAL_SOURCE_MAX = 100
+
+export const journalLines = (max: number, size: number, what: string) =>
+  z.array(z.string().trim().min(1).max(size, `At most ${size} characters`)).max(max, `At most ${max} ${what}`)
+
+const journalShape = {
+  date: z.iso.date("Invalid date: use YYYY-MM-DD"),
+  stepTitle: z.string().trim().min(1).max(200).nullish(),
+  text: z.string().trim().min(1, "Write what happened").max(JOURNAL_TEXT_MAX, `At most ${JOURNAL_TEXT_MAX} characters`),
+  decisions: journalLines(MAX_JOURNAL_DECISIONS, JOURNAL_LINE_MAX, "decisions").optional(),
+  links: journalLines(MAX_JOURNAL_LINKS, JOURNAL_LINK_MAX, "links").optional(),
+  next: z.string().trim().min(1).max(JOURNAL_LINE_MAX, `At most ${JOURNAL_LINE_MAX} characters`).nullish(),
+  source: z.string().trim().min(1).max(JOURNAL_SOURCE_MAX).nullish(),
+}
+
+export const createJournalEntrySchema = z
+  .object({
+    solutionId: z.string().min(1),
+    clientId: z.string().min(1),
+    kind: z.enum(["work", "decision"]).optional(),
+    ...journalShape,
+  })
+  .refine((v) => v.kind !== "decision" || !v.decisions?.length, { path: ["decisions"], message: "A decision is one line" })
+
+export const updateJournalEntrySchema = z.object(journalShape).partial()
+
+/**
+ * What a journal entry stores, parsed (a create input, or a stored entry with an update on top; the
+ * ids and the kind never change). Throws a ZodError. The mock and the Admin SDK write through it;
+ * the client SDK has the rules.
+ */
+export function journalFields(
+  base: CreateJournalEntryInput,
+  update: UpdateJournalEntryInput = {},
+): Omit<JournalEntry, "id" | "userId" | "createdAt" | "updatedAt"> {
+  const defined = Object.fromEntries(Object.entries(update).filter(([, v]) => v !== undefined))
+  const v = createJournalEntrySchema.parse({ ...base, ...defined })
+  return {
+    solutionId: v.solutionId,
+    clientId: v.clientId,
+    kind: v.kind ?? "work",
+    date: v.date,
+    stepTitle: v.stepTitle ?? null,
+    text: v.text,
+    decisions: v.decisions ?? [],
+    links: v.links ?? [],
+    next: v.next ?? null,
+    source: v.source ?? null,
+  }
+}
+
+/** A stored entry as the app may read it: the rules check types and sizes, so a hand-written field is mended or dropped. */
+export function normalizeJournalEntry(d: Record<string, unknown>): Omit<JournalEntry, "id" | "userId" | "createdAt" | "updatedAt"> {
+  const lines = (raw: unknown, max: number) =>
+    (Array.isArray(raw) ? raw : []).filter((x): x is string => typeof x === "string" && x.trim() !== "").slice(0, max)
+  const text = (raw: unknown) => (typeof raw === "string" && raw.trim() ? raw.trim() : null)
+  return {
+    solutionId: d.solutionId as string,
+    clientId: d.clientId as string,
+    kind: d.kind === "decision" ? "decision" : "work",
+    date: d.date as string,
+    stepTitle: text(d.stepTitle),
+    text: (d.text as string | undefined) ?? "",
+    decisions: lines(d.decisions, MAX_JOURNAL_DECISIONS),
+    links: lines(d.links, MAX_JOURNAL_LINKS),
+    next: text(d.next),
+    source: text(d.source),
+  }
 }
 
 // ─── Collaborator Schemas ───────────────────────────────────────────────────

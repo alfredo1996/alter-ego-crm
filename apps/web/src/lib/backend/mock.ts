@@ -16,6 +16,7 @@ import {
   assignmentFields,
   collaboratorFields,
   solutionFields,
+  journalFields,
 } from "@/types/schemas"
 
 import type {
@@ -67,6 +68,9 @@ import type {
   Solution,
   CreateSolutionInput,
   UpdateSolutionInput,
+  JournalEntry,
+  CreateJournalEntryInput,
+  UpdateJournalEntryInput,
   Invoice,
   CreateInvoiceInput,
   UpdateInvoiceInput,
@@ -104,6 +108,7 @@ const tasks: Map<string, Task> = new Map()
 const timecards: Map<string, Timecard> = new Map()
 const meetings: Map<string, Meeting> = new Map()
 const solutions: Map<string, Solution> = new Map()
+const journal: Map<string, JournalEntry> = new Map()
 const collaborators: Map<string, Collaborator> = new Map()
 const assignments: Map<string, Assignment> = new Map()
 const invoices: Map<string, Invoice> = new Map()
@@ -598,9 +603,12 @@ const mockDb: DatabaseAdapter & AuditAdapter & CrmServerAdapter & { validateApiK
     for (const [id, m] of meetings) {
       if (m.userId === userId && m.clientId === clientId) meetings.delete(id)
     }
-    // Likewise every solution, pre-sales ones included.
+    // Likewise every solution, pre-sales ones included, and the journal beside them.
     for (const [id, x] of solutions) {
       if (x.userId === userId && x.clientId === clientId) solutions.delete(id)
+    }
+    for (const [id, x] of journal) {
+      if (x.userId === userId && x.clientId === clientId) journal.delete(id)
     }
     // Its invoices, re-pointed ones included; older ones name just their contract, below.
     for (const [id, i] of invoices) {
@@ -1016,6 +1024,35 @@ const mockDb: DatabaseAdapter & AuditAdapter & CrmServerAdapter & { validateApiK
   async deleteSolution(userId: string, solutionId: string): Promise<void> {
     const x = solutions.get(solutionId)
     if (x && x.userId === userId) solutions.delete(solutionId)
+    for (const [id, e] of journal) {
+      if (e.userId === userId && e.solutionId === solutionId) journal.delete(id)
+    }
+  },
+
+  // ── Journal (work sessions and decisions on a solution) ────────────────────
+
+  async getJournal(userId: string): Promise<JournalEntry[]> {
+    return Array.from(journal.values()).filter((e) => e.userId === userId)
+  },
+
+  async createJournalEntry(userId: string, input: CreateJournalEntryInput): Promise<JournalEntry> {
+    const now = new Date()
+    const entry: JournalEntry = { id: nextId(), userId, ...journalFields(input), createdAt: now, updatedAt: now }
+    journal.set(entry.id, entry)
+    return entry
+  },
+
+  async updateJournalEntry(userId: string, entryId: string, input: UpdateJournalEntryInput): Promise<JournalEntry> {
+    const e = journal.get(entryId)
+    if (!e || e.userId !== userId) throw new Error("Journal entry not found")
+    const updated: JournalEntry = { ...e, ...journalFields(e, input), updatedAt: new Date() }
+    journal.set(entryId, updated)
+    return updated
+  },
+
+  async deleteJournalEntry(userId: string, entryId: string): Promise<void> {
+    const e = journal.get(entryId)
+    if (e && e.userId === userId) journal.delete(entryId)
   },
 
   // ── Invoices (a customer's record of issued paper) ───────────────────────
@@ -1269,6 +1306,7 @@ export function __resetMockState() {
   timecards.clear()
   meetings.clear()
   solutions.clear()
+  journal.clear()
   collaborators.clear()
   clearRent()
   assignments.clear()

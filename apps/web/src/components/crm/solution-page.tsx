@@ -28,13 +28,16 @@ import { Fragment, useEffect, useRef, useState, type ReactNode } from "react"
 import { flushSync } from "react-dom"
 
 import { ConfirmDeleteDialog } from "@/components/confirm-delete-dialog"
+import { LogWorkDialog } from "@/components/crm/log-work-dialog"
 import { SolutionFormDialog } from "@/components/crm/solution-form-dialog"
 import { SolutionGraph } from "@/components/crm/solution-graph"
+import { SolutionJournal } from "@/components/crm/solution-journal"
 import { SolutionRoad } from "@/components/crm/solution-road"
 import { StepDialog, type StepPayerOption } from "@/components/crm/step-dialog"
 import { useAuth } from "@/hooks/use-auth"
 import { useClients } from "@/hooks/use-clients"
 import { useEngagements } from "@/hooks/use-engagements"
+import { useJournal } from "@/hooks/use-journal"
 import { useMeetings } from "@/hooks/use-meetings"
 import { useOpportunities } from "@/hooks/use-opportunities"
 import { useDeleteSolution, useSolutions, useUpdateSolution } from "@/hooks/use-solutions"
@@ -57,6 +60,7 @@ import {
 import type {
   Client,
   Engagement,
+  JournalEntry,
   Meeting,
   Opportunity,
   Solution,
@@ -217,7 +221,8 @@ export function SolutionPage({ id }: { id: string }) {
   const opportunitiesQuery = useOpportunities(user?.id)
   const timecardsQuery = useTimecards(user?.id)
   const tasksQuery = useTasks(user?.id)
-  const gate = pageState([solutionsQuery, clientsQuery, engagementsQuery, meetingsQuery, opportunitiesQuery, timecardsQuery, tasksQuery])
+  const journalQuery = useJournal(user?.id)
+  const gate = pageState([solutionsQuery, clientsQuery, engagementsQuery, meetingsQuery, opportunitiesQuery, timecardsQuery, tasksQuery, journalQuery])
   if (gate) return gate
 
   const solutions = solutionsQuery.data ?? []
@@ -244,6 +249,7 @@ export function SolutionPage({ id }: { id: string }) {
       opportunities={opportunitiesQuery.data ?? []}
       timecards={timecardsQuery.data ?? []}
       tasks={tasksQuery.data ?? []}
+      journal={journalQuery.data ?? []}
     />
   )
 }
@@ -258,6 +264,7 @@ function SolutionBody({
   opportunities,
   timecards,
   tasks,
+  journal,
 }: {
   solution: Solution
   solutions: Solution[]
@@ -268,6 +275,7 @@ function SolutionBody({
   opportunities: Opportunity[]
   timecards: Timecard[]
   tasks: Task[]
+  journal: JournalEntry[]
 }) {
   const router = useRouter()
   const update = useUpdateSolution(userId)
@@ -293,6 +301,9 @@ function SolutionBody({
   /** Edit Step's step ("new" = Add Step) and its opening, so a draft never outlives it. */
   const [stepEdit, setStepEdit] = useState<{ index: number | "new"; session: number } | null>(null)
   const [deletingStep, setDeletingStep] = useState<number | null>(null)
+  /** Log Work's entry ("new" files one) and its opening, so a draft never outlives it. */
+  const [logging, setLogging] = useState<{ entry: JournalEntry | "new"; session: number } | null>(null)
+  const openLog = (entry: JournalEntry | "new") => setLogging((l) => ({ entry, session: (l?.session ?? 0) + 1 }))
   const moreButton = useRef<HTMLButtonElement>(null)
 
   // Another writer (a second tab, chat) changed the data model: an untouched
@@ -329,6 +340,13 @@ function SolutionBody({
   const nowLine = nowUsage ? `${inContractUnit(nowUsage.used, nowUnit)} of ${countIn(nowUsage.total, nowUnit)} used` : null
   const nowTasks = nowContract ? sortTasks(tasks.filter((t) => !t.isDone && t.engagementId === nowContract.id)) : []
   const pipeline = pipelineSteps(solution.steps, opportunities)
+  /** The solution's own contract and the contracts its steps follow: their meetings are the Journal's calls. */
+  const journalContracts = [
+    ...new Set([
+      ...(solution.engagementId ? [solution.engagementId] : []),
+      ...solution.steps.flatMap((x) => { const p = stepContract(x, opportunities); return p?.type === "contract" ? [p.id] : [] }),
+    ]),
+  ]
   /** The client's contracts and open opportunities: what a step can be paid by. */
   const payers: StepPayerOption[] = [
     ...engagements
@@ -884,9 +902,14 @@ function SolutionBody({
           </>
         }
         actions={
-          <Button variant="outline" size="lg" className="max-sm:hidden" onClick={() => setEditing(true)}>
-            <Pencil aria-hidden /> Edit Details
-          </Button>
+          <>
+            <Button variant="outline" size="lg" onClick={() => openLog("new")}>
+              <Plus aria-hidden /> Log Work
+            </Button>
+            <Button variant="outline" size="lg" className="max-sm:hidden" onClick={() => setEditing(true)}>
+              <Pencil aria-hidden /> Edit Details
+            </Button>
+          </>
         }
         more={more}
       />
@@ -1016,6 +1039,16 @@ function SolutionBody({
       )}
       </div>
 
+      <SolutionJournal
+        solution={solution}
+        entries={journal}
+        meetings={meetings}
+        contractIds={journalContracts}
+        userId={userId}
+        today={today}
+        onEdit={openLog}
+      />
+
       <h2 className="-mb-2 text-xl font-semibold tracking-tight">What We Know</h2>
 
       {/* How much is written: on a desktop a quiet bar with the missing sections' links, on a phone a line over full-width segments. */}
@@ -1089,6 +1122,14 @@ function SolutionBody({
         </div>
       </div>
 
+      <LogWorkDialog
+        entry={logging?.entry ?? null}
+        session={logging?.session ?? 0}
+        solution={solution}
+        userId={userId}
+        today={today}
+        onClose={() => setLogging(null)}
+      />
       <StepDialog
         index={stepEdit?.index ?? null}
         session={stepEdit?.session ?? 0}
@@ -1132,7 +1173,7 @@ function SolutionBody({
         open={confirmDelete}
         onOpenChange={setConfirmDelete}
         title="Delete Solution"
-        description={`"${solution.name}" is deleted, with its nine sections and its data model. This can't be undone.`}
+        description={`"${solution.name}" is deleted, with its nine sections, its data model and its journal. This can't be undone.`}
         confirmLabel="Delete Solution"
         isPending={remove.isPending}
         onCloseAutoFocus={(e) => {

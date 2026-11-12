@@ -1,5 +1,5 @@
 import { eurShort } from "@alter-ego/kernel/currency"
-import { formatYearMonth, isoDate, weekdaysInMonth } from "@alter-ego/kernel/dates"
+import { formatYearMonth, isoDate, isoDateInRome, weekdaysInMonth } from "@alter-ego/kernel/dates"
 import { format } from "date-fns"
 
 
@@ -113,8 +113,10 @@ import {
 } from "@/lib/mcp/tools/helpers"
 import { fileHolder, fileTargetInput, fileText, ownFolder } from "@/lib/mcp/tools/invoice-files"
 import { healthByContract } from "@/lib/meetings"
+import { getClient as getOAuthClient } from "@/lib/oauth/store"
 import { isOpen, STAGE_LABELS, STAGE_PROBABILITY } from "@/lib/opportunities"
-import { completeStep, sectionsFor, solutionNameTaken, stepIndex } from "@/lib/solutions"
+import { journalSource } from "@/lib/solution-journal"
+import { completeStep, nowStep, sectionsFor, solutionNameTaken, stepContract, stepIndex } from "@/lib/solutions"
 import { MAX_LABELS, statusOf, taskClientId, taskStatusUpdate } from "@/lib/tasks"
 import { cellLimits, HOURS_AHEAD_MONTHS, hoursRefusal, lastLoggableDay, limitMessage, limitRefusal, monthPlanDays, planWarning } from "@/lib/timecards"
 import { z } from "@/lib/zod"
@@ -139,6 +141,10 @@ import {
   opportunityStageSchema,
   setTimecardSchema,
   SOLUTION_SECTION_MAX,
+  createJournalEntrySchema,
+  journalLines,
+  MAX_JOURNAL_DECISIONS,
+  JOURNAL_LINE_MAX,
   SOLUTION_SECTIONS,
   solutionFields,
   solutionKindSchema,
@@ -219,6 +225,7 @@ export const WRITE_TOOLS = new Set([
   "delete_loan",
   "create_solution",
   "update_solution",
+  "log_work",
   "add_collaborator",
   "update_collaborator",
   "assign_collaborator",
@@ -4654,6 +4661,89 @@ export function registerCrmWriteTools(server: McpServer): void {
             ),
           },
           documentIds: [updated.id],
+        }
+      })
+  )
+
+  server.registerTool(
+    "log_work",
+    {
+      title: "Log Work",
+      description:
+        "Files a work session on a solution's journal, the page's Log Work: did (what was done), decisions (each shown as " +
+        "its own Decision line), links (PRs, commits), next, and source (the repository's name; the entry says which app filed it). " +
+        "step is its number (1 is the first) or its title; the default is the Now step, and a step of another solution is " +
+        "refused. With decisions and no did, each decision is filed on its own. Dated today. The reply names the step and " +
+        "the open tasks of the contract that pays for it. «segna la sessione di oggi sul grafo» → did, with the step Now. " +
+        "solution is a name or id; client narrows it when two clients have one by that name. Entries are edited and deleted " +
+        "on the solution page, not here.",
+      inputSchema: z.object({
+        solution: z.string().trim().min(1),
+        client: z.string().min(1).optional(),
+        step: z.union([z.number().int().min(1), z.string().trim().min(1)]).optional(),
+        // Lengths are checked by the shared schema, which names them.
+        did: z.string().optional(),
+        decisions: z.array(z.string()).optional(),
+        links: z.array(z.string()).optional(),
+        next: z.string().nullable().optional(),
+        source: z.string().optional(),
+      }),
+    },
+    async (input, ctx) =>
+      audited(ctx, "log_work", input, async (userId) => {
+        const did = input.did?.trim()
+        const decisions = (input.decisions ?? []).map((d) => d.trim()).filter(Boolean)
+        if (!did && decisions.length === 0) throw new ToolInputError("Pass did (what was done), or decisions.")
+        if (!did && (input.links?.length || input.next?.trim())) throw new ToolInputError("links and next go with did (a work session).")
+        valid(journalLines(MAX_JOURNAL_DECISIONS, JOURNAL_LINE_MAX, "decisions"), decisions)
+        const [solutions, clients, opportunities, tasks] = await Promise.all([
+          db().getSolutions(userId),
+          db().getClients(userId),
+          db().getOpportunities(userId),
+          db().getTasks(userId),
+        ])
+        const narrowed = input.client ? resolveClient(clients, input.client, true) : null
+        const s = resolveSolution(solutions, clients, input.solution, narrowed?.id)
+        let at = -1
+        if (input.step !== undefined) {
+          at = stepIndex(s.steps, input.step)
+          if (at < 0) {
+            const list = s.steps.map((x, k) => `${k + 1} ${x.title}`).join("; ")
+            throw new ToolInputError(`No single step is "${input.step}" on ${s.name}. ${s.steps.length ? `Its steps: ${list}.` : "It has no steps."}`)
+          }
+        } else {
+          const now = nowStep(s.steps)
+          at = now ? s.steps.indexOf(now) : -1
+        }
+        const step = at >= 0 ? s.steps[at] : null
+        // The registered name of the OAuth client; stdio and API keys have none.
+        const oauthId = ctx.http?.authInfo?.clientId
+        const client = oauthId && oauthId !== "api-key" ? await getOAuthClient(oauthId).catch(() => null) : null
+        const source = journalSource(client?.clientName, input.source)
+        const base = { solutionId: s.id, clientId: s.clientId, date: isoDateInRome(new Date()), stepTitle: step?.title ?? null, source }
+        const docs = did
+          ? [valid(createJournalEntrySchema, { ...base, kind: "work", text: did, decisions, links: input.links ?? [], next: input.next ?? null })]
+          : decisions.map((text) => valid(createJournalEntrySchema, { ...base, kind: "decision", text }))
+        const created = []
+        for (const doc of docs) created.push(await db().createJournalEntry(userId, doc))
+
+        const payer = step ? stepContract(step, opportunities) : null
+        const open = payer?.type === "contract" ? tasks.filter((t) => !t.isDone && t.engagementId === payer.id) : []
+        const where = step ? `step ${at + 1} ${step.title}` : "no step (none is Now)"
+        const tail = !step
+          ? ""
+          : payer?.type !== "contract"
+            ? " No contract pays for this step, so no tasks to list."
+            : open.length === 0
+              ? " No open tasks on this step."
+              : ` ${plural(open.length, "open task", "open tasks")} on this step: ${open.map((t) => t.title).sort().join(", ")}.`
+        return {
+          payload: {
+            summary: `Filed on ${s.name}, ${where}.${tail}`,
+            entries: created.map((e) => ({ id: e.id, kind: e.kind, date: e.date, step: e.stepTitle })),
+            openTasks: open.map((t) => ({ id: t.id, title: t.title, dueDate: t.dueDate ? isoDate(t.dueDate) : null })),
+          },
+          documentIds: created.map((e) => e.id),
         }
       })
   )

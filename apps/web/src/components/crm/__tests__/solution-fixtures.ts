@@ -72,6 +72,7 @@ export const DATA: Record<string, unknown> = {
   getClients: [client("c1", "Nordwind Retail S.p.A."), client("c2", "Lumen Srl")],
   getEngagements: [contract("e1", "c1", "Product graph"), CAPPED, HOURLY, contract("e2", "c1", "Search pilot", false), contract("e3", "c2", "Retainer", false)],
   getSolutions: [GRAPH, CHURN, SEARCH],
+  getJournal: [],
   getOpportunities: [
     opportunity("o1", "Front-desk card", "proposal"), opportunity("o2", "Segments", "lead"), opportunity("o3", "Assistant", "lost"),
     { ...opportunity("o4", "Graph build", "won"), engagementId: "e1" },

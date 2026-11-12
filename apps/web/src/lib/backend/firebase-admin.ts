@@ -31,6 +31,8 @@ import {
   normalizeCollaboratorFee,
   normalizePriceChanges,
   normalizeMonthDays,
+  journalFields,
+  normalizeJournalEntry,
   normalizeSolutionDomain,
   normalizeSolutionGraph,
   normalizeSolutionKind,
@@ -95,6 +97,8 @@ import type {
   SolutionStatus,
   CreateSolutionInput,
   UpdateSolutionInput,
+  JournalEntry,
+  CreateJournalEntryInput,
 } from "@/types"
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
@@ -1240,6 +1244,22 @@ export async function updateSolution(userId: string, id: string, input: UpdateSo
     t.update(ref, { ...solutionFields(mapSolution(withId(snap)), input), updatedAt: now() })
   })
   return mapSolution(withId(await ref.get()))
+}
+
+function mapJournalEntry(d: DocumentData & { id: string }): JournalEntry {
+  return { id: d.id, userId: d.userId as string, ...normalizeJournalEntry(d), createdAt: toDate(d.createdAt), updatedAt: toDate(d.updatedAt) }
+}
+
+// ponytail: whole collection; where(solutionId) once the journals reach thousands.
+export async function getJournal(userId: string): Promise<JournalEntry[]> {
+  const snap = await userCol(userId, "journal").get()
+  return snap.docs.map((d) => mapJournalEntry(withId(d)))
+}
+
+// The Admin SDK skips the rules, so every write is parsed (journalFields). The page edits and deletes; the MCP only files.
+export async function createJournalEntry(userId: string, input: CreateJournalEntryInput): Promise<JournalEntry> {
+  const ref = await userCol(userId, "journal").add({ userId, ...journalFields(input), createdAt: now(), updatedAt: now() })
+  return mapJournalEntry(withId(await ref.get()))
 }
 
 export async function getAllocations(

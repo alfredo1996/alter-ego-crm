@@ -7,17 +7,22 @@
 import { Toaster } from "@alter-ego/ui/ui/toaster"
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react"
+import { format } from "date-fns"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 
 import { SolutionPage } from "../solution-page"
 import { CHURN, DATA, GRAPH, ROAD, SEARCH, solution } from "./solution-fixtures"
 
+import type { JournalEntry } from "@/types"
 import type { MouseEvent, ReactNode } from "react"
 
 const writes = vi.hoisted(() => ({
   updateSolution: vi.fn(async () => ({})),
   deleteSolution: vi.fn(async () => {}),
+  createJournalEntry: vi.fn(async () => ({})),
+  updateJournalEntry: vi.fn(async () => ({})),
+  deleteJournalEntry: vi.fn(async () => {}),
 }))
 const push = vi.hoisted(() => vi.fn())
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push, replace: vi.fn() }) }))
@@ -141,7 +146,7 @@ describe("a solution's page", () => {
     ])
     expect(within(index).getByRole("link", { name: "Purpose and Target" })).toHaveAttribute("aria-current", "location")
     expect(screen.getAllByRole("heading", { level: 2 }).map((h) => h.textContent)).toEqual([
-      "Roadmap", "No steps yet", "What We Know", "Purpose and Target", "KPIs", "Results", "Data Model", "Requirements", "Data Sources", "Architecture",
+      "Roadmap", "No steps yet", "Journal", "What We Know", "Purpose and Target", "KPIs", "Results", "Data Model", "Requirements", "Data Sources", "Architecture",
     ])
     // Each section is the anchor its index link names, and plain text is a paragraph per line: no Markdown.
     expect(document.getElementById("purpose")).toHaveAccessibleName("Purpose and Target")
@@ -546,7 +551,7 @@ describe("an Advisory", () => {
   it("shows its three sections and Add Section for the others", async () => {
     await withSolution(advisory, async () => {
       expect(screen.getAllByRole("heading", { level: 2 }).map((h) => h.textContent)).toEqual([
-        "Roadmap", "No steps yet", "What We Know", "Purpose and Target", "KPIs", "Results and Lessons",
+        "Roadmap", "No steps yet", "Journal", "What We Know", "Purpose and Target", "KPIs", "Results and Lessons",
       ])
       expect(screen.getByText("0 of 3 sections written")).toBeInTheDocument()
       fireEvent.keyDown(button("Add Section"), { key: "Enter" })
@@ -784,6 +789,178 @@ describe("the road", () => {
       expect(within(dialog).getByRole("button", { name: "Move Later" })).toBeDisabled()
       finish()
       await waitFor(() => expect(within(dialog).getByRole("button", { name: "Move Later" })).toBeEnabled())
+    })
+  })
+})
+
+describe("the journal", () => {
+  // Only Date: React Query and Radix keep their real timers. Fixed, so a year never joins the days shown.
+  beforeEach(() => vi.useFakeTimers({ toFake: ["Date"], now: new Date(2026, 10, 1) }))
+  afterEach(() => vi.useRealTimers())
+  const entry = (o: Partial<JournalEntry>): JournalEntry => ({
+    id: "j1", userId: "u1", solutionId: "s4", clientId: "c1", kind: "work", date: "2026-10-27", stepTitle: "MVP on the client's server",
+    text: "Loading rewritten as idempotent Cypher.", decisions: [], links: [], next: null, source: null,
+    createdAt: new Date(2026, 9, 27), updatedAt: new Date(2026, 9, 27), ...o,
+  })
+  const journalOf = () => screen.getByRole("heading", { level: 2, name: "Journal" }).closest("section")!
+  const rows = () => within(journalOf()).getAllByRole("listitem").map((li) => li.textContent)
+
+  async function withJournal(entries: JournalEntry[], body: () => Promise<void>) {
+    const stored = DATA.getJournal
+    DATA.getJournal = entries
+    try {
+      await withSolution(ROAD, body)
+    } finally {
+      DATA.getJournal = stored
+    }
+  }
+
+  it("merges sessions, decisions, the calls of the step contracts and Done steps, newest first, and each filter keeps its kind", async () => {
+    const entries = [
+      entry({ id: "j1", links: ["PR #7"], next: "One nightly run.", decisions: ["Spend goes to the booking holder."], source: "Claude Code · guest-360" }),
+      entry({ id: "j2", kind: "decision", date: "2026-10-22", text: "Keep the old hotels." }),
+    ]
+    await withJournal(entries, async () => {
+      expect(rows()).toEqual([
+        "27 OctWork sessionStep 2Loading rewritten as idempotent Cypher.Next: One nightly run.PR #7Filed from Claude Code · guest-360EditDelete",
+        "27 OctDecisionStep 2Spend goes to the booking holder.",
+        "25 OctCall: Status callFrom Meetings",
+        "22 OctDecisionStep 2Keep the old hotels.EditDelete",
+        "20 OctCall: Status callYellowFrom Meetings",
+        "12 SepStep 1 done: Proof of concept15 questions answered",
+      ])
+      const filter = (name: string) => {
+        fireEvent.click(within(journalOf()).getByRole("button", { name }))
+        return rows()
+      }
+      expect(filter("Work")).toHaveLength(1)
+      expect(filter("Calls").map((r) => r!.slice(0, 18))).toEqual(["25 OctCall: Status", "20 OctCall: Status"])
+      expect(filter("Decisions")).toHaveLength(2)
+      expect(filter("Steps")).toEqual(["12 SepStep 1 done: Proof of concept15 questions answered"])
+      expect(within(journalOf()).getByRole("button", { name: "Steps" })).toHaveAttribute("aria-pressed", "true")
+    })
+  })
+
+  it("says so when a filter has nothing", async () => {
+    await withJournal([], async () => {
+      fireEvent.click(within(journalOf()).getByRole("button", { name: "Work" }))
+      expect(screen.getByText("No work sessions yet.")).toBeInTheDocument()
+    })
+  })
+
+  it("Log Work files a session on the Now step, dated today, and lists its lines", async () => {
+    await withJournal([], async () => {
+      fireEvent.click(button("Log Work"))
+      const dialog = await screen.findByRole("dialog", { name: "Log Work" })
+      expect(within(dialog).getByRole("combobox", { name: "Step" })).toHaveTextContent("2. MVP on the client's server (Now)")
+      type(within(dialog).getByRole("textbox", { name: "Did" }), "Installed the stack.")
+      type(within(dialog).getByRole("textbox", { name: "Decided" }), "Use the bundle.\n\nSkip the backup test.")
+      type(within(dialog).getByRole("textbox", { name: "Links" }), "PR #6\nhttps://example.com/pull/6")
+      type(within(dialog).getByRole("textbox", { name: "Next" }), "Test restore.")
+      fireEvent.click(within(dialog).getByRole("button", { name: "Log Work" }))
+      await waitFor(() => expect(writes.createJournalEntry).toHaveBeenCalledTimes(1))
+      expect(writes.createJournalEntry.mock.calls[0]).toEqual([
+        "u1",
+        {
+          solutionId: "s4", clientId: "c1", kind: "work", date: format(new Date(), "yyyy-MM-dd"), text: "Installed the stack.",
+          stepTitle: "MVP on the client's server", decisions: ["Use the bundle.", "Skip the backup test."],
+          links: ["PR #6", "https://example.com/pull/6"], next: "Test restore.",
+        },
+      ])
+    })
+  })
+
+  it("dates a new session by the Date field, today until changed, and an edit can move the date", async () => {
+    await withJournal([entry({})], async () => {
+      fireEvent.click(button("Log Work"))
+      const dialog = await screen.findByRole("dialog", { name: "Log Work" })
+      expect(within(dialog).getByLabelText("Date")).toHaveValue("2026-11-01")
+      fireEvent.change(within(dialog).getByLabelText("Date"), { target: { value: "2026-10-30" } })
+      type(within(dialog).getByRole("textbox", { name: "Did" }), "Back-filled.")
+      fireEvent.click(within(dialog).getByRole("button", { name: "Log Work" }))
+      await waitFor(() => expect(writes.createJournalEntry).toHaveBeenCalledTimes(1))
+      expect(writes.createJournalEntry.mock.calls[0]).toMatchObject(["u1", { date: "2026-10-30", text: "Back-filled." }])
+    })
+    await withJournal([entry({})], async () => {
+      fireEvent.click(screen.getByRole("button", { name: /^Edit session of 27 Oct/ }))
+      const dialog = await screen.findByRole("dialog", { name: "Edit Work Session" })
+      expect(within(dialog).getByLabelText("Date")).toHaveValue("2026-10-27")
+      fireEvent.change(within(dialog).getByLabelText("Date"), { target: { value: "2026-10-26" } })
+      fireEvent.click(within(dialog).getByRole("button", { name: "Save Entry" }))
+      await waitFor(() => expect(writes.updateJournalEntry).toHaveBeenCalledTimes(1))
+      expect(writes.updateJournalEntry.mock.calls[0]).toMatchObject(["u1", "j1", { date: "2026-10-26" }])
+    })
+  })
+
+  it("refuses a blank Date, naming it", async () => {
+    await withJournal([], async () => {
+      fireEvent.click(button("Log Work"))
+      const dialog = await screen.findByRole("dialog", { name: "Log Work" })
+      type(within(dialog).getByRole("textbox", { name: "Did" }), "Worked.")
+      fireEvent.change(within(dialog).getByLabelText("Date"), { target: { value: "" } })
+      fireEvent.click(within(dialog).getByRole("button", { name: "Log Work" }))
+      expect(await within(dialog).findByRole("alert")).toHaveTextContent("Date: invalid date: use YYYY-MM-DD")
+    })
+  })
+
+  it("refuses an empty Did, naming it, and writes nothing", async () => {
+    await withJournal([], async () => {
+      fireEvent.click(button("Log Work"))
+      const dialog = await screen.findByRole("dialog", { name: "Log Work" })
+      fireEvent.click(within(dialog).getByRole("button", { name: "Log Work" }))
+      expect(await within(dialog).findByRole("alert")).toHaveTextContent("Did: write what happened")
+      expect(writes.createJournalEntry).not.toHaveBeenCalled()
+    })
+  })
+
+  it("names two sessions of one day apart for a screen reader", async () => {
+    await withJournal([entry({ id: "j1", text: "First pass." }), entry({ id: "j2", text: "Second pass." })], async () => {
+      const names = within(journalOf()).getAllByRole("button", { name: /^Edit session/ }).map((b) => b.getAttribute("aria-label"))
+      expect(names.sort()).toEqual(["Edit session of 27 Oct: First pass.", "Edit session of 27 Oct: Second pass."])
+    })
+  })
+
+  it("lists the calls of the solution's own contract when no step follows a contract", async () => {
+    const stored = DATA.getSolutions
+    DATA.getSolutions = [GRAPH, CHURN, SEARCH]
+    try {
+      await show("s1")
+      fireEvent.click(within(journalOf()).getByRole("button", { name: "Calls" }))
+      expect(rows().map((r) => r!.replace(/Status call.*/, "Status call"))).toEqual(["12 OctCall: Status call", "9 OctCall: Status call", "20 SepCall: Status call"])
+    } finally {
+      DATA.getSolutions = stored
+    }
+  })
+
+  it("names the field in a dialog error, and shows two errors that read alike", async () => {
+    await withJournal([], async () => {
+      fireEvent.click(button("Log Work"))
+      const dialog = await screen.findByRole("dialog", { name: "Log Work" })
+      type(within(dialog).getByRole("textbox", { name: "Did" }), "Worked.")
+      type(within(dialog).getByRole("textbox", { name: /^Decided/ }), `${"x".repeat(501)}\n${"y".repeat(501)}`)
+      fireEvent.click(within(dialog).getByRole("button", { name: "Log Work" }))
+      const alert = await within(dialog).findByRole("alert")
+      expect(within(alert).getAllByRole("listitem").map((li) => li.textContent)).toEqual([
+        "Decided: at most 500 characters",
+        "Decided: at most 500 characters",
+      ])
+      expect(writes.createJournalEntry).not.toHaveBeenCalled()
+    })
+  })
+
+  it("edits and deletes an entry; a decision taken in a session has no buttons of its own", async () => {
+    await withJournal([entry({ decisions: ["Spend goes to the booking holder."] })], async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Edit session of 27 Oct: Loading rewritten as idempotent Cypher." }))
+      const dialog = await screen.findByRole("dialog", { name: "Edit Work Session" })
+      type(within(dialog).getByRole("textbox", { name: "Did" }), "Edited.")
+      fireEvent.click(within(dialog).getByRole("button", { name: "Save Entry" }))
+      await waitFor(() => expect(writes.updateJournalEntry).toHaveBeenCalledTimes(1))
+      expect(writes.updateJournalEntry.mock.calls[0]).toMatchObject(["u1", "j1", { text: "Edited.", decisions: ["Spend goes to the booking holder."] }])
+      expect(screen.queryByRole("button", { name: /decision of/ })).not.toBeInTheDocument()
+
+      fireEvent.click(screen.getByRole("button", { name: "Delete session of 27 Oct: Loading rewritten as idempotent Cypher." }))
+      fireEvent.click(await screen.findByRole("button", { name: "Delete Work Session" }))
+      await waitFor(() => expect(writes.deleteJournalEntry.mock.calls[0]).toEqual(["u1", "j1"]))
     })
   })
 })

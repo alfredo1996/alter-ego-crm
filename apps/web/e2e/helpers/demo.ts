@@ -179,7 +179,7 @@ export async function seedDemo(page: Page): Promise<void> {
     await meet({ clientId: lumen, engagementId: retainer, date: `${ym(0)}-06`, time: "15:30", health: "green", text: "Monthly review\nKPI deck approved, two new dashboards requested." })
     await meet({ clientId: vela, date: `${ym(0)}-02`, time: "11:00", text: "Pre-sales call on Graph RAG\nThey want a demo on their support tickets." })
 
-    await db.createSolution(u, {
+    const productGraph = await db.createSolution(u, {
       clientId: nordwind,
       engagementId: graph,
       name: "Product Knowledge Graph",
@@ -223,6 +223,15 @@ export async function seedDemo(page: Page): Promise<void> {
         { from: "Category", to: "Category", type: "CHILD_OF" },
       ],
     })
+    const journal = (e: Omit<Parameters<typeof db.createJournalEntry>[1], "solutionId" | "clientId">) =>
+      db.createJournalEntry(u, { solutionId: productGraph.id, clientId: nordwind, ...e })
+    await journal({
+      date: `${ym(1)}-20`, stepTitle: "Categories and promotions", text: "Category tree editable by merchandisers; promotions link to products.",
+      decisions: ["A promotion belongs to one category tree node, not to a product list."], links: ["PR #12"], next: "Review the tree with merchandising.",
+      source: "Claude Code \u00b7 product-graph",
+    })
+    await journal({ kind: "decision", date: `${ym(1)}-25`, stepTitle: "Categories and promotions", text: "Duplicate SKUs are merged on the ERP code." })
+    await journal({ date: `${ym(0)}-03`, stepTitle: "Categories and promotions", text: "Promotion plans load from the Excel calendar every night.", links: ["PR #14", "PR #15"] })
     await db.createSolution(u, {
       clientId: lumen,
       engagementId: retainer,

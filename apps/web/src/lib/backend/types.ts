@@ -47,6 +47,9 @@ import type {
   Solution,
   CreateSolutionInput,
   UpdateSolutionInput,
+  JournalEntry,
+  CreateJournalEntryInput,
+  UpdateJournalEntryInput,
   Invoice,
   CreateInvoiceInput,
   UpdateInvoiceInput,
@@ -202,6 +205,13 @@ export interface CrmAdapter {
   /** Only the sections named change; stack, entities and relations replace the whole list. */
   updateSolution(userId: string, solutionId: string, input: UpdateSolutionInput): Promise<Solution>
   deleteSolution(userId: string, solutionId: string): Promise<void>
+
+  // The journal of a solution: work sessions and decisions. Unfiltered, like verbali. Deleting a
+  // solution or its client takes its entries along.
+  getJournal(userId: string): Promise<JournalEntry[]>
+  createJournalEntry(userId: string, input: CreateJournalEntryInput): Promise<JournalEntry>
+  updateJournalEntry(userId: string, entryId: string, input: UpdateJournalEntryInput): Promise<JournalEntry>
+  deleteJournalEntry(userId: string, entryId: string): Promise<void>
 
   // Collaborators: freelancers and companies paid on invoice, with an optional fixed monthly fee.
   getCollaborators(userId: string): Promise<Collaborator[]>

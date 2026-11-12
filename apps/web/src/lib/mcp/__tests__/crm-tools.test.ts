@@ -54,8 +54,8 @@ describe("tool module registrations", () => {
 
   // The README's count went stale once: it is checked here now. ping is not counted.
   it("the README counts every tool served, ping excluded", () => {
-    expect(crmRead.length + crmWrite.length + rentTools.length).toBe(66)
-    expect(readFileSync("../../README.md", "utf8")).toContain("- 66 tools over the company data")
+    expect(crmRead.length + crmWrite.length + rentTools.length).toBe(67)
+    expect(readFileSync("../../README.md", "utf8")).toContain("- 67 tools over the company data")
   })
 })
 
@@ -112,8 +112,8 @@ describe("tools served per module set", () => {
 
   it("leaves out the invoice tools, get_quarters and the solution tools without invoicing and solutions", () => {
     const names = new Set(served("invoicing,solutions"))
-    expect(["list_invoices", "get_unbilled", "create_invoice", "mark_invoice_paid", "update_invoice", "delete_invoice", "attach_file", "remove_file", "get_file", "list_solutions", "get_solution", "create_solution", "update_solution"].filter((t) => names.has(t))).toEqual([])
-    expect(names.size).toBe(crmRead.length + crmWrite.length + rentTools.length - 14)
+    expect(["list_invoices", "get_unbilled", "create_invoice", "mark_invoice_paid", "update_invoice", "delete_invoice", "attach_file", "remove_file", "get_file", "list_solutions", "get_solution", "create_solution", "update_solution", "log_work"].filter((t) => names.has(t))).toEqual([])
+    expect(names.size).toBe(crmRead.length + crmWrite.length + rentTools.length - 15)
   })
 
   // Quarters reads ended months off invoices and costs: without either every quarter would say €0.
