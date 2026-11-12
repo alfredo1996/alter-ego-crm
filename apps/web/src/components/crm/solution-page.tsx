@@ -340,9 +340,12 @@ function SolutionBody({
   const nowLine = nowUsage ? `${inContractUnit(nowUsage.used, nowUnit)} of ${countIn(nowUsage.total, nowUnit)} used` : null
   const nowTasks = nowContract ? sortTasks(tasks.filter((t) => !t.isDone && t.engagementId === nowContract.id)) : []
   const pipeline = pipelineSteps(solution.steps, opportunities)
-  /** The contracts its steps follow: their meetings are the Journal's calls. */
+  /** The solution's own contract and the contracts its steps follow: their meetings are the Journal's calls. */
   const journalContracts = [
-    ...new Set(solution.steps.flatMap((x) => { const p = stepContract(x, opportunities); return p?.type === "contract" ? [p.id] : [] })),
+    ...new Set([
+      ...(solution.engagementId ? [solution.engagementId] : []),
+      ...solution.steps.flatMap((x) => { const p = stepContract(x, opportunities); return p?.type === "contract" ? [p.id] : [] }),
+    ]),
   ]
   /** The client's contracts and open opportunities: what a step can be paid by. */
   const payers: StepPayerOption[] = [

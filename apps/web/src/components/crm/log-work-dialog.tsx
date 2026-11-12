@@ -71,7 +71,15 @@ function LogWorkBody({ entry, solution, userId, today, onClose }: Omit<Props, "s
     const parsed = editing
       ? updateJournalEntrySchema.safeParse(fields)
       : createJournalEntrySchema.safeParse({ solutionId: solution.id, clientId: solution.clientId, date: today, kind: "work", ...fields })
-    if (!parsed.success) return setErrors(parsed.error.issues.map((i) => i.message))
+    if (!parsed.success) {
+      const field: Record<string, string> = { text: isDecision ? "Decision" : "Did", decisions: "Decided", links: "Links", next: "Next", stepTitle: "Step" }
+      return setErrors(
+        parsed.error.issues.map((i) => {
+          const label = field[String(i.path[0])]
+          return label ? `${label}: ${i.message.charAt(0).toLowerCase()}${i.message.slice(1)}` : i.message
+        }),
+      )
+    }
     setErrors([])
     try {
       if (editing) await update.mutateAsync({ id: editing.id, input: parsed.data })
@@ -140,8 +148,8 @@ function LogWorkBody({ entry, solution, userId, today, onClose }: Omit<Props, "s
         </div>
         {errors.length > 0 && (
           <ul role="alert" className="space-y-1 text-sm text-destructive">
-            {errors.map((m) => (
-              <li key={m}>{m}</li>
+            {errors.map((m, i) => (
+              <li key={i}>{m}</li>
             ))}
           </ul>
         )}

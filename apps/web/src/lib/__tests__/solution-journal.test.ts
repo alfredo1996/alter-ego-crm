@@ -32,10 +32,11 @@ const input = {
     entry({ id: "w1", date: "2026-11-07", text: "Rewrote the load", decisions: ["Spend goes to the booking holder"], stepTitle: "MVP" }),
     entry({ id: "d1", kind: "decision", date: "2026-11-04", text: "Keep the old hotels", createdAt: at(4) }),
     entry({ id: "w2", date: "2026-10-31", text: "Installed the stack", createdAt: at(1) }),
+    entry({ id: "w3", date: "2026-09-12", text: "Wrote the report", createdAt: at(2) }),
     entry({ id: "other", solutionId: "s2", date: "2026-11-08", text: "Another solution" }),
   ],
   meetings: [
-    meeting({ id: "m1", date: "2026-11-04", text: "Third data drop" }),
+    meeting({ id: "m1", date: "2026-11-04", text: "Third data drop", createdAt: at(5) }),
     meeting({ id: "m2", engagementId: "k9", date: "2026-11-05", text: "Another contract" }),
     meeting({ id: "m3", engagementId: null, date: "2026-11-06", text: "About the client" }),
   ],
@@ -47,12 +48,12 @@ const input = {
 const ids = (filter: (typeof JOURNAL_FILTERS)[number]) => journalItems(input, filter).map((i) => i.id)
 
 describe("journalItems", () => {
-  it("merges entries, the calls of the step contracts and done steps, newest first, decisions of a session on its own line", () => {
-    expect(ids("all")).toEqual(["w1", "w1:decision:0", "d1", "m1", "w2", "step:0"].map((id) => id))
+  it("merges entries, the calls of the step contracts and done steps, newest first (the later written first within a day, a done step last), decisions of a session on its own line", () => {
+    expect(ids("all")).toEqual(["w1", "w1:decision:0", "m1", "d1", "w2", "w3", "step:0"])
   })
 
   it.each([
-    ["work", ["w1", "w2"]],
+    ["work", ["w1", "w2", "w3"]],
     ["calls", ["m1"]],
     ["decisions", ["w1:decision:0", "d1"]],
     ["steps", ["step:0"]],

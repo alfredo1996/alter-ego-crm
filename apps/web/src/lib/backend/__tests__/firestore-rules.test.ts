@@ -1126,7 +1126,11 @@ describe("journal validation", () => {
     await updateDoc(ref, { text: "Edited" })
     await expect(updateDoc(ref, { solutionId: "s2" })).rejects.toThrow()
     await expect(updateDoc(ref, { kind: "decision" })).rejects.toThrow()
+    await expect(updateDoc(ref, { clientId: "c2" })).rejects.toThrow()
     await expect(updateDoc(ref, { text: "x".repeat(JOURNAL_TEXT_MAX + 1) })).rejects.toThrow()
+  })
+  it("rejects a decision that carries a list of decisions, as the schema does", async () => {
+    await expect(setDoc(mine("journal"), validJournalEntry({ kind: "decision", decisions: ["A"] }))).rejects.toThrow()
   })
 })
 

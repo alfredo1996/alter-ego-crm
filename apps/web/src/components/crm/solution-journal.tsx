@@ -27,7 +27,7 @@ const PAGE = 10
 const EMPTY: Record<JournalFilter, string> = {
   all: "Nothing is logged yet. Log Work adds the first entry.",
   work: "No work sessions yet.",
-  calls: "No calls yet. Calls are the meetings of the contracts its steps follow.",
+  calls: "No calls yet. Calls are the meetings of its contract and of the contracts its steps follow.",
   decisions: "No decisions yet.",
   steps: "No step is Done yet.",
 }
@@ -141,12 +141,14 @@ export function SolutionJournal({ solution, entries, meetings, contractIds, user
   }
 
   function entryActions(entry: JournalEntry, what: string) {
+    // The day as shown and the start of the text: two entries of one day stay apart.
+    const name = `${shortDay(new Date(`${entry.date}T00:00:00`))}: ${entry.text.length > 40 ? `${entry.text.slice(0, 40).trimEnd()}...` : entry.text}`
     return (
       <div className="flex gap-1">
-        <Button variant="ghost" size="sm" aria-label={`Edit ${what} of ${entry.date}`} onClick={() => onEdit(entry)}>
+        <Button variant="ghost" size="sm" aria-label={`Edit ${what} of ${name}`} onClick={() => onEdit(entry)}>
           Edit
         </Button>
-        <Button variant="ghost" size="sm" className="text-destructive" aria-label={`Delete ${what} of ${entry.date}`} onClick={() => setDeleting(entry)}>
+        <Button variant="ghost" size="sm" className="text-destructive" aria-label={`Delete ${what} of ${name}`} onClick={() => setDeleting(entry)}>
           Delete
         </Button>
       </div>

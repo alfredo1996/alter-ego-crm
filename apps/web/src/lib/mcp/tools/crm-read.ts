@@ -95,10 +95,10 @@ import type { StepKey } from "@/lib/month-end"
 import type { MeetingHealth, Opportunity } from "@/types"
 import type { McpServer } from "@modelcontextprotocol/server"
 
-/** "2026-08" for today — every UI grid originates at the current month. */
 /** How many journal entries get_solution returns. */
 const JOURNAL_LATEST = 10
 
+/** "2026-08" for today — every UI grid originates at the current month. */
 const currentMonth = () => format(new Date(), "yyyy-MM")
 
 const dayInput = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Use YYYY-MM-DD")

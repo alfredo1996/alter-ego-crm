@@ -563,6 +563,15 @@ describe("log_work", () => {
     expect((await entries(solutionId)).length).toBe(before)
   })
 
+  it("refuses links and next without did, and decisions past the caps, and writes nothing", async () => {
+    const before = (await entries(solutionId)).length
+    expect(await refusal("log_work", { solution: solutionId, decisions: ["A"], links: ["PR #1"] })).toContain("links and next go with did")
+    expect(await refusal("log_work", { solution: solutionId, decisions: ["A"], next: "Ship it" })).toContain("links and next go with did")
+    expect(await refusal("log_work", { solution: solutionId, decisions: ["x".repeat(501)] })).toContain("At most 500 characters")
+    expect(await refusal("log_work", { solution: solutionId, decisions: Array.from({ length: 11 }, (_, i) => `D${i}`) })).toContain("At most 10 decisions")
+    expect((await entries(solutionId)).length).toBe(before)
+  })
+
   it("get_solution returns the latest entries, newest first", async () => {
     const out = await callTool("get_solution", { solution: solutionId })
     expect(out.journal.length).toBe(3)

@@ -496,6 +496,7 @@ service cloud.firestore {
             && (d.stepTitle == null || isShortString(d.stepTitle, 200))
             && isShortString(d.text, 5000)
             && d.decisions is list && d.decisions.size() <= 10
+            && (d.kind == 'work' || d.decisions.size() == 0)
             && d.links is list && d.links.size() <= 10
             && isOptionalString(d.next, 500)
             && (d.source == null || isShortString(d.source, 100))
@@ -509,6 +510,7 @@ service cloud.firestore {
           && isClosedUpdate(userId, journalKeys(), journalRequired())
           && validJournalEntry(incoming())
           && incoming().solutionId == resource.data.solutionId
+          && incoming().clientId == resource.data.clientId
           && incoming().kind == resource.data.kind;
       }
 

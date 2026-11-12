@@ -674,7 +674,7 @@ export const MAX_JOURNAL_LINKS = 10
 export const JOURNAL_LINK_MAX = 300
 export const JOURNAL_SOURCE_MAX = 100
 
-const journalLines = (max: number, size: number, what: string) =>
+export const journalLines = (max: number, size: number, what: string) =>
   z.array(z.string().trim().min(1).max(size, `At most ${size} characters`)).max(max, `At most ${max} ${what}`)
 
 const journalShape = {

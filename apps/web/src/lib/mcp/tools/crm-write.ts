@@ -140,6 +140,9 @@ import {
   setTimecardSchema,
   SOLUTION_SECTION_MAX,
   createJournalEntrySchema,
+  journalLines,
+  MAX_JOURNAL_DECISIONS,
+  JOURNAL_LINE_MAX,
   SOLUTION_SECTIONS,
   solutionFields,
   solutionKindSchema,
@@ -4689,6 +4692,8 @@ export function registerCrmWriteTools(server: McpServer): void {
         const did = input.did?.trim()
         const decisions = (input.decisions ?? []).map((d) => d.trim()).filter(Boolean)
         if (!did && decisions.length === 0) throw new ToolInputError("Pass did (what was done), or decisions.")
+        if (!did && (input.links?.length || input.next?.trim())) throw new ToolInputError("links and next go with did (a work session).")
+        valid(journalLines(MAX_JOURNAL_DECISIONS, JOURNAL_LINE_MAX, "decisions"), decisions)
         const [solutions, clients, opportunities, tasks] = await Promise.all([
           db().getSolutions(userId),
           db().getClients(userId),

@@ -875,14 +875,49 @@ describe("the journal", () => {
       fireEvent.click(button("Log Work"))
       const dialog = await screen.findByRole("dialog", { name: "Log Work" })
       fireEvent.click(within(dialog).getByRole("button", { name: "Log Work" }))
-      expect(await within(dialog).findByRole("alert")).toHaveTextContent("Write what happened")
+      expect(await within(dialog).findByRole("alert")).toHaveTextContent("Did: write what happened")
+      expect(writes.createJournalEntry).not.toHaveBeenCalled()
+    })
+  })
+
+  it("names two sessions of one day apart for a screen reader", async () => {
+    await withJournal([entry({ id: "j1", text: "First pass." }), entry({ id: "j2", text: "Second pass." })], async () => {
+      const names = within(journalOf()).getAllByRole("button", { name: /^Edit session/ }).map((b) => b.getAttribute("aria-label"))
+      expect(names.sort()).toEqual(["Edit session of 27 Oct: First pass.", "Edit session of 27 Oct: Second pass."])
+    })
+  })
+
+  it("lists the calls of the solution's own contract when no step follows a contract", async () => {
+    const stored = DATA.getSolutions
+    DATA.getSolutions = [GRAPH, CHURN, SEARCH]
+    try {
+      await show("s1")
+      fireEvent.click(within(journalOf()).getByRole("button", { name: "Calls" }))
+      expect(rows().map((r) => r!.replace(/Status call.*/, "Status call"))).toEqual(["12 OctCall: Status call", "9 OctCall: Status call", "20 SepCall: Status call"])
+    } finally {
+      DATA.getSolutions = stored
+    }
+  })
+
+  it("names the field in a dialog error, and shows two errors that read alike", async () => {
+    await withJournal([], async () => {
+      fireEvent.click(button("Log Work"))
+      const dialog = await screen.findByRole("dialog", { name: "Log Work" })
+      type(within(dialog).getByRole("textbox", { name: "Did" }), "Worked.")
+      type(within(dialog).getByRole("textbox", { name: /^Decided/ }), `${"x".repeat(501)}\n${"y".repeat(501)}`)
+      fireEvent.click(within(dialog).getByRole("button", { name: "Log Work" }))
+      const alert = await within(dialog).findByRole("alert")
+      expect(within(alert).getAllByRole("listitem").map((li) => li.textContent)).toEqual([
+        "Decided: at most 500 characters",
+        "Decided: at most 500 characters",
+      ])
       expect(writes.createJournalEntry).not.toHaveBeenCalled()
     })
   })
 
   it("edits and deletes an entry; a decision taken in a session has no buttons of its own", async () => {
     await withJournal([entry({ decisions: ["Spend goes to the booking holder."] })], async () => {
-      fireEvent.click(screen.getByRole("button", { name: "Edit session of 2026-10-27" }))
+      fireEvent.click(screen.getByRole("button", { name: "Edit session of 27 Oct: Loading rewritten as idempotent Cypher." }))
       const dialog = await screen.findByRole("dialog", { name: "Edit Work Session" })
       type(within(dialog).getByRole("textbox", { name: "Did" }), "Edited.")
       fireEvent.click(within(dialog).getByRole("button", { name: "Save Entry" }))
@@ -890,7 +925,7 @@ describe("the journal", () => {
       expect(writes.updateJournalEntry.mock.calls[0]).toMatchObject(["u1", "j1", { text: "Edited.", decisions: ["Spend goes to the booking holder."] }])
       expect(screen.queryByRole("button", { name: /decision of/ })).not.toBeInTheDocument()
 
-      fireEvent.click(screen.getByRole("button", { name: "Delete session of 2026-10-27" }))
+      fireEvent.click(screen.getByRole("button", { name: "Delete session of 27 Oct: Loading rewritten as idempotent Cypher." }))
       fireEvent.click(await screen.findByRole("button", { name: "Delete Work Session" }))
       await waitFor(() => expect(writes.deleteJournalEntry.mock.calls[0]).toEqual(["u1", "j1"]))
     })
