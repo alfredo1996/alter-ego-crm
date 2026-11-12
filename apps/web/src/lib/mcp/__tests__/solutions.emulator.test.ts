@@ -32,7 +32,7 @@ async function mintToken(idToken: string): Promise<string> {
     new Request(`${ORIGIN}/api/oauth/register`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ client_name: "test", redirect_uris: [REDIRECT] }),
+      body: JSON.stringify({ client_name: "Claude", redirect_uris: [REDIRECT] }),
     })
   )
   const { client_id: oauthClient } = (await reg.json()) as { client_id: string }
@@ -540,7 +540,7 @@ describe("log_work", () => {
     expect(await entries(solutionId)).toMatchObject([
       {
         kind: "work", stepTitle: "MVP", text: "Loading rewritten as idempotent Cypher.", links: ["PR #7"],
-        decisions: ["A stay's spend goes to the booking holder."], next: "One nightly run.", source: "Claude Code · guest-360",
+        decisions: ["A stay's spend goes to the booking holder."], next: "One nightly run.", source: "Claude · guest-360",
       },
     ])
   })
@@ -550,7 +550,7 @@ describe("log_work", () => {
     expect(out.summary).toBe("Filed on Guest journal, step 3 Rollout. No contract pays for this step, so no tasks to list.")
     await callTool("log_work", { solution: solutionId, step: "proof of concept", decisions: ["Italian and English reports."] })
     const all = await entries(solutionId)
-    expect(all.find((e) => e.kind === "decision")).toMatchObject({ stepTitle: "Proof of concept", text: "Italian and English reports.", decisions: [], source: "Claude Code" })
+    expect(all.find((e) => e.kind === "decision")).toMatchObject({ stepTitle: "Proof of concept", text: "Italian and English reports.", decisions: [], source: "Claude" })
     expect(all.find((e) => e.text === "Planned the rollout.")).toMatchObject({ stepTitle: "Rollout" })
   })
 

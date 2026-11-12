@@ -77,3 +77,10 @@ export function linesOf(text: string): string[] {
 export function isWebLink(link: string): boolean {
   return /^https?:\/\/\S+$/i.test(link)
 }
+
+/** Where an entry filed over MCP says it came from: the connected app's registered name (MCP when it has none), then the repository. */
+export function journalSource(clientName: string | null | undefined, repo?: string): string {
+  const name = clientName?.trim() || "MCP"
+  const r = repo?.trim()
+  return r ? `${name} · ${r}` : name
+}

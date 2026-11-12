@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 
-import { journalItems, type JOURNAL_FILTERS } from "@/lib/solution-journal"
+import { journalItems, journalSource, type JOURNAL_FILTERS } from "@/lib/solution-journal"
 
 import type { JournalEntry, Meeting, SolutionStep } from "@/types"
 
@@ -63,5 +63,18 @@ describe("journalItems", () => {
 
   it("a done step is dated by the day it was done", () => {
     expect(journalItems(input, "steps")[0]).toMatchObject({ type: "step", date: "2026-09-12", number: 1 })
+  })
+})
+
+describe("journalSource", () => {
+  it.each([
+    ["Claude", "guest-360", "Claude · guest-360"],
+    ["  Claude  ", undefined, "Claude"],
+    ["Claude", "  ", "Claude"],
+    [null, "guest-360", "MCP · guest-360"],
+    [undefined, undefined, "MCP"],
+    ["", undefined, "MCP"],
+  ])("%j with repository %j reads %j", (client, repo, label) => {
+    expect(journalSource(client, repo)).toBe(label)
   })
 })

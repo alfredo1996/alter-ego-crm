@@ -49,6 +49,7 @@ function LogWorkBody({ entry, solution, userId, today, onClose }: Omit<Props, "s
   // A decision entry is one line; a new session defaults to the Now step.
   const isDecision = editing?.kind === "decision"
   const now = nowStep(solution.steps)
+  const [date, setDate] = useState(editing?.date ?? today)
   const [did, setDid] = useState(editing?.text ?? "")
   const [decided, setDecided] = useState(editing?.decisions.join("\n") ?? "")
   const [links, setLinks] = useState(editing?.links.join("\n") ?? "")
@@ -64,15 +65,16 @@ function LogWorkBody({ entry, solution, userId, today, onClose }: Omit<Props, "s
     // An entry whose step left the road keeps the title it was filed under unless another is picked.
     const kept = editing?.stepTitle && step === NO_STEP && stepNumberOf(solution.steps, editing.stepTitle) === null ? editing.stepTitle : stepTitle
     const fields = {
+      date,
       text: did,
       stepTitle: kept,
       ...(isDecision ? {} : { decisions: linesOf(decided), links: linesOf(links), next: next.trim() || null }),
     }
     const parsed = editing
       ? updateJournalEntrySchema.safeParse(fields)
-      : createJournalEntrySchema.safeParse({ solutionId: solution.id, clientId: solution.clientId, date: today, kind: "work", ...fields })
+      : createJournalEntrySchema.safeParse({ solutionId: solution.id, clientId: solution.clientId, kind: "work", ...fields })
     if (!parsed.success) {
-      const field: Record<string, string> = { text: isDecision ? "Decision" : "Did", decisions: "Decided", links: "Links", next: "Next", stepTitle: "Step" }
+      const field: Record<string, string> = { date: "Date", text: isDecision ? "Decision" : "Did", decisions: "Decided", links: "Links", next: "Next", stepTitle: "Step" }
       return setErrors(
         parsed.error.issues.map((i) => {
           const label = field[String(i.path[0])]
@@ -96,7 +98,7 @@ function LogWorkBody({ entry, solution, userId, today, onClose }: Omit<Props, "s
       <DialogHeader>
         <DialogTitle className="pr-6">{editing ? (isDecision ? "Edit Decision" : "Edit Work Session") : "Log Work"}</DialogTitle>
         <DialogDescription>
-          {editing ? `Entry of ${editing.date} on ${solution.name}.` : `A work session on ${solution.name}, dated today.`}
+          {editing ? `Entry of ${editing.date} on ${solution.name}.` : `A work session on ${solution.name}. It is dated today unless you change the date.`}
         </DialogDescription>
       </DialogHeader>
       <form
@@ -107,6 +109,10 @@ function LogWorkBody({ entry, solution, userId, today, onClose }: Omit<Props, "s
           void submit()
         }}
       >
+        <div className="space-y-2">
+          <Label htmlFor="log-date">Date</Label>
+          <Input id="log-date" type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+        </div>
         <div className="space-y-2">
           <Label htmlFor="log-did">{isDecision ? "Decision" : "Did"}</Label>
           <Textarea id="log-did" rows={3} autoFocus maxLength={JOURNAL_TEXT_MAX} value={did} onChange={(e) => setDid(e.target.value)} />

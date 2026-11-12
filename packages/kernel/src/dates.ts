@@ -106,6 +106,12 @@ export function isoDate(date: Date): string {
   return format(date, "yyyy-MM-dd")
 }
 
+/** The calendar day of an instant in Rome, whatever zone the process runs in ("YYYY-MM-DD"). */
+export function isoDateInRome(date: Date): string {
+  // en-CA formats as YYYY-MM-DD.
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Rome", year: "numeric", month: "2-digit", day: "2-digit" }).format(date)
+}
+
 /**
  * Makes "local" on the server mean what it means in the browser that wrote the
  * date. Stored dates are instants at the writer's local midnight, so a server

@@ -870,6 +870,39 @@ describe("the journal", () => {
     })
   })
 
+  it("dates a new session by the Date field, today until changed, and an edit can move the date", async () => {
+    await withJournal([entry({})], async () => {
+      fireEvent.click(button("Log Work"))
+      const dialog = await screen.findByRole("dialog", { name: "Log Work" })
+      expect(within(dialog).getByLabelText("Date")).toHaveValue("2026-11-01")
+      fireEvent.change(within(dialog).getByLabelText("Date"), { target: { value: "2026-10-30" } })
+      type(within(dialog).getByRole("textbox", { name: "Did" }), "Back-filled.")
+      fireEvent.click(within(dialog).getByRole("button", { name: "Log Work" }))
+      await waitFor(() => expect(writes.createJournalEntry).toHaveBeenCalledTimes(1))
+      expect(writes.createJournalEntry.mock.calls[0]).toMatchObject(["u1", { date: "2026-10-30", text: "Back-filled." }])
+    })
+    await withJournal([entry({})], async () => {
+      fireEvent.click(screen.getByRole("button", { name: /^Edit session of 27 Oct/ }))
+      const dialog = await screen.findByRole("dialog", { name: "Edit Work Session" })
+      expect(within(dialog).getByLabelText("Date")).toHaveValue("2026-10-27")
+      fireEvent.change(within(dialog).getByLabelText("Date"), { target: { value: "2026-10-26" } })
+      fireEvent.click(within(dialog).getByRole("button", { name: "Save Entry" }))
+      await waitFor(() => expect(writes.updateJournalEntry).toHaveBeenCalledTimes(1))
+      expect(writes.updateJournalEntry.mock.calls[0]).toMatchObject(["u1", "j1", { date: "2026-10-26" }])
+    })
+  })
+
+  it("refuses a blank Date, naming it", async () => {
+    await withJournal([], async () => {
+      fireEvent.click(button("Log Work"))
+      const dialog = await screen.findByRole("dialog", { name: "Log Work" })
+      type(within(dialog).getByRole("textbox", { name: "Did" }), "Worked.")
+      fireEvent.change(within(dialog).getByLabelText("Date"), { target: { value: "" } })
+      fireEvent.click(within(dialog).getByRole("button", { name: "Log Work" }))
+      expect(await within(dialog).findByRole("alert")).toHaveTextContent("Date: invalid date: use YYYY-MM-DD")
+    })
+  })
+
   it("refuses an empty Did, naming it, and writes nothing", async () => {
     await withJournal([], async () => {
       fireEvent.click(button("Log Work"))

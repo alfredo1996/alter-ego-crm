@@ -1,5 +1,5 @@
 import { eurShort } from "@alter-ego/kernel/currency"
-import { formatYearMonth, isoDate, weekdaysInMonth } from "@alter-ego/kernel/dates"
+import { formatYearMonth, isoDate, isoDateInRome, weekdaysInMonth } from "@alter-ego/kernel/dates"
 import { format } from "date-fns"
 
 
@@ -113,7 +113,9 @@ import {
 } from "@/lib/mcp/tools/helpers"
 import { fileHolder, fileTargetInput, fileText, ownFolder } from "@/lib/mcp/tools/invoice-files"
 import { healthByContract } from "@/lib/meetings"
+import { getClient as getOAuthClient } from "@/lib/oauth/store"
 import { isOpen, STAGE_LABELS, STAGE_PROBABILITY } from "@/lib/opportunities"
+import { journalSource } from "@/lib/solution-journal"
 import { completeStep, nowStep, sectionsFor, solutionNameTaken, stepContract, stepIndex } from "@/lib/solutions"
 import { MAX_LABELS, statusOf, taskClientId, taskStatusUpdate } from "@/lib/tasks"
 import { cellLimits, HOURS_AHEAD_MONTHS, hoursRefusal, lastLoggableDay, limitMessage, limitRefusal, monthPlanDays, planWarning } from "@/lib/timecards"
@@ -4669,7 +4671,7 @@ export function registerCrmWriteTools(server: McpServer): void {
       title: "Log Work",
       description:
         "Files a work session on a solution's journal, the page's Log Work: did (what was done), decisions (each shown as " +
-        "its own Decision line), links (PRs, commits), next, and source (the repository's name, when filed from Claude Code). " +
+        "its own Decision line), links (PRs, commits), next, and source (the repository's name; the entry says which app filed it). " +
         "step is its number (1 is the first) or its title; the default is the Now step, and a step of another solution is " +
         "refused. With decisions and no did, each decision is filed on its own. Dated today. The reply names the step and " +
         "the open tasks of the contract that pays for it. «segna la sessione di oggi sul grafo» → did, with the step Now. " +
@@ -4714,8 +4716,11 @@ export function registerCrmWriteTools(server: McpServer): void {
           at = now ? s.steps.indexOf(now) : -1
         }
         const step = at >= 0 ? s.steps[at] : null
-        const source = input.source?.trim() ? `Claude Code · ${input.source.trim()}` : "Claude Code"
-        const base = { solutionId: s.id, clientId: s.clientId, date: isoDate(new Date()), stepTitle: step?.title ?? null, source }
+        // The registered name of the OAuth client; stdio and API keys have none.
+        const oauthId = ctx.http?.authInfo?.clientId
+        const client = oauthId && oauthId !== "api-key" ? await getOAuthClient(oauthId).catch(() => null) : null
+        const source = journalSource(client?.clientName, input.source)
+        const base = { solutionId: s.id, clientId: s.clientId, date: isoDateInRome(new Date()), stepTitle: step?.title ?? null, source }
         const docs = did
           ? [valid(createJournalEntrySchema, { ...base, kind: "work", text: did, decisions, links: input.links ?? [], next: input.next ?? null })]
           : decisions.map((text) => valid(createJournalEntrySchema, { ...base, kind: "decision", text }))

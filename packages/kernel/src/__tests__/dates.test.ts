@@ -9,6 +9,7 @@ import {
   formatShortDate,
   advanceDate,
   isoDate,
+  isoDateInRome,
   pinServerTimeZone,
   daysLeftInMonth,
   weekdaysInMonth,
@@ -223,5 +224,16 @@ describe("daysLeftInMonth", () => {
     expect(daysLeftInMonth(new Date(2026, 9, 16))).toBe(16)
     expect(daysLeftInMonth(new Date(2026, 9, 31))).toBe(1)
     expect(daysLeftInMonth(new Date(2026, 9, 1))).toBe(31)
+  })
+})
+
+describe("isoDateInRome", () => {
+  it.each([
+    ["2026-11-12T23:30:00Z", "2026-11-13"],
+    ["2026-11-12T22:59:00Z", "2026-11-12"],
+    ["2026-07-12T22:30:00Z", "2026-07-13"],
+    ["2026-07-12T21:59:00Z", "2026-07-12"],
+  ])("%s is %s in Rome, whatever the server zone", (instant, day) => {
+    expect(isoDateInRome(new Date(instant))).toBe(day)
   })
 })
