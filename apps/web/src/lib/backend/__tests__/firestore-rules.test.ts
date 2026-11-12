@@ -29,6 +29,11 @@ import {
   MAX_AMENDMENTS,
   MAX_FEE,
   MAX_FEE_CHANGES,
+  JOURNAL_LINE_MAX,
+  JOURNAL_SOURCE_MAX,
+  JOURNAL_TEXT_MAX,
+  MAX_JOURNAL_DECISIONS,
+  MAX_JOURNAL_LINKS,
   MAX_SOLUTION_ENTITIES,
   MAX_SOLUTION_RELATIONS,
   MAX_SOLUTION_STACK,
@@ -132,6 +137,12 @@ const solutionWithout = (field: string) => {
   return d
 }
 const listOf = (n: number) => Array.from({ length: n }, (_, i) => `t${i}`)
+
+const validJournalEntry = (o: Record<string, unknown> = {}) => ({
+  userId: uid, solutionId: "s1", clientId: "c1", kind: "work", date: "2026-11-07", stepTitle: "MVP",
+  text: "Loading rewritten.", decisions: ["Spend goes to the booking holder"], links: ["PR #7"], next: null, source: null,
+  createdAt: new Date(), updatedAt: new Date(), ...o,
+})
 
 const validCompanyAccount = (o: Record<string, unknown> = {}) => ({
   userId: uid, name: "Bank A", openingBalance: 1000, openingDate: new Date(),
@@ -1075,6 +1086,47 @@ describe("assignment validation", () => {
     ]) {
       await expect(setAssignment(bad), JSON.stringify(bad)).rejects.toThrow()
     }
+  })
+})
+
+describe("journal validation", () => {
+  it("accepts a work session, a decision and an entry with every optional field empty", async () => {
+    await setDoc(mine("journal"), validJournalEntry())
+    await setDoc(mine("journal"), validJournalEntry({ kind: "decision", decisions: [] }))
+    await setDoc(mine("journal"), validJournalEntry({ stepTitle: null, decisions: [], links: [], next: null, source: "Claude Code" }))
+  })
+  it.each(["solutionId", "clientId", "kind", "date", "text", "decisions", "links"])("rejects an entry with no %s field", async (field) => {
+    const d: Record<string, unknown> = validJournalEntry()
+    delete d[field]
+    await expect(setDoc(mine("journal"), d)).rejects.toThrow()
+  })
+  it("rejects an unknown kind, a blank or over-long id, a bad date and another user's entry", async () => {
+    for (const bad of [
+      { kind: "call" }, { kind: null }, { solutionId: "" }, { solutionId: null }, { clientId: "" },
+      { date: "2026-02-30x" }, { date: "7 Nov" }, { userId: OTHER },
+    ]) {
+      await expect(setDoc(mine("journal"), validJournalEntry(bad)), JSON.stringify(bad)).rejects.toThrow()
+    }
+    await expect(setDoc(theirs("journal"), validJournalEntry({ userId: OTHER }))).rejects.toThrow()
+  })
+  it("pins the text caps and the list sizes", async () => {
+    await setDoc(mine("journal"), validJournalEntry({ text: "x".repeat(JOURNAL_TEXT_MAX), next: "x".repeat(JOURNAL_LINE_MAX) }))
+    for (const bad of [
+      { text: "x".repeat(JOURNAL_TEXT_MAX + 1) }, { text: "" }, { next: "x".repeat(JOURNAL_LINE_MAX + 1) },
+      { stepTitle: "x".repeat(201) }, { source: "x".repeat(JOURNAL_SOURCE_MAX + 1) },
+      { decisions: listOf(MAX_JOURNAL_DECISIONS + 1) }, { links: listOf(MAX_JOURNAL_LINKS + 1) },
+    ]) {
+      await expect(setDoc(mine("journal"), validJournalEntry(bad)), JSON.stringify(bad).slice(0, 80)).rejects.toThrow()
+    }
+    await setDoc(mine("journal"), validJournalEntry({ decisions: listOf(MAX_JOURNAL_DECISIONS), links: listOf(MAX_JOURNAL_LINKS) }))
+  })
+  it("never lets an update change the solution or the kind", async () => {
+    const ref = mine("journal")
+    await setDoc(ref, validJournalEntry())
+    await updateDoc(ref, { text: "Edited" })
+    await expect(updateDoc(ref, { solutionId: "s2" })).rejects.toThrow()
+    await expect(updateDoc(ref, { kind: "decision" })).rejects.toThrow()
+    await expect(updateDoc(ref, { text: "x".repeat(JOURNAL_TEXT_MAX + 1) })).rejects.toThrow()
   })
 })
 

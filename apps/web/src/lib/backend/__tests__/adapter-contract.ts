@@ -6,7 +6,7 @@ import { CONTRACT_HAS_HOURS } from "@/lib/engagements"
 import { invoiceClientId } from "@/lib/invoices"
 
 import type { DatabaseAdapter, FilesAdapter } from "../types"
-import type { CreateCompanyMovementInput } from "@/types"
+import type { CreateCompanyMovementInput, CreateJournalEntryInput } from "@/types"
 
 export interface ContractSetup {
   (): Promise<{
@@ -1630,6 +1630,80 @@ export function describeAdapterContract(name: string, setup: ContractSetup) {
         expect(await solutionById(preSales.id)).toMatchObject({ clientId: "solution-from", engagementId: null })
         await Promise.all([db.deleteSolution(userId, onContract.id), db.deleteSolution(userId, preSales.id)])
         await db.deleteEngagement(userId, contract.id)
+      })
+    })
+
+    // ── Journal (work sessions and decisions on a solution) ────────────────
+
+    describe("journal", () => {
+      const journalOf = async (solutionId: string) => (await db.getJournal(userId)).filter((e) => e.solutionId === solutionId)
+      const session: Omit<CreateJournalEntryInput, "solutionId" | "clientId"> = {
+        kind: "work", date: "2026-11-07", stepTitle: "MVP", text: "Loading rewritten as idempotent Cypher.",
+        decisions: ["A stay's spend goes to the booking holder."], links: ["PR #7", "https://example.com/pull/8"],
+        next: "One nightly run.", source: "Claude Code · guest-360",
+      }
+
+      it("creates, updates and deletes an entry, every field read back", async () => {
+        const created = await db.createJournalEntry(userId, { solutionId: "journal-s", clientId: "journal-c", ...session })
+        const bare = await db.createJournalEntry(userId, { solutionId: "journal-s", clientId: "journal-c", date: "2026-11-08", text: "Bare" })
+        expect(created).toMatchObject({ userId, solutionId: "journal-s", clientId: "journal-c", ...session })
+        expect(created.id).toBeTruthy()
+        expect(created.createdAt).toBeInstanceOf(Date)
+        expect(bare).toMatchObject({ kind: "work", stepTitle: null, decisions: [], links: [], next: null, source: null })
+        expect((await journalOf("journal-s")).map((e) => e.id).sort()).toEqual([created.id, bare.id].sort())
+        expect(await db.getJournal(otherUserId)).toEqual([])
+
+        const steps: [Parameters<typeof db.updateJournalEntry>[2], Record<string, unknown>][] = [
+          [{ text: "Edited" }, { text: "Edited" }],
+          [{ date: "2026-11-06" }, { date: "2026-11-06" }],
+          [{ stepTitle: null }, { stepTitle: null }],
+          [{ decisions: [] }, { decisions: [] }],
+          [{ links: ["PR #9"] }, { links: ["PR #9"] }],
+          [{ next: null }, { next: null }],
+          [{ source: null }, { source: null }],
+        ]
+        for (const [input, expected] of steps) {
+          expect(await db.updateJournalEntry(userId, created.id, input), JSON.stringify(input)).toMatchObject(expected)
+        }
+        const stored = (await journalOf("journal-s")).find((e) => e.id === created.id)
+        expect(stored).toMatchObject({ text: "Edited", date: "2026-11-06", links: ["PR #9"], solutionId: "journal-s", kind: "work" })
+
+        await db.deleteJournalEntry(userId, created.id)
+        expect((await journalOf("journal-s")).map((e) => e.id)).toEqual([bare.id])
+        await db.deleteJournalEntry(userId, bare.id)
+      })
+
+      it("deleting a solution deletes its entries, and only its own", async () => {
+        const [doomed, spared] = await Promise.all([
+          db.createSolution(userId, { clientId: "journal-del", name: "Doomed" }),
+          db.createSolution(userId, { clientId: "journal-del", name: "Spared" }),
+        ])
+        await db.createJournalEntry(userId, { solutionId: doomed.id, clientId: "journal-del", date: "2026-11-07", text: "Gone" })
+        const kept = await db.createJournalEntry(userId, { solutionId: spared.id, clientId: "journal-del", date: "2026-11-07", text: "Kept" })
+        await db.deleteSolution(userId, doomed.id)
+        expect(await journalOf(doomed.id)).toEqual([])
+        expect((await journalOf(spared.id)).map((e) => e.id)).toEqual([kept.id])
+        await db.deleteSolution(userId, spared.id)
+        await db.deleteJournalEntry(userId, kept.id)
+      })
+
+      it("deleting a client deletes the entries of its solutions, and only its own", async () => {
+        const [doomed, spared] = await Promise.all([
+          db.createClient(userId, { name: "Journal Cascade" }),
+          db.createClient(userId, { name: "Journal Bystander" }),
+        ])
+        const [a, b] = await Promise.all([
+          db.createSolution(userId, { clientId: doomed.id, name: "Graph" }),
+          db.createSolution(userId, { clientId: spared.id, name: "Graph" }),
+        ])
+        const entry = (s: typeof a) => db.createJournalEntry(userId, { solutionId: s.id, clientId: s.clientId, date: "2026-11-07", text: "Work" })
+        const [gone, kept] = await Promise.all([entry(a), entry(b)])
+
+        await db.deleteClient(userId, doomed.id)
+        const left = new Set((await db.getJournal(userId)).map((e) => e.id))
+        expect(left.has(gone.id)).toBe(false)
+        expect(left.has(kept.id)).toBe(true)
+        await db.deleteClient(userId, spared.id)
       })
     })
 

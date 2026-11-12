@@ -31,4 +31,5 @@ export const useUpdateSolution = createUpdateHook<UpdateSolutionInput>(
 export const useDeleteSolution = createDeleteHook(
   SOLUTIONS_KEY,
   (userId, solutionId) => getBackend().db.deleteSolution(userId, solutionId),
+  [["journal"]],
 )

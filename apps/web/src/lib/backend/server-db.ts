@@ -57,6 +57,8 @@ export type ServerDb = AuditAdapter &
     | "getSolutions"
     | "createSolution"
     | "updateSolution"
+    | "getJournal"
+    | "createJournalEntry"
     | "getInvoices"
     | "createInvoice"
     | "updateInvoice"

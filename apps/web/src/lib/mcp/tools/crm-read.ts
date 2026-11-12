@@ -96,6 +96,9 @@ import type { MeetingHealth, Opportunity } from "@/types"
 import type { McpServer } from "@modelcontextprotocol/server"
 
 /** "2026-08" for today — every UI grid originates at the current month. */
+/** How many journal entries get_solution returns. */
+const JOURNAL_LATEST = 10
+
 const currentMonth = () => format(new Date(), "yyyy-MM")
 
 const dayInput = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Use YYYY-MM-DD")
@@ -1748,7 +1751,8 @@ export function registerCrmReadTools(server: McpServer): void {
         "id), client 'Acme', which narrows it when two clients have one by that name; list_solutions finds the " +
         "names. sections returns only those, by key (purpose, requirements, kpis, sources, model, " +
         "architecture, steps, history, results): 'the history of the knowledge graph' → sections ['history']; " +
-        "the calls of its contract are list_meetings.",
+        "the calls of its contract are list_meetings. journal returns its latest work sessions and decisions, newest first; " +
+        "log_work files one.",
       inputSchema: z.object({
         solution: z.string().trim().min(1),
         client: z.string().min(1).optional(),
@@ -1767,6 +1771,10 @@ export function registerCrmReadTools(server: McpServer): void {
         ])
         const client = input.client ? resolveClient(clients, input.client, true) : null
         const s = resolveSolution(solutions, clients, input.solution, client?.id)
+        const journal = (await db().getJournal(userId))
+          .filter((e) => e.solutionId === s.id)
+          .sort((a, b) => b.date.localeCompare(a.date) || b.createdAt.getTime() - a.createdAt.getTime())
+          .slice(0, JOURNAL_LATEST)
         const card = solutionCard(s, clients, engagements, opportunities)
         // Read from the verbali, as get_client does: the catalog never copies the contract's status.
         const status = s.engagementId ? contractStatus(meetings)(s.engagementId) : null
@@ -1792,6 +1800,9 @@ export function registerCrmReadTools(server: McpServer): void {
           entities: s.entities,
           relations: s.relations,
           missingSections: card.missingSections,
+          journal: journal.map(({ id, kind, date, stepTitle, text, decisions, links, next, source }) => ({
+            id, kind, date, step: stepTitle, text, decisions, links, next, source,
+          })),
         })
       } catch (e) {
         return toolError(e)

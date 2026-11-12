@@ -340,6 +340,53 @@ export interface CreateSolutionInput {
  */
 export type UpdateSolutionInput = Partial<Omit<CreateSolutionInput, "clientId">>
 
+/** A work session, or one decision taken on its own. */
+export type JournalKind = "work" | "decision"
+
+/**
+ * One entry of a solution's journal. Calls and done steps are not entries: they are read from the
+ * meetings and the road when the journal is shown (lib/solution-journal), never copied here.
+ */
+export interface JournalEntry {
+  id: string
+  userId: string
+  solutionId: string
+  /** The solution's client, so deleting a client removes its entries beside its solutions. */
+  clientId: string
+  kind: JournalKind
+  /** "YYYY-MM-DD" as typed. */
+  date: string
+  /** The title of the step it belongs to when it was filed; null = none. */
+  stepTitle: string | null
+  /** What was done; for a decision, the one line. */
+  text: string
+  /** Each one is shown as its own Decision line. Always empty on a decision entry. */
+  decisions: string[]
+  /** PRs, commits, pages: a URL is shown as a link, anything else as text. */
+  links: string[]
+  next: string | null
+  /** Where it came from; null = the page, else "Claude Code" with the repository's name. */
+  source: string | null
+  createdAt: Date
+  updatedAt: Date
+}
+
+export interface CreateJournalEntryInput {
+  solutionId: string
+  clientId: string
+  kind?: JournalKind
+  date: string
+  stepTitle?: string | null
+  text: string
+  decisions?: string[]
+  links?: string[]
+  next?: string | null
+  source?: string | null
+}
+
+/** Which solution, client and kind an entry has never changes. */
+export type UpdateJournalEntryInput = Partial<Omit<CreateJournalEntryInput, "solutionId" | "clientId" | "kind">>
+
 /**
  * A to-do for a client, optionally on one of its contracts — deliverables,
  * follow-ups, admin steps. Deliberately flat: no priority, ordering, or subtasks

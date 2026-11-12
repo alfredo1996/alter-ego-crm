@@ -37,5 +37,5 @@ export const useUpdateClient = createUpdateHook<UpdateClientInput>(
 export const useDeleteClient = createDeleteHook(
   CLIENTS_KEY,
   (userId, clientId) => getBackend().db.deleteClient(userId, clientId),
-  [["opportunities"], ["engagements"], ["allocations"], ["tasks"], ["invoices"], ["meetings"], ["solutions"], ["timecards"]],
+  [["opportunities"], ["engagements"], ["allocations"], ["tasks"], ["invoices"], ["meetings"], ["solutions"], ["journal"], ["timecards"]],
 )

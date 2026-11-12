@@ -284,4 +284,51 @@ test.describe("Solutions", () => {
     const today = new Date().toLocaleDateString("en-CA")
     await expect(main.getByRole("region", { name: "History" }).getByRole("listitem").first()).toHaveText(new RegExp(`^${today}\\s*Pilot signed off\\.$`))
   })
+  test("Journal: Log Work files a session on the Now step, a reload keeps it, and Calls shows only meetings", async ({ page, isMobile }) => {
+    const clientId = await seedClient(page)
+    const id = await page.evaluate(
+      async ({ clientId, name }) => {
+        const backend = (window as Window & { __mockBackend?: BackendAdapter }).__mockBackend!
+        const u = (await backend.auth.getCurrentUser())!.id
+        const contract = (await backend.db.getEngagements(u))[0]
+        await backend.db.createMeeting(u, { clientId, engagementId: contract.id, date: "2026-10-04", time: null, health: "green", text: "Third data drop reviewed\nThe historic hotels come in." })
+        const step = { toMonth: null, goal: null, outcome: null, doneOn: null } as const
+        const steps = [
+          { ...step, title: "Proof of concept", state: "done" as const, fromMonth: "2026-08", paidBy: null, outcome: "Report sent", doneOn: "2026-09-12" },
+          { ...step, title: "MVP", state: "now" as const, fromMonth: "2026-10", paidBy: { type: "contract" as const, id: contract.id } },
+        ]
+        return (await backend.db.createSolution(u, { clientId, name, steps })).id
+      },
+      { clientId, name: NAME },
+    )
+    await navigateTo(page, "Solutions", "/solutions")
+    type NextWindow = Window & { next: { router: { push: (href: string) => void } } }
+    await page.evaluate((id) => (window as unknown as NextWindow).next.router.push(`/solutions/${id}`), id)
+    const main = page.getByRole("main")
+    const journal = main.getByRole("region", { name: "Journal" })
+    await expect(journal.getByRole("listitem")).toHaveCount(2)
+
+    await main.getByRole("button", { name: "Log Work" }).click()
+    const dialog = page.getByRole("dialog", { name: "Log Work" })
+    await expect(dialog.getByRole("combobox", { name: "Step" })).toHaveText(/2\. MVP \(Now\)/)
+    await dialog.getByRole("textbox", { name: "Did" }).fill("Loading rewritten as idempotent Cypher.")
+    await dialog.getByRole("textbox", { name: "Decided" }).fill("Spend goes to the booking holder.")
+    await dialog.getByRole("textbox", { name: "Next" }).fill("One nightly run.")
+    await dialog.getByRole("button", { name: "Log Work" }).click()
+    await expect(dialog).toBeHidden()
+    await expect(journal.getByText("Loading rewritten as idempotent Cypher.")).toBeVisible()
+    await expect(journal.getByRole("listitem")).toHaveCount(4)
+    if (isMobile) await noSideScroll(page)
+
+    // "Reload": away and back, the journal read again from the backend.
+    await navigateTo(page, "Clients", "/clients")
+    await page.getByRole("link", { name: "1 solution", exact: true }).click()
+    await page.getByRole("link", { name: NAME }).click()
+    await expect(journal.getByText("Loading rewritten as idempotent Cypher.")).toBeVisible()
+    await expect(journal.getByText("Spend goes to the booking holder.")).toBeVisible()
+
+    await journal.getByRole("button", { name: "Calls" }).click()
+    await expect(journal.getByRole("listitem")).toHaveText([/Call: Third data drop reviewed/])
+    await expect(journal.getByText("Loading rewritten as idempotent Cypher.")).toBeHidden()
+  })
 })

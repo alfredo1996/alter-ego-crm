@@ -14,6 +14,7 @@ import { POST as approve } from "@/app/api/oauth/authorize/route"
 import { POST as register } from "@/app/api/oauth/register/route"
 import { POST as token } from "@/app/api/oauth/token/route"
 import * as admin from "@/lib/backend/firebase-admin"
+import { getAdminFirestore } from "@/lib/firebase-admin-client"
 import { getFirebaseAuth } from "@/lib/firebase-client"
 import { s256 } from "@/lib/oauth/pkce"
 import { SOLUTION_KIND_SECTIONS, SOLUTION_SECTIONS } from "@/types/schemas"
@@ -494,5 +495,85 @@ describe("a solution's kind, target and road", () => {
     const out = await callTool("get_solution", { solution: tuningId })
     expect(out.solution).toMatchObject({ kind: "advisory", nowStep: { title: "Tune" } })
     expect(out.summary).toContain("0 of 3 sections written")
+  })
+})
+
+describe("log_work", () => {
+  let solutionId = ""
+  let contractId = ""
+
+  beforeAll(async () => {
+    const [nordwind] = (await admin.getClients(userId)).filter((c) => c.name.startsWith("Nordwind"))
+    contractId = (await admin.getEngagements(userId)).find((e) => e.name === "Product graph")!.id
+    const step = { goal: null, outcome: null, doneOn: null, toMonth: null } as const
+    solutionId = (
+      await admin.createSolution(userId, {
+        clientId: nordwind.id,
+        name: "Guest journal",
+        steps: [
+          { ...step, title: "Proof of concept", state: "done", fromMonth: "2026-08", paidBy: null, outcome: "Report sent", doneOn: "2026-09-12" },
+          { ...step, title: "MVP", state: "now", fromMonth: "2026-10", paidBy: { type: "contract", id: contractId } },
+          { ...step, title: "Rollout", state: "later", fromMonth: "2026-12", paidBy: null },
+        ],
+      })
+    ).id
+    await admin.createSolution(userId, { clientId: nordwind.id, name: "Other journal", steps: [{ ...step, title: "Only here", state: "now", fromMonth: "2026-10", paidBy: null }] })
+    await admin.createTask(userId, { clientId: nordwind.id, engagementId: contractId, title: "Nightly run" })
+    await admin.createTask(userId, { clientId: nordwind.id, engagementId: contractId, title: "Backup test" })
+    const done = await admin.createTask(userId, { clientId: nordwind.id, engagementId: contractId, title: "Finished one" })
+    await admin.updateTask(userId, done.id, { isDone: true })
+  })
+
+  const entries = async (id: string) => (await admin.getJournal(userId)).filter((e) => e.solutionId === id)
+
+  it("files on the Now step, and the reply names the step and its open tasks", async () => {
+    const out = await callTool("log_work", {
+      solution: "Guest journal",
+      did: "Loading rewritten as idempotent Cypher.",
+      decisions: ["A stay's spend goes to the booking holder."],
+      links: ["PR #7"],
+      next: "One nightly run.",
+      source: "guest-360",
+    })
+    expect(out.summary).toBe("Filed on Guest journal, step 2 MVP. 2 open tasks on this step: Backup test, Nightly run.")
+    expect(out.openTasks.map((t: { title: string }) => t.title).sort()).toEqual(["Backup test", "Nightly run"])
+    expect(await entries(solutionId)).toMatchObject([
+      {
+        kind: "work", stepTitle: "MVP", text: "Loading rewritten as idempotent Cypher.", links: ["PR #7"],
+        decisions: ["A stay's spend goes to the booking holder."], next: "One nightly run.", source: "Claude Code · guest-360",
+      },
+    ])
+  })
+
+  it("files on a step named by number or title, and a decision alone becomes a decision entry", async () => {
+    const out = await callTool("log_work", { solution: solutionId, step: 3, did: "Planned the rollout." })
+    expect(out.summary).toBe("Filed on Guest journal, step 3 Rollout. No contract pays for this step, so no tasks to list.")
+    await callTool("log_work", { solution: solutionId, step: "proof of concept", decisions: ["Italian and English reports."] })
+    const all = await entries(solutionId)
+    expect(all.find((e) => e.kind === "decision")).toMatchObject({ stepTitle: "Proof of concept", text: "Italian and English reports.", decisions: [], source: "Claude Code" })
+    expect(all.find((e) => e.text === "Planned the rollout.")).toMatchObject({ stepTitle: "Rollout" })
+  })
+
+  it("refuses a step of another solution, and a call with neither did nor decisions, and writes nothing", async () => {
+    const before = (await entries(solutionId)).length
+    expect(await refusal("log_work", { solution: solutionId, step: "Only here", did: "x" })).toContain('No single step is "Only here"')
+    expect(await refusal("log_work", { solution: solutionId, step: 9, did: "x" })).toContain('No single step is "9"')
+    expect(await refusal("log_work", { solution: solutionId })).toContain("did")
+    expect(await refusal("log_work", { solution: solutionId, did: "x".repeat(5001) })).toContain("5000")
+    expect((await entries(solutionId)).length).toBe(before)
+  })
+
+  it("get_solution returns the latest entries, newest first", async () => {
+    const out = await callTool("get_solution", { solution: solutionId })
+    expect(out.journal.length).toBe(3)
+    expect(out.journal[0]).toMatchObject({ kind: expect.any(String), date: isoDate(new Date()) })
+    expect(out.journal.map((e: { text: string }) => e.text)).toContain("Planned the rollout.")
+  })
+
+  it("audits every call, refused or done", async () => {
+    const audit = () => getAdminFirestore().collection("users").doc(userId).collection("mcp_audit").where("tool", "==", "log_work").get()
+    await expect.poll(async () => new Set((await audit()).docs.map((d) => d.get("result"))).size).toBe(2)
+    const done = (await audit()).docs.find((d) => d.get("result") === "ok" && d.get("params")?.solution === "Guest journal")!
+    expect(done.get("params")).toMatchObject({ solution: "Guest journal", did: "Loading rewritten as idempotent Cypher." })
   })
 })

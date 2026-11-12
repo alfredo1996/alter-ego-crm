@@ -6,5 +6,5 @@ export const solutions = defineModule({
   summary: "The solution catalog and its data model graph.",
   requires: ["crm"],
   listed: true,
-  tools: ["list_solutions", "get_solution", "create_solution", "update_solution"],
+  tools: ["list_solutions", "get_solution", "create_solution", "update_solution", "log_work"],
 })

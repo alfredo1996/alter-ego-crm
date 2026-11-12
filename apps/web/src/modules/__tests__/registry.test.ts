@@ -66,7 +66,7 @@ describe("tools", () => {
     const names = enabledToolNames(resolveModules("invoicing,solutions").enabled)
     expect(names.has("get_cash_book")).toBe(true)
     expect(names.has("create_client")).toBe(true)
-    expect(["list_invoices", "create_invoice", "list_solutions", "update_solution"].filter((t) => names.has(t))).toEqual([])
+    expect(["list_invoices", "create_invoice", "list_solutions", "update_solution", "log_work"].filter((t) => names.has(t))).toEqual([])
   })
 
   it("gateTools drops a tool outside the allowed set and passes the rest through", () => {

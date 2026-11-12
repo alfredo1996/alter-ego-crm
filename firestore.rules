@@ -472,6 +472,46 @@ service cloud.firestore {
           && validSolution(incoming());
       }
 
+      // ── Journal (work sessions and decisions on a solution) ───────────────
+      //
+      // Shaped like meetings: a new collection whose every writer writes every field, so one
+      // function covers create and update (incoming() is the merged document). decisions and
+      // links are checked for type and size only, like tasks.labels: zod checks each line on
+      // write and the read drops a malformed one. The caps are the JOURNAL_* constants in
+      // schemas.ts; the rules tests pin the two. solutionId and kind never change.
+
+      match /journal/{entryId} {
+        function journalKeys() {
+          return ['userId', 'solutionId', 'clientId', 'kind', 'date', 'stepTitle', 'text', 'decisions', 'links', 'next',
+                  'source', 'createdAt', 'updatedAt'];
+        }
+        function journalRequired() {
+          return ['userId', 'solutionId', 'clientId', 'kind', 'date', 'stepTitle', 'text', 'decisions', 'links', 'next', 'source'];
+        }
+        function validJournalEntry(d) {
+          return isShortString(d.solutionId, 200)
+            && isShortString(d.clientId, 200)
+            && d.kind in ['work', 'decision']
+            && isIsoDate(d.date)
+            && (d.stepTitle == null || isShortString(d.stepTitle, 200))
+            && isShortString(d.text, 5000)
+            && d.decisions is list && d.decisions.size() <= 10
+            && d.links is list && d.links.size() <= 10
+            && isOptionalString(d.next, 500)
+            && (d.source == null || isShortString(d.source, 100))
+            && isStamped(d);
+        }
+        allow read, delete: if isOwner(userId);
+        allow create: if isOwner(userId)
+          && isClosedCreate(userId, journalKeys(), journalRequired())
+          && validJournalEntry(incoming());
+        allow update: if isOwner(userId)
+          && isClosedUpdate(userId, journalKeys(), journalRequired())
+          && validJournalEntry(incoming())
+          && incoming().solutionId == resource.data.solutionId
+          && incoming().kind == resource.data.kind;
+      }
+
       // ── Invoices (a customer's record of issued paper) ────────────────────
       //
       // amount and vat are deliberately unconstrained in sign: a nota di credito

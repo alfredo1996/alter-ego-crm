@@ -49,6 +49,7 @@ import {
   normalizeMonthDays,
   normalizeCollaboratorFee,
   normalizePriceChanges,
+  normalizeJournalEntry,
   normalizeSolutionDomain,
   normalizeSolutionGraph,
   normalizeSolutionKind,
@@ -112,6 +113,9 @@ import type {
   SolutionStatus,
   CreateSolutionInput,
   UpdateSolutionInput,
+  JournalEntry,
+  CreateJournalEntryInput,
+  UpdateJournalEntryInput,
   Invoice,
   InvoiceFile,
   CreateInvoiceInput,
@@ -455,6 +459,16 @@ function mapMeeting(d: DocumentData & { id: string }): Meeting {
     time: (d.time as string | null) ?? null,
     health: (d.health as MeetingHealth | null) ?? null,
     text: d.text as string,
+    createdAt: toDate(d.createdAt),
+    updatedAt: toDate(d.updatedAt),
+  }
+}
+
+function mapJournalEntry(d: DocumentData & { id: string }): JournalEntry {
+  return {
+    id: d.id,
+    userId: d.userId as string,
+    ...normalizeJournalEntry(d),
     createdAt: toDate(d.createdAt),
     updatedAt: toDate(d.updatedAt),
   }
@@ -1071,6 +1085,7 @@ function createFirebaseDbAdapter(): DatabaseAdapter {
         ...engSnap.docs.map((d) => query(col(userId, "timecards"), where("engagementId", "==", d.id))),
         query(col(userId, "meetings"), where("clientId", "==", clientId)),
         query(col(userId, "solutions"), where("clientId", "==", clientId)),
+        query(col(userId, "journal"), where("clientId", "==", clientId)),
       )
 
       // ponytail: one writeBatch, so a client with more than 500 descendant docs
@@ -1451,7 +1466,59 @@ function createFirebaseDbAdapter(): DatabaseAdapter {
     },
 
     async deleteSolution(userId: string, solutionId: string): Promise<void> {
+      await deleteAllDocs(query(col(userId, "journal"), where("solutionId", "==", solutionId)))
       await deleteDoc(docRef(userId, "solutions", solutionId))
+    },
+
+    // ── Journal (work sessions and decisions on a solution) ─────────────────
+
+    async getJournal(userId: string): Promise<JournalEntry[]> {
+      try {
+        const snap = await getDocs(col(userId, "journal"))
+        return snap.docs.map((d) => mapJournalEntry(docData(d)))
+      } catch (err) {
+        // A bundle deployed before the rules still renders.
+        if (isPermissionDenied(err)) return []
+        throw err
+      }
+    },
+
+    // Every field, null included: the rules require each one to be present.
+    async createJournalEntry(userId: string, input: CreateJournalEntryInput): Promise<JournalEntry> {
+      const ref = await addDoc(col(userId, "journal"), {
+        userId,
+        solutionId: input.solutionId,
+        clientId: input.clientId,
+        kind: input.kind ?? "work",
+        date: input.date,
+        stepTitle: input.stepTitle ?? null,
+        text: input.text.trim(),
+        decisions: input.decisions ?? [],
+        links: input.links ?? [],
+        next: input.next ?? null,
+        source: input.source ?? null,
+        createdAt: now(),
+        updatedAt: now(),
+      })
+      return mapJournalEntry(docData(await readBack(ref)))
+    },
+
+    async updateJournalEntry(userId: string, entryId: string, input: UpdateJournalEntryInput): Promise<JournalEntry> {
+      const ref = docRef(userId, "journal", entryId)
+      const updates: Record<string, unknown> = { updatedAt: now() }
+      if (input.date !== undefined) updates.date = input.date
+      if (input.stepTitle !== undefined) updates.stepTitle = input.stepTitle
+      if (input.text !== undefined) updates.text = input.text.trim()
+      if (input.decisions !== undefined) updates.decisions = input.decisions
+      if (input.links !== undefined) updates.links = input.links
+      if (input.next !== undefined) updates.next = input.next
+      if (input.source !== undefined) updates.source = input.source
+      await updateDoc(ref, updates)
+      return mapJournalEntry(docData(await readBack(ref)))
+    },
+
+    async deleteJournalEntry(userId: string, entryId: string): Promise<void> {
+      await deleteDoc(docRef(userId, "journal", entryId))
     },
 
     // The rent module's slice: it takes our helpers instead of importing the SDK.
