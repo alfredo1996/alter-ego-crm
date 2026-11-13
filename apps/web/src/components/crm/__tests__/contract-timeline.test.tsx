@@ -22,7 +22,13 @@ const DATA: Record<string, unknown> = {
       contractedDays: 20, defaultDaysPerMonth: 5, startMonth: ym(-1), endMonth: ym(3), endDate: null, isActive: true,
       notes: null, createdAt: at, updatedAt: at,
     },
+    {
+      id: "e0", userId: "u1", clientId: "c1", name: "Retainer", opportunityId: null, dailyRate: 500, vatApplicable: true,
+      contractedDays: null, defaultDaysPerMonth: 2, startMonth: ym(-2), endMonth: null, endDate: null, isActive: true,
+      notes: null, createdAt: at, updatedAt: at,
+    },
   ],
+  getSolutions: [{ id: "s1", userId: "u1", clientId: "c1", engagementId: "e1", name: "Guest 360", steps: [] }],
   getOpportunities: [
     {
       id: "o1", userId: "u1", clientId: "c1", title: "Front-desk card", stage: "proposal", probability: 50, dailyRate: 800,
@@ -33,18 +39,23 @@ const DATA: Record<string, unknown> = {
   ],
 }
 
+const initial = { ...DATA }
+
 vi.mock("@/hooks/use-auth", () => ({ useAuth: () => ({ user: { id: "u1" } }) }))
 vi.mock("@/lib/backend", () => ({
   getBackend: () => ({
-    db: new Proxy({}, { get: (_db, method) => () => Promise.resolve(DATA[String(method)] ?? []) }),
+    db: new Proxy({}, { get: (_db, method) => () => { calls.push(String(method)); return Promise.resolve(DATA[String(method)] ?? []) } }),
   }),
 }))
 const off = vi.hoisted(() => new Set<string>())
+const calls = vi.hoisted(() => [] as string[])
 vi.mock("@/modules", async (actual) => ({ ...(await actual<Record<string, unknown>>()), isModuleOn: (id: string) => !off.has(id) }))
 
 afterEach(() => {
   cleanup()
   off.clear()
+  calls.length = 0
+  Object.assign(DATA, initial)
 })
 
 async function show() {
@@ -59,36 +70,82 @@ const timeline = (t: HTMLElement) => within(t)
 
 it("draws the contract and the deal under their client; Hide Pipeline takes the deal away", async () => {
   const t = timeline(await show())
-  expect(t.getByRole("button", { name: /^Guest MVP, Acme Retail: .*Active$/ })).toBeInTheDocument()
-  expect(t.getByRole("button", { name: /^Front-desk card, Acme Retail: Proposal · 10 days.*Not signed yet$/ })).toBeInTheDocument()
+  expect(t.getByRole("button", { name: /^Guest MVP, Acme Retail: .*Active, \w{3} \d{4} – \w{3} \d{4}$/ })).toBeInTheDocument()
+  expect(t.getByRole("button", { name: /^Front-desk card, Acme Retail: Proposal · 10 days.*Not signed yet, \w{3} \d{4} – \w{3} \d{4}$/ })).toBeInTheDocument()
   fireEvent.click(screen.getByRole("button", { name: "Hide Pipeline" }))
   expect(t.queryByRole("button", { name: /Front-desk card/ })).toBeNull()
   expect(t.getByRole("button", { name: /Guest MVP/ })).toBeInTheDocument()
-  expect(screen.getByRole("button", { name: "Show Pipeline" })).toHaveAttribute("aria-pressed", "false")
+  // The label says the state, so the button is not also a pressed toggle.
+  expect(screen.getByRole("button", { name: "Show Pipeline" })).not.toHaveAttribute("aria-pressed")
 })
 
-it("a click on a bar shows its quarters with an Invoiced column", async () => {
+it("a click on another bar swaps the detail to it, with its quarter rows and figures", async () => {
   const t = timeline(await show())
-  fireEvent.click(t.getByRole("button", { name: /^Guest MVP/ }))
   const detail = within(screen.getByRole("region", { name: "Contract detail" }))
+  // The open-ended Retainer starts first, so it is the one shown until a click.
+  expect(detail.getByRole("heading", { name: "Retainer" })).toBeInTheDocument()
+  fireEvent.click(t.getByRole("button", { name: /^Guest MVP/ }))
   expect(detail.getByRole("heading", { name: "Guest MVP" })).toBeInTheDocument()
   expect(detail.getAllByRole("columnheader").map((c) => c.textContent)).toEqual(["Quarter", "Planned", "Logged", "Invoiced", "Fill"])
-  expect(detail.getAllByRole("row").at(-1)).toHaveTextContent(/^Total/)
+  const rows = detail.getAllByRole("row").slice(1)
+  expect(rows.length).toBeGreaterThanOrEqual(2)
+  expect(rows[0]).toHaveAccessibleName(/^Q\d \d{4}/)
+  // Five months at 5 days, nothing logged, nothing invoiced.
+  expect(rows.at(-1)).toHaveTextContent("Total25" + "0" + "€0" + "0%")
 })
 
-it("with invoicing off there is no Invoiced column", async () => {
+it("with invoicing off there is no Invoiced column and no invoice is read", async () => {
   off.add("invoicing")
   const t = timeline(await show())
   fireEvent.click(t.getByRole("button", { name: /^Guest MVP/ }))
   const detail = within(screen.getByRole("region", { name: "Contract detail" }))
   expect(detail.getAllByRole("columnheader").map((c) => c.textContent)).toEqual(["Quarter", "Planned", "Logged", "Fill"])
+  expect(calls).toContain("getSolutions")
+  expect(calls).not.toContain("getInvoices")
+})
+
+it("names the solution and links to it; with solutions off, neither, and none is read", async () => {
+  const t = timeline(await show())
+  fireEvent.click(t.getByRole("button", { name: /^Guest MVP/ }))
+  let detail = within(screen.getByRole("region", { name: "Contract detail" }))
+  expect(detail.getByText("Solution")).toBeInTheDocument()
+  expect(detail.getByRole("link", { name: "Open Solution" })).toHaveAttribute("href", "/solutions/s1")
+  cleanup()
+  calls.length = 0
+  off.add("solutions")
+  const t2 = timeline(await show())
+  fireEvent.click(t2.getByRole("button", { name: /^Guest MVP/ }))
+  detail = within(screen.getByRole("region", { name: "Contract detail" }))
+  expect(detail.queryByText("Solution")).toBeNull()
+  expect(detail.queryByRole("link", { name: "Open Solution" })).toBeNull()
+  expect(calls).not.toContain("getSolutions")
+  expect(calls).toContain("getInvoices")
+})
+
+it("a new user with nothing is not told to page Earlier or Later", async () => {
+  for (const k of ["getEngagements", "getOpportunities", "getSolutions"]) DATA[k] = []
+  render(
+    <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+      <ContractTimeline />
+    </QueryClientProvider>,
+  )
+  expect(await screen.findByRole("heading", { name: "No contracts yet" })).toBeInTheDocument()
+  expect(screen.getByRole("link", { name: "Open Clients" })).toHaveAttribute("href", "/clients")
+  expect(screen.queryByText(/Try Earlier or Later/)).toBeNull()
+})
+
+it("a window with nothing in it, over data elsewhere, says to try Earlier or Later", async () => {
+  await show()
+  for (let i = 0; i < 12; i++) fireEvent.click(screen.getByRole("button", { name: "Earlier" }))
+  expect(await screen.findByRole("heading", { name: "Nothing on the timeline in these months" })).toBeInTheDocument()
+  expect(screen.getByText(/Try Earlier or Later/)).toBeInTheDocument()
 })
 
 it("a deal's detail says it is not signed yet", async () => {
   const t = timeline(await show())
   fireEvent.click(t.getByRole("button", { name: /^Front-desk card/ }))
   const detail = within(screen.getByRole("region", { name: "Contract detail" }))
-  expect(detail.getByRole("heading", { name: "Not signed yet" })).toBeInTheDocument()
+  expect(detail.getByRole("heading", { name: "Not Signed Yet" })).toBeInTheDocument()
   expect(detail.getByRole("link", { name: "Open Opportunity" })).toHaveAttribute("href", "/pipeline")
 })
 

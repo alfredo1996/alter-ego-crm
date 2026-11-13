@@ -15,7 +15,7 @@ import { cn } from "@alter-ego/ui/utils"
 import { format } from "date-fns"
 import { ChevronLeft, ChevronRight } from "lucide-react"
 import Link from "next/link"
-import { useState, useSyncExternalStore } from "react"
+import { useRef, useState, useSyncExternalStore } from "react"
 
 import { useAllocations } from "@/hooks/use-allocations"
 import { useAuth } from "@/hooks/use-auth"
@@ -68,6 +68,15 @@ function barLine(b: TimelineBar): string {
   return road ? `${lead} · ${road}` : lead
 }
 
+const monthName = (ym: string) => format(new Date(`${ym}-01T00:00:00`), "MMM yyyy")
+
+/** When a bar runs, in words; a bar with no end month says so. */
+function barWhen(b: TimelineBar): string {
+  if (b.start && b.end) return `${monthName(b.start)} – ${monthName(b.end)}`
+  if (b.start) return `from ${monthName(b.start)}, no end month`
+  return b.end ? `until ${monthName(b.end)}` : ""
+}
+
 /** The word after a bar: its fill, or its state. */
 function afterWord(b: TimelineBar): string {
   if (b.state === "ended") return "Ended"
@@ -89,18 +98,19 @@ function usePhone(): boolean {
   )
 }
 
-function Toggle({ pressed, onClick, children }: { pressed: boolean; onClick: () => void; children: React.ReactNode }) {
+function Toggle({ pressed, onClick, children }: { pressed?: boolean; onClick: () => void; children: React.ReactNode }) {
   return (
-    <Button type="button" variant="outline" size="lg" aria-pressed={pressed} onClick={onClick}>
+    <Button type="button" variant="outline" size="lg" aria-pressed={pressed} onClick={onClick} className="aria-pressed:border-border-strong aria-pressed:bg-accent">
       {children}
     </Button>
   )
 }
 
-function BarRow({ bar, selected, onPick, todayLeft, showClient }: { bar: TimelineBar; selected: boolean; onPick: () => void; todayLeft: number | null; showClient: boolean }) {
+function BarRow({ bar, selected, onPick, todayLeft, showClient }: { bar: TimelineBar; selected: boolean; onPick: (opener: HTMLElement) => void; todayLeft: number | null; showClient: boolean }) {
   const look = BAR[bar.state]
   const line = barLine(bar)
-  const after = afterWord(bar)
+  // A bar running to the window's edge has no room beside it: its figure is in the row line and the detail.
+  const after = bar.toEdge ? "" : afterWord(bar)
   const open = bar.toEdge
   return (
     <div className="grid grid-cols-[168px_minmax(0,1fr)] border-t border-hairline sm:grid-cols-[280px_minmax(0,1fr)]">
@@ -113,21 +123,26 @@ function BarRow({ bar, selected, onPick, todayLeft, showClient }: { bar: Timelin
         <button
           type="button"
           aria-pressed={selected}
-          aria-label={`${bar.name}, ${bar.clientName}: ${line}. ${look.word}`}
-          onClick={onPick}
-          className={cn(
-            "absolute top-3.5 flex h-7 items-center overflow-hidden rounded-[7px] text-xs font-semibold outline-offset-2 focus-visible:outline-2 focus-visible:outline-ring",
-            look.track,
-            selected && "outline-2 outline-ring",
-            bar.fromEdge && "rounded-l-none",
-            open && "rounded-r-none",
-          )}
+          aria-label={`${bar.name}, ${bar.clientName}: ${line}. ${look.word}${barWhen(bar) ? `, ${barWhen(bar)}` : ""}`}
+          onClick={(e) => onPick(e.currentTarget)}
+          // The button is the row's height, so a thumb finds it; the visible bar is the span inside.
+          className="group absolute inset-y-0 flex items-center outline-hidden"
           style={{ left: `${bar.left * 100}%`, width: `${bar.width * 100}%` }}
         >
-          {bar.kind === "contract" && bar.fill !== null && (
-            <span aria-hidden className={cn("h-full", look.fill)} style={{ width: `${Math.min(bar.fill, 1) * 100}%` }} />
-          )}
-          {bar.kind === "opportunity" && <span className="absolute left-2.5 whitespace-nowrap text-info-soft-foreground">{bar.stage}</span>}
+          <span
+            className={cn(
+              "relative flex h-7 w-full items-center overflow-hidden rounded-[7px] text-xs font-semibold group-focus-visible:outline-2 group-focus-visible:outline-offset-2 group-focus-visible:outline-ring",
+              look.track,
+              selected && "ring-2 ring-info",
+              bar.fromEdge && "rounded-l-none",
+              open && "rounded-r-none",
+            )}
+          >
+            {bar.kind === "contract" && bar.fill !== null && (
+              <span aria-hidden className={cn("h-full", look.fill)} style={{ width: `${Math.min(bar.fill, 1) * 100}%` }} />
+            )}
+            {bar.kind === "opportunity" && <span className="absolute left-2.5 whitespace-nowrap text-info-soft-foreground">{bar.stage}</span>}
+          </span>
         </button>
         {after && (
           <span
@@ -226,14 +241,17 @@ function BarDetail({ bar, health, withInvoiced, withSolutions, sheet }: { bar: T
       <div className="flex min-w-0 flex-col gap-2.5">
         {opportunity ? (
           <>
-            <h3 className="text-xs font-semibold tracking-[0.04em] text-muted-foreground uppercase">Not signed yet</h3>
+            <h3 className="text-xs font-semibold tracking-[0.04em] text-muted-foreground uppercase">Not Signed Yet</h3>
             <p className="text-sm leading-relaxed">
-              Expected {bar.start && bar.end ? `${format(new Date(`${bar.start}-01T00:00:00`), "MMM yyyy")} – ${format(new Date(`${bar.end}-01T00:00:00`), "MMM yyyy")}` : "soon"}, about {days(bar.estimate ?? 0)}. It has no days or money until it is won; then its contract takes this place on the timeline.
+              Expected {bar.start && bar.end ? `${format(new Date(`${bar.start}-01T00:00:00`), "MMM yyyy")} – ${format(new Date(`${bar.end}-01T00:00:00`), "MMM yyyy")}` : "soon"}, about {days(bar.estimate ?? 0)}. It has no days or money until it is won; then its contract takes this place on the timeline{withSolutions && bar.solution?.step ? ", and the roadmap step follows it" : ""}.
             </p>
+            <Link href="/pipeline" className="text-sm font-medium underline-offset-4 hover:underline">
+              Open in Pipeline
+            </Link>
           </>
         ) : (
           <>
-            <h3 className="text-xs font-semibold tracking-[0.04em] text-muted-foreground uppercase">By quarter</h3>
+            <h3 className="text-xs font-semibold tracking-[0.04em] text-muted-foreground uppercase">By Quarter</h3>
             <div className="overflow-x-auto">
               <table className="w-full text-sm tabular-nums">
                 <thead>
@@ -288,6 +306,7 @@ export function ContractTimeline() {
   const [grouped, setGrouped] = useState(true)
   const [pipeline, setPipeline] = useState(true)
   const [picked, setPicked] = useState<string | null>(null)
+  const opener = useRef<HTMLElement | null>(null)
   const phone = usePhone()
 
   const gate = pageState([
@@ -314,6 +333,8 @@ export function ContractTimeline() {
   const bars = pipeline ? all : all.filter((b) => b.kind === "contract")
   const health = healthByContract(meetingsQuery.data ?? [])
   const rows = bars
+  // No contract and no open deal anywhere: paging the window cannot help.
+  const hasAnything = all.length > 0 || (engagementsQuery.data ?? []).length > 0 || stats.openDeals > 0
   // The detail follows the pick; with none, the first live contract, so the panel is never empty.
   const shown = rows.find((b) => b.id === picked) ?? rows.find((b) => b.state !== "ended" && b.kind === "contract") ?? rows[0]
   const todayLeft = todayAt(today, from)
@@ -322,7 +343,7 @@ export function ContractTimeline() {
   const plural = (n: number) => `${n} ${n === 1 ? "contract" : "contracts"}`
 
   const row = (b: TimelineBar, showClient: boolean) => (
-    <BarRow key={b.id} bar={b} selected={shown?.id === b.id} onPick={() => setPicked(b.id)} todayLeft={todayLeft} showClient={showClient} />
+    <BarRow key={b.id} bar={b} selected={(phone ? picked : shown?.id) === b.id} onPick={(el) => { opener.current = el; setPicked(b.id) }} todayLeft={todayLeft} showClient={showClient} />
   )
   const detail = shown && (
     <BarDetail
@@ -353,7 +374,7 @@ export function ContractTimeline() {
             <Toggle pressed={grouped} onClick={() => setGrouped(!grouped)}>
               Group by Client
             </Toggle>
-            <Toggle pressed={pipeline} onClick={() => setPipeline(!pipeline)}>
+            <Toggle onClick={() => setPipeline(!pipeline)}>
               {pipeline ? "Hide Pipeline" : "Show Pipeline"}
             </Toggle>
           </>
@@ -367,7 +388,17 @@ export function ContractTimeline() {
         <StatCard label="In the pipeline" value={stats.openDeals === 0 ? "None" : `${stats.openDeals} · ${days(stats.dealDays)}`} />
       </StatStrip>
 
-      {rows.length === 0 ? (
+      {rows.length === 0 && !hasAnything ? (
+        <EmptyPrompt
+          title="No contracts yet"
+          description="Contracts and open deals show on this timeline once you have them."
+          action={
+            <Button asChild variant="outline">
+              <Link href="/clients">Open Clients</Link>
+            </Button>
+          }
+        />
+      ) : rows.length === 0 ? (
         <EmptyPrompt
           title="Nothing on the timeline in these months"
           description="Contracts and open deals show here once they fall in the window. Try Earlier or Later."
@@ -378,7 +409,7 @@ export function ContractTimeline() {
             <div className="min-w-[760px] lg:min-w-0">
               <div className="grid grid-cols-[168px_minmax(0,1fr)] bg-surface-subtle sm:grid-cols-[280px_minmax(0,1fr)]">
                 <div className="sticky left-0 z-10 flex items-end bg-surface-subtle px-4 py-3 text-xs font-semibold tracking-[0.04em] text-muted-foreground">
-                  CONTRACT
+                  <span className="uppercase">Contract</span>
                 </div>
                 <div className="relative">
                   <div className="grid grid-cols-4">
@@ -398,7 +429,7 @@ export function ContractTimeline() {
                   </div>
                   {todayLeft !== null && (
                     <span
-                      className="absolute bottom-0 -translate-x-1/2 rounded bg-danger px-1.5 py-px text-[11px] font-semibold text-white"
+                      className="absolute bottom-0 -translate-x-1/2 rounded bg-destructive px-1.5 py-px text-[11px] font-semibold text-destructive-foreground"
                       style={{ left: `${todayLeft * 100}%` }}
                     >
                       Today
@@ -439,7 +470,15 @@ export function ContractTimeline() {
       )}
       {detail && phone && (
         <Sheet open={picked !== null} onOpenChange={(open) => !open && setPicked(null)}>
-          <SheetContent side="bottom" className="max-h-[85vh] overflow-y-auto">
+          <SheetContent
+            side="bottom"
+            className="max-h-[85vh] overflow-y-auto"
+            // The sheet has no trigger of its own, so focus goes back to the bar that opened it.
+            onCloseAutoFocus={(event) => {
+              event.preventDefault()
+              opener.current?.focus()
+            }}
+          >
             <SheetDescription className="sr-only">{shown.clientName}</SheetDescription>
             {detail}
           </SheetContent>

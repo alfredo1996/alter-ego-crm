@@ -52,13 +52,24 @@ test.describe("Contracts", () => {
     const timeline = page.getByRole("region", { name: "Timeline" })
     await expect(timeline.getByRole("button", { name: new RegExp(`^${DEAL}, ${CLIENT}`) })).toBeVisible()
 
-    await timeline.getByRole("button", { name: new RegExp(`^${CONTRACT}, ${CLIENT}`) }).click()
+    const bar = timeline.getByRole("button", { name: new RegExp(`^${CONTRACT}, ${CLIENT}`) })
+    if (!isMobile) {
+      // The contract is shown by default, so a click on the deal first proves the click changes the detail.
+      await timeline.getByRole("button", { name: new RegExp(`^${DEAL}, ${CLIENT}`) }).click()
+      await expect(page.getByRole("region", { name: "Contract detail" }).getByRole("heading", { name: DEAL })).toBeVisible()
+    }
+    await bar.click()
     // A phone opens the detail as a sheet, a desktop shows it below the timeline.
     const detail = isMobile ? page.getByRole("dialog", { name: CONTRACT }) : page.getByRole("region", { name: "Contract detail" })
     await expect(detail.getByRole("heading", { name: CONTRACT })).toBeVisible()
     await expect(detail.getByRole("columnheader", { name: "Planned" })).toBeVisible()
+    await expect(detail.getByRole("row", { name: /^Q\d \d{4}/ }).first()).toBeVisible()
     await expect(detail.getByRole("row", { name: /^Total/ })).toBeVisible()
-    if (isMobile) await page.keyboard.press("Escape")
+    if (isMobile) {
+      await page.keyboard.press("Escape")
+      // The sheet has no trigger: focus must go back to the bar that opened it.
+      await expect(bar).toBeFocused()
+    }
 
     const range = page.getByText(/^[A-Z][a-z]{2} \d{4} – [A-Z][a-z]{2} \d{4}$/)
     const before = await range.textContent()
@@ -76,10 +87,16 @@ test.describe("Contracts", () => {
     await expect(timeline.getByRole("button", { name: new RegExp(`^${DEAL}`) })).toHaveCount(0)
   })
 
-  test("the page never scrolls sideways", async ({ page }) => {
+  test("on a phone the bars are thumb-sized and the contract column stays put while the card scrolls", async ({ page, isMobile }) => {
+    test.skip(!isMobile, "a phone behaviour")
     await seed(page)
     await navigateTo(page, "Contracts", "/contracts")
-    await expect(page.getByRole("region", { name: "Timeline" })).toBeVisible()
-    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(page.viewportSize()!.width)
+    const timeline = page.getByRole("region", { name: "Timeline" })
+    const box = await timeline.getByRole("button", { name: new RegExp(`^${CONTRACT}, ${CLIENT}`) }).boundingBox()
+    expect(box!.height).toBeGreaterThanOrEqual(44)
+    const name = timeline.getByText(CONTRACT, { exact: true })
+    const x = (await name.boundingBox())!.x
+    await timeline.locator(".overflow-x-auto").evaluate((el) => { el.scrollLeft = 200 })
+    expect((await name.boundingBox())!.x).toBe(x)
   })
 })

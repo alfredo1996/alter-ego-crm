@@ -7,11 +7,11 @@
 import { parseYearMonth, quarterMonths } from "@alter-ego/kernel/dates"
 import { addMonths, differenceInCalendarMonths, format, getDaysInMonth } from "date-fns"
 
-import { monthsFrom, resolveAllocationGrid, toRevenueSources } from "./engagement-burndown"
-import { contractDays, contractEndDate, contractUnit, engagementLabel, hoursToDays, rateIn } from "./engagements"
-import { clientBilling, invoiceClientId } from "./invoices"
-import { OPEN_STAGES, STAGE_LABELS } from "./opportunities"
-import { stepContract } from "./solutions"
+import { monthsFrom, resolveAllocationGrid, toRevenueSources } from "@/lib/engagement-burndown"
+import { contractDays, contractEndDate, contractUnit, engagementLabel, hoursToDays, rateIn } from "@/lib/engagements"
+import { clientBilling, invoiceClientId } from "@/lib/invoices"
+import { OPEN_STAGES, STAGE_LABELS } from "@/lib/opportunities"
+import { stepContract } from "@/lib/solutions"
 
 import type { Allocation, Client, Engagement, Invoice, Opportunity, Solution, Timecard } from "@/types"
 
@@ -200,12 +200,23 @@ export function contractTimeline(input: TimelineInput): { bars: TimelineBar[]; s
     }
     for (const [clientId, list] of byClient) {
       const billing = clientBilling({ clientId, engagements, timecards: input.timecards, invoices: list, today })
+      const own = engagements.filter((e) => e.clientId === clientId)
       for (const m of billing.months) {
-        const worth = m.contracts.reduce((s, l) => s + l.logged, 0)
-        // ponytail: an invoice in a month with no hours has no contract to take it; the client's total still has it.
-        for (const l of m.contracts) {
-          if (worth > 0) invoicedBy.set(`${l.engagementId}:${m.yearMonth}`, round2(m.invoiced * (l.logged / worth)))
-        }
+        // A month's invoice goes by what each contract logged; with no hours, by its planned days; with
+        // neither, evenly between the contracts running then (all of the client's, if none is).
+        const running = own.filter((e) => (e.startMonth === null || e.startMonth <= m.yearMonth) && (e.endMonth === null || e.endMonth >= m.yearMonth))
+        const candidates = running.length > 0 ? running : own
+        const weights: [string, number][] = m.contracts.map((l) => [l.engagementId, l.logged])
+        const byPlan: [string, number][] = candidates.map((e) => [e.id, planned.get(`${e.id}:${m.yearMonth}`) ?? 0])
+        const byRun: [string, number][] = candidates.map((e) => [e.id, 1])
+        const pick = [weights, byPlan, byRun].map((w) => w.filter(([, x]) => x > 0)).find((w) => w.length > 0) ?? []
+        const worth = pick.reduce((s, [, x]) => s + x, 0)
+        let rest = m.invoiced
+        pick.forEach(([id, w], k) => {
+          const share = k === pick.length - 1 ? round2(rest) : round2((m.invoiced * w) / worth)
+          rest -= share
+          invoicedBy.set(`${id}:${m.yearMonth}`, share)
+        })
       }
     }
   }
@@ -249,6 +260,8 @@ export function contractTimeline(input: TimelineInput): { bars: TimelineBar[]; s
     thisPlanned += plannedIn(e.id, thisQuarter.months)
     thisLogged += loggedIn(e.id, thisQuarter.months)
 
+    // Closed without an end month or an hour: it never ran, so it has no place on a timeline (the Plan leaves it out too).
+    if (!e.isActive && e.endMonth === null && !lastLogged.has(e.id)) continue
     const start = e.startMonth ?? firstLogged.get(e.id) ?? null
     // A closed contract with no end month stops at its last hour.
     const end = e.endMonth ?? (!e.isActive ? (lastLogged.get(e.id) ?? start) : null)

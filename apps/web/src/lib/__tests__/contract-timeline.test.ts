@@ -144,6 +144,57 @@ describe("the quarter breakdown", () => {
     expect(bar({ engagements: [e], invoices: null }, "e1").quarters.map((q) => q.invoiced)).toEqual([null, null]))
 })
 
+describe("invoiced, shared out between a client's contracts", () => {
+  const q4 = (id: string, o: Partial<TimelineInput>) => bar(o, id).quarters.find((q) => q.label === "Q4 2026")!.invoiced
+  const billed = (o: Partial<TimelineInput>) =>
+    clientBilling({ clientId: "c1", engagements: o.engagements!, timecards: o.timecards!, invoices: o.invoices!, today: TODAY }).months
+      .filter((m) => m.yearMonth >= "2026-10" && m.yearMonth <= "2026-12").reduce((s, m) => s + m.invoiced, 0)
+  const e1 = contract({ id: "e1", startMonth: "2026-10", endMonth: "2026-12" })
+
+  it("gives a period invoice's shares in months without hours to the only contract", () => {
+    const o = { engagements: [e1], timecards: [hours("e1", "2026-10-05", 16)], invoices: [invoice({ yearMonth: "2026-12", fromMonth: "2026-10", amount: 6000 })] }
+    expect(billed(o)).toBe(6000)
+    expect(q4("e1", o)).toBe(6000)
+  })
+  it("gives an invoice in a month nobody logged to the only contract", () => {
+    const o = {
+      engagements: [e1], timecards: [hours("e1", "2026-10-05", 8)],
+      invoices: [invoice({ yearMonth: "2026-11", amount: 500 }), invoice({ id: "j", yearMonth: "2026-12", amount: 700 })],
+    }
+    expect(q4("e1", o)).toBe(1200)
+  })
+  it("shares a month without hours by planned days, the last contract taking the remainder", () => {
+    const f = contract({ id: "e2", startMonth: "2026-10", endMonth: "2026-12", defaultDaysPerMonth: 8 })
+    const o = { engagements: [{ ...e1, defaultDaysPerMonth: 4 }, f], timecards: [], invoices: [invoice({ yearMonth: "2026-11", amount: 1000 })] }
+    expect([q4("e1", o), q4("e2", o)]).toEqual([333.33, 666.67])
+  })
+  it("loses no cent when equal contracts split an invoice", () => {
+    const three = ["e1", "e2", "e3"].map((id) => contract({ id, startMonth: "2026-10", endMonth: "2026-12" }))
+    const o = { engagements: three, timecards: three.map((e) => hours(e.id, "2026-10-05", 8)), invoices: [invoice({ yearMonth: "2026-10", amount: 1000 })] }
+    expect(["e1", "e2", "e3"].map((id) => q4(id, o))).toEqual([333.33, 333.33, 333.34])
+  })
+})
+
+describe("what the timeline leaves out or counts differently", () => {
+  it("leaves out a closed contract with no end month and no hours, in any window", () => {
+    const dead = contract({ id: "d", isActive: false })
+    const closedEarly = contract({ id: "x", isActive: false, startMonth: "2027-02" })
+    for (const from of ["2026-07", "2020-01"]) expect(contractTimeline(input({ from, engagements: [dead, closedEarly] })).bars).toEqual([])
+  })
+  it("reads an hourly contract's cap in days and marks it nearly full", () => {
+    const h = contract({ id: "h", startMonth: "2026-09", endMonth: "2026-12", contractedDays: 10, unit: "hour", dailyRate: 800 } as Partial<Engagement> & { id: string })
+    const b = bar({ engagements: [h], timecards: [hours("h", "2026-10-05", 76)] }, "h")
+    expect(b).toMatchObject({ state: "full", used: 9.5, total: 10, fill: 0.95, rate: "€100/h" })
+  })
+  it("shows every quarter a long contract touches, with window-only totals", () => {
+    const long = contract({ id: "l", startMonth: "2025-01", endMonth: "2027-12", defaultDaysPerMonth: 2 })
+    const b = bar({ engagements: [long], timecards: [hours("l", "2025-03-05", 80), hours("l", "2026-10-05", 8)] }, "l")
+    expect(b.quarters.map((q) => q.label)).toEqual(["Q3 2026", "Q4 2026", "Q1 2027", "Q2 2027"])
+    expect(b.used).toBe(11)
+    expect(b.sum).toMatchObject({ planned: 24, logged: 1 })
+  })
+})
+
 describe("opportunities", () => {
   it("draw from the expected start for the estimated months, with their stage", () => {
     const b = bar({ opportunities: [opportunity({ id: "o1" })] }, "o1")
