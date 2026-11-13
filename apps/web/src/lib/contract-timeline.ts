@@ -92,8 +92,10 @@ export interface TimelineBar extends Span {
   used: number
   /** Days it is contracted for, amendments included; null = no ceiling. */
   total: number | null
-  /** Logged of contracted; with no ceiling, logged of planned in the window. null when unknowable. */
+  /** Logged of contracted; with no ceiling, logged of planned to date, all time. null when unknowable. */
   fill: number | null
+  /** Days planned from its first planned or logged month up to and including this month (a contract with no ceiling). */
+  plannedToDate: number
   /** An opportunity: its stage and its estimate in days. */
   stage: string | null
   estimate: number | null
@@ -163,7 +165,14 @@ export function contractTimeline(input: TimelineInput): { bars: TimelineBar[]; s
   const clientName = new Map(input.clients.map((c) => [c.id, c.name]))
 
   // The Plan's grid, over the window and this quarter, as the Plan burns it.
-  const gridFrom = [months[0], thisQuarter.months[0]].sort()[0]
+  // A contract with no ceiling fills up to today, so the grid also reaches back to each contract's first month.
+  const firstAlloc = new Map<string, string>()
+  for (const a of input.allocations) if (a.yearMonth < (firstAlloc.get(a.engagementId) ?? "9")) firstAlloc.set(a.engagementId, a.yearMonth)
+  const firstHour = new Map<string, string>()
+  for (const t of input.timecards) if (t.date <= today && t.date.slice(0, 7) < (firstHour.get(t.engagementId) ?? "9")) firstHour.set(t.engagementId, t.date.slice(0, 7))
+  const firstMonth = (e: Engagement, logged: string | undefined): string | null =>
+    [e.startMonth, logged, firstAlloc.get(e.id)].filter((x): x is string => !!x).sort()[0] ?? null
+  const gridFrom = [months[0], thisQuarter.months[0], ...engagements.map((e) => firstMonth(e, firstHour.get(e.id)) ?? "9")].sort()[0]
   const gridLast = [months.at(-1)!, thisQuarter.months[2]].sort().at(-1)!
   const planned = new Map<string, number>()
   for (const c of resolveAllocationGrid({
@@ -269,11 +278,14 @@ export function contractTimeline(input: TimelineInput): { bars: TimelineBar[]; s
     if (!span) continue
     const quarters = quarterLines(e.id, span)
     const sum = sumOf(quarters)
-    const fill = total !== null ? (total > 0 ? used / total : null) : sum.fill
+    // Planned to date counts the whole current month: the ceiling of what could be logged by today (no day-proration helper exists).
+    const first = firstMonth(e, firstLogged.get(e.id))
+    const plannedToDate = first === null ? 0 : round2(plannedIn(e.id, monthsFrom(first, Math.max(0, differenceInCalendarMonths(parseYearMonth(today.slice(0, 7)), parseYearMonth(first)) + 1))))
+    const fill = total !== null ? (total > 0 ? used / total : null) : plannedToDate > 0 ? used / plannedToDate : null
     const state: BarState = ended ? "ended" : fill !== null && total !== null && fill >= NEARLY_FULL ? "full" : e.endMonth === null ? "open" : "active"
     bars.push({
       ...span, id: e.id, kind: "contract", clientId: e.clientId, clientName: clientName.get(e.clientId) ?? "Unknown client",
-      name: engagementLabel(e), state, start, end, used, total, fill, stage: null, estimate: null, rate: rateIn(e.dailyRate, contractUnit(e)),
+      name: engagementLabel(e), state, start, end, used, total, fill, plannedToDate, stage: null, estimate: null, rate: rateIn(e.dailyRate, contractUnit(e)),
       solution: solutionFor({ type: "contract", id: e.id }, input.solutions, opportunities), quarters, sum,
     })
   }
@@ -292,7 +304,7 @@ export function contractTimeline(input: TimelineInput): { bars: TimelineBar[]; s
     const empty: QuarterLine = { label: "Total", planned: 0, logged: 0, invoiced: null, fill: null }
     bars.push({
       ...span, id: o.id, kind: "opportunity", clientId: o.clientId, clientName: clientName.get(o.clientId) ?? "Unknown client",
-      name: o.title, state: "opportunity", start, end, used: 0, total: null, fill: null, stage: STAGE_LABELS[o.stage], estimate, rate: null,
+      name: o.title, state: "opportunity", start, end, used: 0, total: null, fill: null, plannedToDate: 0, stage: STAGE_LABELS[o.stage], estimate, rate: null,
       solution: solutionFor({ type: "opportunity", id: o.id }, input.solutions, opportunities), quarters: [], sum: empty,
     })
   }

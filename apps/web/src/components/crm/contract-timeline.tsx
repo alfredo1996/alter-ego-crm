@@ -15,7 +15,7 @@ import { cn } from "@alter-ego/ui/utils"
 import { format } from "date-fns"
 import { ChevronLeft, ChevronRight } from "lucide-react"
 import Link from "next/link"
-import { useRef, useState, useSyncExternalStore } from "react"
+import { useCallback, useRef, useState, useSyncExternalStore } from "react"
 
 import { useAllocations } from "@/hooks/use-allocations"
 import { useAuth } from "@/hooks/use-auth"
@@ -83,6 +83,19 @@ function afterWord(b: TimelineBar): string {
   if (b.state === "full") return `${percent(b.fill ?? 1)} · nearly full`
   if (b.state === "opportunity" || b.state === "open") return ""
   return b.fill === null ? "" : percent(b.fill)
+}
+
+/**
+ * On first mount of the scroller, bring the Today label into view (a phone shows a fraction of the 760px
+ * grid; a desktop fits it, so nothing moves). Jumps, never animates, so reduced motion needs no case of its own.
+ */
+function useScrollToToday() {
+  return useCallback((scroller: HTMLElement | null) => {
+    const label = scroller?.querySelector<HTMLElement>("[data-today]")
+    if (!scroller || !label) return
+    const at = label.getBoundingClientRect().left - scroller.getBoundingClientRect().left + scroller.scrollLeft
+    scroller.scrollLeft = Math.max(0, at - scroller.clientWidth * 0.6)
+  }, [])
 }
 
 const phoneQuery = "(max-width: 767px)"
@@ -219,7 +232,7 @@ function BarDetail({ bar, health, withInvoiced, withSolutions, sheet }: { bar: T
               <span>
                 {bar.total !== null
                   ? `${num(bar.used)} of ${num(bar.total)} days logged${left ? ` · ${num(left)} left` : ""}`
-                  : `No ceiling: ${num(bar.sum.logged)} of ${num(bar.sum.planned)} planned days logged`}
+                  : `No ceiling: ${num(bar.used)} of ${num(bar.plannedToDate)} planned days logged`}
               </span>
               <span className="font-semibold text-foreground">{percent(bar.fill)}</span>
             </div>
@@ -308,6 +321,7 @@ export function ContractTimeline() {
   const [picked, setPicked] = useState<string | null>(null)
   const opener = useRef<HTMLElement | null>(null)
   const phone = usePhone()
+  const scrollToToday = useScrollToToday()
 
   const gate = pageState([
     clientsQuery, engagementsQuery, opportunitiesQuery, allocationsQuery, timecardsQuery, meetingsQuery,
@@ -405,7 +419,7 @@ export function ContractTimeline() {
         />
       ) : (
         <section aria-label="Timeline" className="overflow-hidden rounded-xl border bg-card shadow-xs">
-          <div className="overflow-x-auto">
+          <div ref={scrollToToday} className="overflow-x-auto">
             <div className="min-w-[760px] lg:min-w-0">
               <div className="grid grid-cols-[168px_minmax(0,1fr)] bg-surface-subtle sm:grid-cols-[280px_minmax(0,1fr)]">
                 <div className="sticky left-0 z-10 flex items-end bg-surface-subtle px-4 py-3 text-xs font-semibold tracking-[0.04em] text-muted-foreground">
@@ -429,6 +443,7 @@ export function ContractTimeline() {
                   </div>
                   {todayLeft !== null && (
                     <span
+                      data-today
                       className="absolute bottom-0 -translate-x-1/2 rounded bg-destructive px-1.5 py-px text-[11px] font-semibold text-destructive-foreground"
                       style={{ left: `${todayLeft * 100}%` }}
                     >

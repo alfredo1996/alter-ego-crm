@@ -96,6 +96,26 @@ describe("a contract's state and fill", () => {
     expect(contractTimeline(input({ engagements: [e({ startMonth: "2025-01", endMonth: "2025-06" })] })).bars).toEqual([]))
 })
 
+describe("a contract with no ceiling fills up to today", () => {
+  const open = (o: Partial<Engagement> = {}) => contract({ id: "e1", startMonth: "2026-06", endMonth: null, contractedDays: null, defaultDaysPerMonth: 10, ...o })
+  // Jun..Nov planned 10 a month = 60 days to date; 32 days logged.
+  const cards = [hours("e1", "2026-06-10", 12 * 8), hours("e1", "2026-09-10", 20 * 8)]
+  it("is logged over planned to date, all time", () => {
+    const b = bar({ engagements: [open()], timecards: cards }, "e1")
+    expect(b).toMatchObject({ used: 32, plannedToDate: 60 })
+    expect(b.fill).toBeCloseTo(32 / 60)
+  })
+  it("does not move with Earlier or Later", () => {
+    const fills = ["2026-01", "2026-07", "2027-01"].map((from) => bar({ from, engagements: [open()], timecards: cards }, "e1").fill)
+    expect(fills).toEqual([fills[0], fills[0], fills[0]])
+    expect(fills[0]).toBeCloseTo(32 / 60)
+  })
+  it("a contract with a cap keeps logged of contracted", () => {
+    const b = bar({ engagements: [open({ contractedDays: 100 })], timecards: cards }, "e1")
+    expect(b).toMatchObject({ total: 100, fill: 0.32 })
+  })
+})
+
 describe("the quarter breakdown", () => {
   const e = contract({ id: "e1", startMonth: "2026-09", endMonth: "2026-12", defaultDaysPerMonth: 5, contractedDays: 40 })
   const allocations = [{ id: "a", userId: "u", engagementId: "e1", yearMonth: "2026-11", days: 7, createdAt: at, updatedAt: at }] as Allocation[]

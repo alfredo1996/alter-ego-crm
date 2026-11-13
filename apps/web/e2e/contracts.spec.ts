@@ -99,4 +99,15 @@ test.describe("Contracts", () => {
     await timeline.locator(".overflow-x-auto").evaluate((el) => { el.scrollLeft = 200 })
     expect((await name.boundingBox())!.x).toBe(x)
   })
+
+  test("on a phone the timeline opens with the Today line in view", async ({ page, isMobile }) => {
+    test.skip(!isMobile, "a phone behaviour")
+    await seed(page)
+    await navigateTo(page, "Contracts", "/contracts")
+    const timeline = page.getByRole("region", { name: "Timeline" })
+    const scroller = (await timeline.locator(".overflow-x-auto").boundingBox())!
+    const today = (await timeline.locator("[data-today]").boundingBox())!
+    expect(today.x).toBeGreaterThanOrEqual(scroller.x + 168)
+    expect(today.x + today.width).toBeLessThanOrEqual(scroller.x + scroller.width)
+  })
 })
