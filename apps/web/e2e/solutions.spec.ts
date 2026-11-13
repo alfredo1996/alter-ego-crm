@@ -113,10 +113,10 @@ test.describe("Solutions", () => {
     }
     if (isMobile) await noSideScroll(page)
 
-    // Back on the catalog by the breadcrumb, the card says how much is written.
+    // Back on the catalog by the breadcrumb, the solution is a row of it.
     await main.getByRole("link", { name: "Back to Solutions" }).click()
     await expect(page).toHaveURL("/solutions")
-    await expect(page.getByRole("article", { name: NAME })).toContainText("2/7")
+    await expect(page.getByRole("article", { name: NAME })).toBeVisible()
     if (isMobile) await noSideScroll(page)
 
     // "Reload": away to Clients and back through its link, the list read again.
@@ -181,7 +181,7 @@ test.describe("Solutions", () => {
     await main.getByRole("link", { name: "Back to Solutions" }).click()
     await ask.getByRole("button", { name: "Discard Changes" }).click()
     await expect(page).toHaveURL("/solutions")
-    await expect(page.getByRole("article", { name: NAME })).toContainText("0/7")
+    await expect(page.getByRole("article", { name: NAME })).toBeVisible()
   })
 
   test("the road: add three steps, make the second Now, finish it, reorder, and a reload keeps it", async ({ page, isMobile }) => {
@@ -330,5 +330,57 @@ test.describe("Solutions", () => {
     await journal.getByRole("button", { name: "Calls" }).click()
     await expect(journal.getByRole("listitem")).toHaveText([/Call: Third data drop reviewed/])
     await expect(journal.getByText("Loading rewritten as idempotent Cypher.")).toBeHidden()
+  })
+
+  test("presents the list: no sidebar, no edit controls, kept by the URL, and Stop restores the page", async ({ page, isMobile }) => {
+    const clientId = await seedClient(page)
+    await page.evaluate(async (clientId) => {
+      const backend = (window as Window & { __mockBackend?: BackendAdapter }).__mockBackend!
+      const u = (await backend.auth.getCurrentUser())!.id
+      await backend.db.createSolution(u, {
+        clientId,
+        name: "Guest 360",
+        status: "building",
+        target: "One guest record on the front desk's screen.",
+        steps: [
+          { title: "Proof of concept", state: "done", fromMonth: "2026-08", toMonth: "2026-08", paidBy: null, goal: null, outcome: "15 questions answered", doneOn: "2026-09-12" },
+          { title: "MVP on the client's server", state: "now", fromMonth: "2026-10", toMonth: null, paidBy: null, goal: null, outcome: null, doneOn: null },
+          { title: "Front-desk guest card", state: "next", fromMonth: "2027-01", toMonth: null, paidBy: null, goal: null, outcome: null, doneOn: null },
+        ],
+      })
+    }, clientId)
+    await navigateTo(page, "Solutions", "/solutions")
+    const main = page.getByRole("main")
+    const row = main.getByRole("article", { name: "Guest 360" })
+    await expect(row).toContainText("Now: MVP on the client's server (step 2 of 3)")
+    await expect(row).toContainText("Next: Front-desk guest card")
+    await expect(main.getByRole("button", { name: "New Solution" })).toBeVisible()
+    if (isMobile) await noSideScroll(page)
+
+    await main.getByRole("button", { name: "Present" }).click()
+    await expect(page).toHaveURL("/solutions?present=1")
+    await expect(main.getByText(/^Presenting:/)).toBeVisible()
+    await expect(main.getByRole("button", { name: "New Solution" })).toHaveCount(0)
+    await expect(page.locator("aside")).toHaveCount(0)
+    await expect(page.getByRole("button", { name: /open navigation/i })).toHaveCount(0)
+    // The row keeps the page presenting, and the page itself has no edit control.
+    await row.getByRole("link", { name: "Guest 360" }).click()
+    await expect(page).toHaveURL(/\/solutions\/[^/?]+\?present=1$/)
+    await expect(main.getByRole("heading", { level: 1, name: "Guest 360" })).toBeVisible()
+    for (const name of ["Log Work", "Edit Details", "More actions", "Add Step"]) await expect(main.getByRole("button", { name })).toHaveCount(0)
+    if (isMobile) await noSideScroll(page)
+    await main.getByRole("link", { name: "Back to Solutions" }).click()
+    await expect(page).toHaveURL("/solutions?present=1")
+
+    // A full load of the link (the mock backend signs out and empties on one: sign in to it again): the URL alone keeps it presenting.
+    await signIn(page, "/solutions?present=1")
+    await expect(page.getByRole("main").getByText(/^Presenting:/)).toBeVisible()
+    await expect(page.locator("aside")).toHaveCount(0)
+
+    await page.getByRole("button", { name: "Stop Presenting" }).click()
+    await expect(page).toHaveURL("/solutions")
+    await expect(page.getByText(/^Presenting:/)).toHaveCount(0)
+    if (isMobile) await expect(page.getByRole("button", { name: /open navigation/i })).toBeVisible()
+    else await expect(page.locator("aside")).toBeVisible()
   })
 })

@@ -7,11 +7,11 @@
 import { formatYearMonth } from "@alter-ego/kernel/dates"
 import { format } from "date-fns"
 
-import { contractUsage } from "@/lib/engagements"
-import { isOpen } from "@/lib/opportunities"
+import { contractUnit, contractUsage, countIn, inContractUnit, isOverBudget } from "@/lib/engagements"
+import { STAGE_LABELS, isOpen } from "@/lib/opportunities"
 import { SOLUTION_KIND_SECTIONS, SOLUTION_SECTIONS, solutionStepsSchema } from "@/types/schemas"
 
-import type { Engagement, Opportunity, Solution, Timecard, SolutionKind, SolutionSectionKey, SolutionStatus, SolutionStep, SolutionStepPayer } from "@/types"
+import type { Engagement, JournalEntry, Meeting, Opportunity, Solution, Timecard, SolutionKind, SolutionSectionKey, SolutionStatus, SolutionStep, SolutionStepPayer } from "@/types"
 
 /** The solution's own lifecycle, in order, with each status's label and pill tone. */
 export const SOLUTION_STATUS: Record<SolutionStatus, { label: string; tone: "info" | "warning" | "success" | "neutral" }> = {
@@ -27,6 +27,8 @@ export const SOLUTION_STATUSES = Object.keys(SOLUTION_STATUS) as SolutionStatus[
 export interface SolutionFilters {
   client: string | null
   status: SolutionStatus | null
+  /** ?kind=: Product or Advisory. */
+  kind?: SolutionKind | null
   stack: string | null
   /** The one search: the page's box (?q=) and MCP list_solutions' query. */
   q?: string | null
@@ -38,12 +40,13 @@ export function solutionFilters(params: URLSearchParams): SolutionFilters {
   return {
     client: params.get("client") || null,
     status: status && SOLUTION_STATUSES.includes(status) ? status : null,
+    kind: ["product", "advisory"].includes(params.get("kind") ?? "") ? (params.get("kind") as SolutionKind) : null,
     stack: params.get("stack")?.trim().toLowerCase() || null,
     q: params.get("q")?.trim() || null,
   }
 }
 
-/** The solutions the filters leave, the most recently updated first. The search reads the name, domain, stack and every section. */
+/** The solutions the filters leave, the most recently updated first. The search reads the name, domain, target, stack and every section. */
 export function filterSolutions(solutions: Solution[], f: SolutionFilters): Solution[] {
   const q = f.q?.toLowerCase()
   return solutions
@@ -51,8 +54,9 @@ export function filterSolutions(solutions: Solution[], f: SolutionFilters): Solu
       (s) =>
         (!f.client || s.clientId === f.client) &&
         (!f.status || s.status === f.status) &&
+        (!f.kind || s.kind === f.kind) &&
         (!f.stack || s.stack.includes(f.stack)) &&
-        (!q || [s.name, s.domain, ...s.stack, ...Object.values(s.sections)].some((text) => text?.toLowerCase().includes(q))),
+        (!q || [s.name, s.domain, s.target, ...s.stack, ...Object.values(s.sections)].some((text) => text?.toLowerCase().includes(q))),
     )
     .sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime())
 }
@@ -102,6 +106,59 @@ export function filledSections(solution: Pick<Solution, "sections">): number {
 /** The step the work is on now, if any: a solution has at most one. */
 export function nowStep(steps: SolutionStep[]): SolutionStep | undefined {
   return steps.find((s) => s.state === "now")
+}
+
+/**
+ * One row of the Solutions list, read off the road: steps done of the total, the Now step, and what comes
+ * after it (the next open step, "The target" after the last). Every step done is Reached: the last day
+ * a step was marked Done and its outcome.
+ */
+export function roadRow(steps: SolutionStep[], opportunities: Pick<Opportunity, "id" | "stage" | "engagementId">[] = []) {
+  const done = steps.filter((s) => s.state === "done").length
+  const reached = steps.length > 0 && done === steps.length
+  const now = steps.findIndex((s) => s.state === "now")
+  const after = steps.find((s, i) => i > now && s.state !== "done")
+  const last = steps[steps.length - 1]
+  // An open opportunity behind the next step names its stage: "Front-desk guest card, in Proposal".
+  const payer = after && stepContract(after, opportunities)
+  const opportunity = payer?.type === "opportunity" ? opportunities.find((o) => o.id === payer.id) : undefined
+  const stage = opportunity && isOpen(opportunity as Opportunity) ? `, in ${STAGE_LABELS[opportunity.stage]}` : ""
+  return {
+    done,
+    total: steps.length,
+    reached,
+    reachedOn: reached ? steps.map((s) => s.doneOn ?? "").sort().pop() || null : null,
+    result: reached ? last.outcome : null,
+    now: now >= 0 ? { number: now + 1, title: steps[now].title } : null,
+    next: reached || steps.length === 0 ? null : after ? `${after.title}${stage}` : now >= 0 ? "The target" : null,
+  }
+}
+
+/** The solution's own contract and the contracts its steps follow, once each: their meetings are its calls. */
+export function solutionContractIds(solution: Pick<Solution, "engagementId" | "steps">, opportunities: Pick<Opportunity, "id" | "engagementId">[]): string[] {
+  return [
+    ...new Set([
+      ...(solution.engagementId ? [solution.engagementId] : []),
+      ...solution.steps.flatMap((x) => {
+        const p = stepContract(x, opportunities)
+        return p?.type === "contract" ? [p.id] : []
+      }),
+    ]),
+  ]
+}
+
+/** "YYYY-MM-DD" of the newest journal entry of the solution or meeting of its contracts; null when there is none. */
+export function lastActivity(
+  solutionId: string,
+  contractIds: string[],
+  journal: Pick<JournalEntry, "solutionId" | "date">[],
+  meetings: Pick<Meeting, "engagementId" | "date">[],
+): string | null {
+  const days = [
+    ...journal.filter((e) => e.solutionId === solutionId).map((e) => e.date),
+    ...meetings.filter((m) => m.engagementId && contractIds.includes(m.engagementId)).map((m) => m.date),
+  ]
+  return days.sort().pop() ?? null
 }
 
 /** The index of the step a number (1-based) or a title (any case) names; -1 when there is none or the title is shared. */
@@ -205,6 +262,30 @@ export function pipelineSteps(
     const opportunity = payer?.type === "opportunity" ? opportunities.find((o) => o.id === payer.id) : undefined
     return opportunity && isOpen(opportunity as Opportunity) ? [{ number: i + 1, step, opportunity }] : []
   })
+}
+
+/**
+ * The row's days column: the days (hours on an hourly contract) the Now step's contract has used, or the
+ * solution's own when no step is Now, then the steps an open opportunity pays for: "6.5 of 11 days · 2 steps
+ * in the pipeline". Either part alone when the other is missing; null with neither.
+ */
+export function usageSummary(
+  solution: Pick<Solution, "engagementId" | "steps">,
+  engagements: (Parameters<typeof stepUsage>[0] & Parameters<typeof contractUnit>[0])[],
+  opportunities: Pick<Opportunity, "id" | "stage" | "engagementId">[],
+  timecards: Pick<Timecard, "engagementId" | "date" | "hours">[],
+  today: string,
+): string | null {
+  const now = nowStep(solution.steps)
+  const payer = now && stepContract(now, opportunities)
+  const id = payer?.type === "contract" ? payer.id : solution.engagementId
+  const contract = engagements.find((e) => e.id === id)
+  const usage = contract && stepUsage(contract, timecards, today)
+  const unit = contract ? contractUnit(contract) : "day"
+  const days = usage && `${inContractUnit(usage.used, unit)} of ${countIn(usage.total, unit)}${isOverBudget(usage) ? ", over budget" : ""}`
+  const n = pipelineSteps(solution.steps, opportunities).length
+  const pipeline = n > 0 ? `${n} ${n === 1 ? "step" : "steps"} in the pipeline` : null
+  return [days, pipeline].filter(Boolean).join(" · ") || null
 }
 
 /** The list with step `from` moved to position `to`; out of range, the list as it was. */

@@ -7,23 +7,27 @@ import {
   filledSections,
   filterSolutions,
   historyEntries,
+  lastActivity,
   lineLabel,
   missingSections,
   moveStep,
   nowStep,
   pipelineSteps,
+  roadRow,
   saveStep,
   sectionsFor,
   stepContract,
   stepUsage,
+  usageSummary,
   stepWhen,
+  solutionContractIds,
   solutionFilters,
   solutionNameTaken,
   usedStack,
 } from "@/lib/solutions"
 import { normalizeSolutionSections } from "@/types/schemas"
 
-import type { Solution, SolutionStep } from "@/types"
+import type { JournalEntry, Meeting, Solution, SolutionStep } from "@/types"
 
 /** Made-up data: Nordwind Retail S.p.A.'s product knowledge graph and a second, older solution. */
 const solution = (o: Partial<Solution> & Pick<Solution, "id">): Solution => ({
@@ -38,10 +42,15 @@ const GRAPH = solution({
 const SEARCH = solution({ id: "search", clientId: "c2", stack: ["kafka"], updatedAt: new Date(2026, 9, 5) })
 const OLD = solution({ id: "old", status: "retired", stack: ["neo4j"], updatedAt: new Date(2025, 5, 1) })
 const ALL = [GRAPH, OLD, SEARCH]
-const none = { client: null, status: null, stack: null, q: null }
+const none = { client: null, status: null, kind: null, stack: null, q: null }
 const ids = (list: Solution[]) => list.map((s) => s.id)
 
 describe("filterSolutions", () => {
+  it("keeps one kind", () => {
+    const mixed = [solution({ id: "p", kind: "product" }), solution({ id: "a", kind: "advisory" })]
+    expect(ids(filterSolutions(mixed, { ...none, kind: "advisory" }))).toEqual(["a"])
+  })
+
   it("lists every solution, the most recently updated first", () => {
     expect(ids(filterSolutions(ALL, none))).toEqual(["search", "graph", "old"])
   })
@@ -65,20 +74,21 @@ describe("filterSolutions", () => {
     expect(ids(filterSolutions(list, { ...none, q: "threshold" }))).toEqual(["written"])
     expect(ids(filterSolutions(list, { ...none, q: "retail" }))).toEqual(["written"])
     expect(ids(filterSolutions(list, { ...none, q: "GDS" }))).toEqual(["graph"])
+    expect(ids(filterSolutions([...list, solution({ id: "t", target: "One guest record on screen" })], { ...none, q: "GUEST RECORD" }))).toEqual(["t"])
     expect(ids(filterSolutions(list, { ...none, q: "kafka", client: "c1" }))).toEqual(["graph"])
     expect(filterSolutions(list, { ...none, q: "salesforce" })).toEqual([])
   })
 })
 
 describe("solutionFilters", () => {
-  it("reads the four params, a tag in lowercase and the search trimmed", () => {
-    expect(solutionFilters(new URLSearchParams("client=c1&status=building&stack=Neo4j&q=+Graph+"))).toEqual({
-      client: "c1", status: "building", stack: "neo4j", q: "Graph",
+  it("reads the five params, a tag in lowercase and the search trimmed", () => {
+    expect(solutionFilters(new URLSearchParams("client=c1&status=building&kind=advisory&stack=Neo4j&q=+Graph+"))).toEqual({
+      client: "c1", status: "building", kind: "advisory", stack: "neo4j", q: "Graph",
     })
   })
 
   it("reads a missing, empty or unknown value as no filter", () => {
-    expect(solutionFilters(new URLSearchParams("client=&status=done&q=%20"))).toEqual(none)
+    expect(solutionFilters(new URLSearchParams("client=&status=done&kind=gadget&q=%20"))).toEqual(none)
   })
 })
 
@@ -271,6 +281,40 @@ describe("stepUsage", () => {
   })
 })
 
+describe("usageSummary", () => {
+  const e1 = { id: "e1", contractedDays: 11, unit: "day" as const }
+  const hourly = { id: "e2", contractedDays: 5, unit: "hour" as const }
+  const uncapped = { id: "e3", contractedDays: null }
+  const timecards = [
+    { engagementId: "e1", date: "2026-10-05", hours: 52 },
+    { engagementId: "e2", date: "2026-10-05", hours: 8 },
+    { engagementId: "e3", date: "2026-10-05", hours: 8 },
+  ]
+  const opps = [
+    { id: "o1", stage: "proposal", engagementId: null },
+    { id: "o2", stage: "lead", engagementId: null },
+    { id: "o3", stage: "lost", engagementId: null },
+  ] as never
+  const paid = (title: string, state: SolutionStep["state"], paidBy: SolutionStep["paidBy"]) => stp(title, state, { paidBy })
+  const summary = (s: Solution, engagements: never[] = [e1, hourly, uncapped] as never[]) => usageSummary(s, engagements, opps, timecards, "2026-11-10")
+
+  it.each([
+    ["the days used and the steps in the pipeline", solution({ id: "a", engagementId: "e1", steps: [paid("A", "now", { type: "contract", id: "e1" }), paid("B", "next", { type: "opportunity", id: "o1" }), paid("C", "later", { type: "opportunity", id: "o2" }), paid("D", "later", { type: "opportunity", id: "o3" })] }), "6.5 of 11 days · 2 steps in the pipeline"],
+    ["one step, singular", solution({ id: "b", engagementId: "e1", steps: [paid("B", "next", { type: "opportunity", id: "o1" })] }), "6.5 of 11 days · 1 step in the pipeline"],
+    ["the days alone with nothing in the pipeline", solution({ id: "c", engagementId: "e1" }), "6.5 of 11 days"],
+    ["hours on an hourly contract, followed from the Now step", solution({ id: "d", engagementId: "e1", steps: [paid("A", "now", { type: "contract", id: "e2" })] }), "8 of 40 hours"],
+    ["the pipeline alone with no contract", solution({ id: "e", steps: [paid("B", "next", { type: "opportunity", id: "o1" })] }), "1 step in the pipeline"],
+    ["the pipeline alone on a contract with no cap", solution({ id: "f", engagementId: "e3", steps: [paid("B", "next", { type: "opportunity", id: "o1" })] }), "1 step in the pipeline"],
+    ["nothing with neither", solution({ id: "g" }), null],
+  ])("reads %s", (_name, s, expected) => {
+    expect(summary(s)).toBe(expected)
+  })
+
+  it("says so in words when the days are over the contract's", () => {
+    expect(usageSummary(solution({ id: "h", engagementId: "e1" }), [{ ...e1, contractedDays: 5 }] as never[], opps, timecards, "2026-11-10")).toBe("6.5 of 5 days, over budget")
+  })
+})
+
 describe("pipelineSteps", () => {
   const opps = [
     { id: "o1", stage: "proposal", engagementId: null },
@@ -370,5 +414,59 @@ describe("saveStep", () => {
   it("reports the schema's complaint, naming nothing written", () => {
     expect(saveStep(road, 2, draft({ title: "C", state: "next", toMonth: "2026-01" }), "2026-05-20")).toEqual({ errors: ["The end is before the start"] })
     expect(saveStep(road, 2, draft({ title: " ", state: "next" }), "2026-05-20")).toEqual({ errors: ["Name the step"] })
+  })
+})
+
+describe("roadRow", () => {
+  const st = (title: string, state: SolutionStep["state"], over: Partial<SolutionStep> = {}): SolutionStep => ({
+    title, state, fromMonth: "2026-10", toMonth: null, paidBy: null, goal: null, outcome: null, doneOn: null, ...over,
+  })
+  const none = { reachedOn: null, result: null }
+
+  it.each([
+    ["Now and the step after it", [st("A", "done"), st("B", "now"), st("C", "next"), st("D", "later")], { done: 1, total: 4, now: { number: 2, title: "B" }, next: "C", reached: false }],
+    ["the target when Now is the last step", [st("A", "done"), st("B", "now")], { done: 1, total: 2, now: { number: 2, title: "B" }, next: "The target", reached: false }],
+    ["the first open step when none is Now", [st("A", "done"), st("B", "next"), st("C", "later")], { done: 1, total: 3, now: null, next: "B", reached: false }],
+    ["nothing on a solution with no steps", [], { done: 0, total: 0, now: null, next: null, reached: false }],
+  ])("reads %s", (_name, steps, expected) => {
+    expect(roadRow(steps)).toEqual({ ...none, ...expected })
+  })
+
+  it("names the stage of the open opportunity behind the next step, and only that", () => {
+    const opps = [{ id: "o1", stage: "proposal", engagementId: null }, { id: "o2", stage: "lost", engagementId: null }] as never
+    const next = (paidBy: SolutionStep["paidBy"]) => roadRow([st("A", "now"), st("B", "next", { paidBy })], opps).next
+    expect(next({ type: "opportunity", id: "o1" })).toBe("B, in Proposal")
+    expect(next({ type: "opportunity", id: "o2" })).toBe("B")
+    expect(next({ type: "contract", id: "e1" })).toBe("B")
+    expect(next(null)).toBe("B")
+  })
+
+  it("is reached when every step is done: the last day and the last outcome", () => {
+    const steps = [st("A", "done", { doneOn: "2026-07-02", outcome: "first" }), st("B", "done", { doneOn: "2026-07-20", outcome: "Search is one query" })]
+    expect(roadRow(steps)).toEqual({ done: 2, total: 2, now: null, next: null, reached: true, reachedOn: "2026-07-20", result: "Search is one query" })
+  })
+})
+
+describe("lastActivity", () => {
+  const entry = (solutionId: string, date: string) => ({ solutionId, date }) as JournalEntry
+  const call = (engagementId: string | null, date: string) => ({ engagementId, date }) as Meeting
+
+  it("is the newest day among the solution's entries and its contracts' calls", () => {
+    const journal = [entry("s1", "2026-10-02"), entry("s1", "2026-10-09"), entry("s2", "2026-11-30")]
+    const meetings = [call("e1", "2026-10-05"), call("e2", "2026-12-01"), call(null, "2026-12-02")]
+    expect(lastActivity("s1", ["e1"], journal, meetings)).toBe("2026-10-09")
+    expect(lastActivity("s1", ["e1"], journal, [call("e1", "2026-10-15")])).toBe("2026-10-15")
+  })
+
+  it("is null with neither", () => {
+    expect(lastActivity("s1", ["e1"], [entry("s2", "2026-10-02")], [call("e2", "2026-10-02")])).toBeNull()
+  })
+})
+
+describe("solutionContractIds", () => {
+  it("lists the solution's contract and the contracts its steps follow once, a won opportunity as its contract", () => {
+    const paid = (paidBy: SolutionStep["paidBy"]): SolutionStep => ({ title: "x", state: "next", fromMonth: "2026-10", toMonth: null, paidBy, goal: null, outcome: null, doneOn: null })
+    const s = solution({ id: "s1", engagementId: "e1", steps: [paid({ type: "contract", id: "e1" }), paid({ type: "opportunity", id: "o1" }), paid({ type: "opportunity", id: "o2" }), paid(null)] })
+    expect(solutionContractIds(s, [{ id: "o1", engagementId: "e7" }, { id: "o2", engagementId: null }])).toEqual(["e1", "e7"])
   })
 })

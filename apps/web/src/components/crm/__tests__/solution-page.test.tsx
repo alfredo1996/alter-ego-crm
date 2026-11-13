@@ -25,7 +25,12 @@ const writes = vi.hoisted(() => ({
   deleteJournalEntry: vi.fn(async () => {}),
 }))
 const push = vi.hoisted(() => vi.fn())
-vi.mock("next/navigation", () => ({ useRouter: () => ({ push, replace: vi.fn() }) }))
+const nav = vi.hoisted(() => ({ search: "", replace: vi.fn() }))
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ push, replace: nav.replace }),
+  usePathname: () => "/solutions/s4",
+  useSearchParams: () => new URLSearchParams(nav.search),
+}))
 vi.mock("next/link", () => ({
   default: ({ href, onNavigate, children, ...rest }: { href: string; onNavigate?: (e: { preventDefault: () => void }) => void; children: ReactNode }) => (
     <a
@@ -57,6 +62,8 @@ vi.mock("@/lib/backend", () => ({
 
 // happy-dom never lays out: each observer is told 600 px at once, so the data model graph draws.
 beforeEach(() => {
+  nav.search = ""
+  nav.replace.mockClear()
   push.mockClear()
   Object.values(writes).forEach((w) => w.mockClear())
   vi.stubGlobal(
@@ -631,7 +638,7 @@ describe("the road", () => {
       expect(within(card).getByRole("progressbar", { name: "Days used" })).toHaveAttribute("aria-valuenow", "59")
       expect(within(card).getByText("Runs every night on their server.")).toBeInTheDocument()
       // The date of the last call (a later one that stated no health), then the newest stated health in the app's words.
-      expect(within(card).getByText("Contract Guest MVP · Active · last call 25 Oct 2026")).toBeInTheDocument()
+      expect(within(card).getByText("Contract · Guest MVP · active · last call 25 Oct 2026")).toBeInTheDocument()
       expect(within(card).getByText("Yellow")).toBeInTheDocument()
       expect(within(card).getAllByRole("listitem").map((li) => li.textContent)).toEqual(["Back up and restore12 Nov", "Handover session20 Nov"])
       expect(within(card).getByRole("link", { name: "Open in Tasks" })).toHaveAttribute("href", "/tasks")
@@ -961,6 +968,104 @@ describe("the journal", () => {
       fireEvent.click(screen.getByRole("button", { name: "Delete session of 27 Oct: Loading rewritten as idempotent Cypher." }))
       fireEvent.click(await screen.findByRole("button", { name: "Delete Work Session" }))
       await waitFor(() => expect(writes.deleteJournalEntry.mock.calls[0]).toEqual(["u1", "j1"]))
+    })
+  })
+})
+
+describe("Present", () => {
+  /** A contract without a name reads as its rate: the money Present must hide. */
+  const priced = ROAD
+  const withRate = async (body: () => Promise<void>) => {
+    const stored = DATA.getEngagements
+    DATA.getEngagements = (stored as { id: string }[]).map((e) => (e.id === "e4" ? { ...e, name: null } : e))
+    try {
+      await withSolution(priced, body)
+    } finally {
+      DATA.getEngagements = stored
+    }
+  }
+
+  it("offers Present, which writes ?present=1", async () => {
+    await withRate(async () => {
+      expect(document.body.textContent).toContain("€600")
+      fireEvent.click(button("Present"))
+      expect(nav.replace).toHaveBeenLastCalledWith("/solutions/s4?present=1", { scroll: false })
+    })
+  })
+
+  it("holds no € amount and no way to edit, keeps the way back presenting, and Stop Presenting drops it", async () => {
+    nav.search = "?present=1"
+    await withRate(async () => {
+      expect(document.body.textContent).not.toContain("€")
+      for (const name of [/^Log Work/, /^Edit/, /^Add/, /^Write/, /^More actions/, /^Delete/]) {
+        expect(screen.queryByRole("button", { name })).not.toBeInTheDocument()
+      }
+      expect(screen.getByText(/^Presenting:/)).toBeInTheDocument()
+      expect(screen.getByRole("link", { name: "Back to Solutions" })).toHaveAttribute("href", "/solutions?present=1")
+      // The road shows, but its steps open nothing.
+      expect(screen.getByRole("heading", { level: 2, name: "Roadmap" })).toBeInTheDocument()
+      fireEvent.click(button("Stop Presenting"))
+      expect(nav.replace).toHaveBeenLastCalledWith("/solutions/s4", { scroll: false })
+    })
+  })
+
+  it("shows no days: no usage, no bar, no estimate, on the road, the Now card or the pipeline", async () => {
+    nav.search = "?present=1"
+    await withRate(async () => {
+      expect(document.body.textContent).not.toMatch(/days? used|hours? used|\d+ days?\b/)
+      expect(screen.queryByRole("progressbar")).not.toBeInTheDocument()
+      // What pays stays: the pipeline still names its opportunities.
+      expect(screen.getByRole("heading", { level: 2, name: "Next Steps in the Pipeline" })).toBeInTheDocument()
+    })
+  })
+
+  it("keeps the step cards from opening anything", async () => {
+    nav.search = "?present=1"
+    await withRate(async () => {
+      const road = screen.getByRole("heading", { level: 2, name: "Roadmap" }).closest("section")!
+      const cards = within(road).getAllByRole("button")
+      expect(cards).toHaveLength(ROAD.steps.length)
+      for (const card of cards) expect(card).toBeDisabled()
+      fireEvent.click(cards[0])
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument()
+    })
+  })
+
+  it("lists in Sections only what it shows, so no link points at nothing", async () => {
+    nav.search = "?present=1"
+    await withRate(async () => {
+      const anchors = Array.from(document.querySelectorAll<HTMLAnchorElement>('a[href^="#"]'))
+      for (const a of anchors) expect(document.getElementById(a.getAttribute("href")!.slice(1)), a.getAttribute("href")!).not.toBeNull()
+    })
+  })
+
+  it("cannot be turned on over an open editor or unsaved model edits", async () => {
+    await show()
+    expect(button("Present")).toBeEnabled()
+    fireEvent.click(button("Edit Requirements"))
+    expect(button("Present")).toBeDisabled()
+    expect(button("Present")).toHaveAccessibleDescription("Save or cancel your edits first.")
+    fireEvent.click(button("Cancel"))
+    expect(button("Present")).toBeEnabled()
+    fireEvent.mouseDown(screen.getByRole("tab", { name: "Entities" }))
+    fireEvent.click(button("Add Entity"))
+    expect(button("Present")).toBeDisabled()
+  })
+
+  it("says plainly what is missing, without pointing at controls it hides", async () => {
+    nav.search = "?present=1"
+    await withSolution(solution({ ...ROAD, target: null }), async () => {
+      expect(screen.getByText("No target set")).toBeInTheDocument()
+      expect(document.body.textContent).not.toMatch(/Edit Details|Log Work/)
+    })
+  })
+
+  it("says so too when there are no steps and nothing is logged", async () => {
+    nav.search = "?present=1"
+    await withSolution(solution({ ...ROAD, id: "s7", engagementId: null, steps: [] }), async () => {
+      expect(screen.getByText("No steps yet")).toBeInTheDocument()
+      expect(document.body.textContent).not.toContain("Add the steps")
+      expect(screen.getByText("Nothing logged yet")).toBeInTheDocument()
     })
   })
 })

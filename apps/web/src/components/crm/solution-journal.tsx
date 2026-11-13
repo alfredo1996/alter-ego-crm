@@ -43,10 +43,12 @@ interface Props {
   userId: string | undefined
   today: string
   onEdit: (entry: JournalEntry) => void
+  /** Presenting: no Edit and no Delete. */
+  readOnly?: boolean
 }
 
 /** The Journal: work sessions, decisions, the calls of its contracts and its Done steps, newest first. */
-export function SolutionJournal({ solution, entries, meetings, contractIds, userId, today, onEdit }: Props) {
+export function SolutionJournal({ solution, entries, meetings, contractIds, userId, today, onEdit, readOnly }: Props) {
   const [filter, setFilter] = useState<JournalFilter>("all")
   const [shown, setShown] = useState(PAGE)
   const [deleting, setDeleting] = useState<JournalEntry | null>(null)
@@ -141,6 +143,7 @@ export function SolutionJournal({ solution, entries, meetings, contractIds, user
   }
 
   function entryActions(entry: JournalEntry, what: string) {
+    if (readOnly) return null
     // The day as shown and the start of the text: two entries of one day stay apart.
     const name = `${shortDay(new Date(`${entry.date}T00:00:00`))}: ${entry.text.length > 40 ? `${entry.text.slice(0, 40).trimEnd()}...` : entry.text}`
     return (
@@ -179,7 +182,7 @@ export function SolutionJournal({ solution, entries, meetings, contractIds, user
         ))}
       </div>
       {items.length === 0 ? (
-        <p className="text-sm text-muted-foreground">{EMPTY[filter]}</p>
+        <p className="text-sm text-muted-foreground">{readOnly && filter === "all" ? "Nothing logged yet" : EMPTY[filter]}</p>
       ) : (
         <Timeline items={items} />
       )}
