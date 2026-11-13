@@ -11,15 +11,22 @@ import { StatusPill, TagList } from "@alter-ego/ui/page/status-pill"
 import { StatusTabs } from "@alter-ego/ui/page/status-tabs"
 import { Button } from "@alter-ego/ui/ui/button"
 import { cn } from "@alter-ego/ui/utils"
-import { Plus } from "lucide-react"
+import { format } from "date-fns"
+import { Flag, Plus } from "lucide-react"
 import Link from "next/link"
 import { useRouter, useSearchParams } from "next/navigation"
 import { useEffect, useState } from "react"
 
+import { PresentBanner, PresentButton } from "@/components/crm/present-controls"
 import { SolutionFormDialog } from "@/components/crm/solution-form-dialog"
+import { STEP_MARK } from "@/components/crm/solution-road"
 import { useAuth } from "@/hooks/use-auth"
 import { useClients } from "@/hooks/use-clients"
 import { useEngagements } from "@/hooks/use-engagements"
+import { useJournal } from "@/hooks/use-journal"
+import { useMeetings } from "@/hooks/use-meetings"
+import { useOpportunities } from "@/hooks/use-opportunities"
+import { usePresent } from "@/hooks/use-present"
 import { useSolutions } from "@/hooks/use-solutions"
 import { engagementLabel } from "@/lib/engagements"
 import {
@@ -27,12 +34,16 @@ import {
   SOLUTION_STATUSES,
   contractState,
   filterSolutions,
+  lastActivity,
   missingSections,
+  roadRow,
   sectionsFor,
   shortDay,
+  solutionContractIds,
   solutionFilters,
   usedStack,
 } from "@/lib/solutions"
+
 
 import type { Engagement, Solution } from "@/types"
 
@@ -127,6 +138,118 @@ export function SolutionCard({
   )
 }
 
+/** The contract's own state beside a dot, with no name: the name can be its rate. */
+function ContractState({ contract }: { contract: Engagement | undefined }) {
+  if (!contract) return <StatusDot outline>Pre-sales</StatusDot>
+  return <StatusDot tone={contract.isActive ? "success" : "neutral"}>{contractState(contract)}</StatusDot>
+}
+
+/**
+ * One solution as a row of the list: client, kind and status over the name and the target; the road as a
+ * small track of its steps ending in the flag, with Now and Next (Reached and Result once delivered); then
+ * the last activity, the contract and the stack. Presenting, the contract shows its state alone: its name
+ * can be its rate, and no money figure is on the screen. The name is the row's one control.
+ */
+export function SolutionRow({
+  solution: s,
+  client,
+  contract,
+  activity,
+  href,
+  presenting,
+}: {
+  solution: Solution
+  client: string
+  contract: Engagement | undefined
+  /** "YYYY-MM-DD" of the newest journal entry or call; null = none. */
+  activity: string | null
+  href: string
+  presenting: boolean
+}) {
+  const road = roadRow(s.steps)
+  const titleId = `solution-${s.id}`
+  const trackLabel = road.reached ? `All ${road.total} steps done, target reached` : `${road.done} of ${road.total} steps done`
+  return (
+    <ContentCard labelledBy={titleId} className="grid min-w-0 gap-x-7 gap-y-5 transition-colors hover:border-border-strong motion-reduce:transition-none sm:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)] lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)_minmax(0,0.8fr)]">
+      <div className="flex min-w-0 flex-col gap-2.5">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="min-w-0 text-meta text-muted-foreground [overflow-wrap:anywhere]">{client}</span>
+          <span className="rounded-full border px-2 py-px text-xs font-medium">{s.kind === "advisory" ? "Advisory" : "Product"}</span>
+          <StatusPill tone={SOLUTION_STATUS[s.status].tone}>{SOLUTION_STATUS[s.status].label}</StatusPill>
+        </div>
+        <h2 className="text-lg leading-snug font-semibold">
+          <Link
+            id={titleId}
+            href={href}
+            className={cn(
+              stretchedLink,
+              "rounded-sm [overflow-wrap:anywhere] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-card",
+            )}
+          >
+            {s.name}
+          </Link>
+        </h2>
+        {s.target && (
+          <p className="flex items-start gap-2 text-sm leading-normal text-subtle-foreground">
+            <Flag aria-hidden className="mt-0.5 size-4 shrink-0" />
+            <span className="[overflow-wrap:anywhere]">{s.target}</span>
+          </p>
+        )}
+      </div>
+
+      <div className="flex min-w-0 flex-col gap-3">
+        {road.total > 0 && (
+          <div role="img" aria-label={trackLabel} className="flex items-center">
+            {s.steps.map((step, i) => (
+              <span key={i} className="contents">
+                <span className={cn("size-[18px] shrink-0 rounded-full", STEP_MARK[step.state])} />
+                <span className={cn("h-0.5 min-w-3 flex-1", step.state === "done" ? "bg-foreground" : "bg-border")} />
+              </span>
+            ))}
+            <span className={cn("flex size-6 shrink-0 items-center justify-center rounded-full border", road.reached ? "bg-foreground text-background" : "bg-sidebar")}>
+              <Flag aria-hidden className="size-3" />
+            </span>
+          </div>
+        )}
+        <div className="flex flex-col gap-1 text-sm">
+          {road.reached ? (
+            <>
+              <span>
+                <span className="font-semibold text-success-soft-foreground">Reached:</span> {road.reachedOn ? `Target reached in ${format(new Date(`${road.reachedOn}T00:00:00`), "MMM yyyy")}.` : "Target reached."}
+              </span>
+              {road.result && (
+                <span className="text-subtle-foreground">
+                  <span className="font-medium">Result:</span> {road.result}
+                </span>
+              )}
+            </>
+          ) : (
+            <>
+              {road.now && (
+                <span>
+                  <span className="font-semibold text-warning-soft-foreground">Now:</span> {road.now.title} (step {road.now.number} of {road.total})
+                </span>
+              )}
+              {road.next && (
+                <span className="text-subtle-foreground">
+                  <span className="font-medium">Next:</span> {road.next}
+                </span>
+              )}
+              {!road.now && !road.next && <span className="text-muted-foreground">{road.total === 0 ? "No steps yet" : "No step in progress"}</span>}
+            </>
+          )}
+        </div>
+      </div>
+
+      <div className="flex min-w-0 flex-col gap-1.5 text-[13px] text-subtle-foreground sm:max-lg:col-span-2 lg:col-span-1">
+        <span>{activity ? `Last activity ${shortDay(new Date(`${activity}T00:00:00`))}` : "No activity yet"}</span>
+        {presenting ? <ContractState contract={contract} /> : <Contract contract={contract} />}
+        {s.stack.length > 0 && <TagList items={s.stack} max={4} />}
+      </div>
+    </ContentCard>
+  )
+}
+
 /**
  * The Solutions page: a catalog of every solution built or proposed for a client,
  * newest updated first, searched and narrowed by client, technology and status. The
@@ -139,9 +262,16 @@ export function SolutionCatalog() {
   const solutionsQuery = useSolutions(user?.id)
   const clientsQuery = useClients(user?.id)
   const engagementsQuery = useEngagements(user?.id)
+  const journalQuery = useJournal(user?.id)
+  const meetingsQuery = useMeetings(user?.id)
+  const opportunitiesQuery = useOpportunities(user?.id)
+  const { present, href } = usePresent()
   const { data: solutions = [] } = solutionsQuery
   const { data: clients = [] } = clientsQuery
   const { data: engagements = [] } = engagementsQuery
+  const { data: journal = [] } = journalQuery
+  const { data: meetings = [] } = meetingsQuery
+  const { data: opportunities = [] } = opportunitiesQuery
   const router = useRouter()
   const params = useSearchParams()
   // New Solution; a solution is edited on its own page.
@@ -168,7 +298,7 @@ export function SolutionCatalog() {
     if (legacy) router.replace(`/solutions/${encodeURIComponent(legacy)}`)
   }, [legacy, router])
 
-  const gate = legacy ? <PageLoader /> : pageState([solutionsQuery, clientsQuery, engagementsQuery])
+  const gate = legacy ? <PageLoader /> : pageState([solutionsQuery, clientsQuery, engagementsQuery, journalQuery, meetingsQuery, opportunitiesQuery])
   if (gate) return gate
 
   const filters = { ...solutionFilters(params), q: search.trim() || null }
@@ -192,22 +322,32 @@ export function SolutionCatalog() {
     .map((c) => ({ value: c.id, label: c.name }))
   const stack = usedStack(solutions)
   if (filters.stack && !stack.includes(filters.stack)) stack.push(filters.stack)
-  const newSolution = (
+  const newSolution = present ? undefined : (
     <Button size="lg" onClick={() => setForm(true)}>
       <Plus aria-hidden /> New Solution
     </Button>
   )
+  const activityOf = (s: Solution) => lastActivity(s.id, solutionContractIds(s, opportunities), journal, meetings)
   const showAll = () => {
     setSearch("")
-    go({ client: null, status: null, stack: null, q: null })
+    go({ client: null, status: null, kind: null, stack: null, q: null })
   }
 
   return (
     <div className="flex flex-col gap-6 sm:gap-7">
+      {present && <PresentBanner />}
       <PageHeader
         title="Solutions"
-        subtitle="What you built for each client, ready to reuse in pre-sales."
-        actions={solutions.length > 0 && newSolution}
+        subtitle="Where each client is going, and how far along the road is."
+        actions={
+          solutions.length > 0 &&
+          !present && (
+            <>
+              <PresentButton />
+              {newSolution}
+            </>
+          )
+        }
       />
 
       {solutions.length === 0 ? (
@@ -231,7 +371,7 @@ export function SolutionCatalog() {
                 go({ q })
               },
             }}
-            sheet={{ active: [filters.client, filters.stack].filter(Boolean).length }}
+            sheet={{ active: [filters.client, filters.kind, filters.stack].filter(Boolean).length }}
           >
             <FilterSelect
               label="Client"
@@ -239,6 +379,16 @@ export function SolutionCatalog() {
               value={filters.client}
               options={clientOptions}
               onValueChange={(client) => go({ client })}
+            />
+            <FilterSelect
+              label="Kind"
+              allLabel="All kinds"
+              value={filters.kind ?? null}
+              options={[
+                { value: "product", label: "Product" },
+                { value: "advisory", label: "Advisory" },
+              ]}
+              onValueChange={(kind) => go({ kind })}
             />
             <FilterSelect
               label="Stack"
@@ -273,16 +423,20 @@ export function SolutionCatalog() {
                 }
               />
             ) : (
-              <div className="grid grid-cols-[repeat(auto-fill,minmax(min(300px,100%),1fr))] gap-5">
+              <ol className="flex flex-col gap-3">
                 {visible.map((s) => (
-                  <SolutionCard
-                    key={s.id}
-                    solution={s}
-                    client={clientName.get(s.clientId) ?? "Unknown client"}
-                    contract={contractOf(s)}
-                  />
+                  <li key={s.id}>
+                    <SolutionRow
+                      solution={s}
+                      client={clientName.get(s.clientId) ?? "Unknown client"}
+                      contract={contractOf(s)}
+                      activity={activityOf(s)}
+                      href={href(`/solutions/${s.id}`)}
+                      presenting={present}
+                    />
+                  </li>
                 ))}
-              </div>
+              </ol>
             )}
           </StatusTabs>
         </>

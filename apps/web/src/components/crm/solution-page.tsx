@@ -29,6 +29,7 @@ import { flushSync } from "react-dom"
 
 import { ConfirmDeleteDialog } from "@/components/confirm-delete-dialog"
 import { LogWorkDialog } from "@/components/crm/log-work-dialog"
+import { PresentBanner, PresentButton } from "@/components/crm/present-controls"
 import { SolutionFormDialog } from "@/components/crm/solution-form-dialog"
 import { SolutionGraph } from "@/components/crm/solution-graph"
 import { SolutionJournal } from "@/components/crm/solution-journal"
@@ -40,13 +41,14 @@ import { useEngagements } from "@/hooks/use-engagements"
 import { useJournal } from "@/hooks/use-journal"
 import { useMeetings } from "@/hooks/use-meetings"
 import { useOpportunities } from "@/hooks/use-opportunities"
+import { usePresent } from "@/hooks/use-present"
 import { useDeleteSolution, useSolutions, useUpdateSolution } from "@/hooks/use-solutions"
 import { useTasks } from "@/hooks/use-tasks"
 import { useTimecards } from "@/hooks/use-timecards"
 import { contractUnit, countIn, engagementLabel, inContractUnit, isOverBudget } from "@/lib/engagements"
 import { MEETING_HEALTH, formatMeetingDate, healthByContract, sortMeetings } from "@/lib/meetings"
 import { OPEN_STAGES, STAGE_LABELS, STAGE_TONE } from "@/lib/opportunities"
-import { SOLUTION_STATUS, contractState, historyEntries, lineLabel, moveStep, nowStep, pipelineSteps, sectionsFor, shortDay, stepContract, stepUsage } from "@/lib/solutions"
+import { SOLUTION_STATUS, contractState, historyEntries, lineLabel, moveStep, nowStep, pipelineSteps, sectionsFor, solutionContractIds, shortDay, stepContract, stepUsage } from "@/lib/solutions"
 import { sortTasks } from "@/lib/tasks"
 import {
   MAX_SOLUTION_ENTITIES,
@@ -278,6 +280,7 @@ function SolutionBody({
   journal: JournalEntry[]
 }) {
   const router = useRouter()
+  const { present, href } = usePresent()
   const update = useUpdateSolution(userId)
   const remove = useDeleteSolution(userId)
   /** The sections open for editing, with their text so far; a section absent here shows as text. */
@@ -341,12 +344,7 @@ function SolutionBody({
   const nowTasks = nowContract ? sortTasks(tasks.filter((t) => !t.isDone && t.engagementId === nowContract.id)) : []
   const pipeline = pipelineSteps(solution.steps, opportunities)
   /** The solution's own contract and the contracts its steps follow: their meetings are the Journal's calls. */
-  const journalContracts = [
-    ...new Set([
-      ...(solution.engagementId ? [solution.engagementId] : []),
-      ...solution.steps.flatMap((x) => { const p = stepContract(x, opportunities); return p?.type === "contract" ? [p.id] : [] }),
-    ]),
-  ]
+  const journalContracts = solutionContractIds(solution, opportunities)
   /** The client's contracts and open opportunities: what a step can be paid by. */
   const payers: StepPayerOption[] = [
     ...engagements
@@ -493,7 +491,7 @@ function SolutionBody({
 
   /** A written section's pencil. History's way in is Add an Entry: the editor opens with a line for today under the rest. */
   const editButton = (key: SolutionSectionKey, label: string, className?: string) =>
-    key === "history" ? (
+    present ? null : key === "history" ? (
       <Button
         id="solution-edit-history"
         variant="ghost"
@@ -529,6 +527,8 @@ function SolutionBody({
     const text = solution.sections[key] ?? ""
     const open = drafts[key] !== undefined
     const card = CARDS.includes(key)
+    // Presenting, a section nobody has written shows nothing: its prompt asks to be written.
+    if (!open && !text.trim() && present) return null
     if (!open && !text.trim()) {
       return (
         <section key={key} id={key} aria-labelledby={headingId} className="scroll-mt-20">
@@ -624,6 +624,18 @@ function SolutionBody({
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
+  )
+
+  /** Presenting: the saved model's graph alone, with no tables to edit. */
+  const presentModel = (
+    <ContentCard as="section" id="model" labelledBy="solution-section-model" className="flex scroll-mt-20 flex-col gap-4 rounded-2xl">
+      <h2 id="solution-section-model" className="text-[17px] font-semibold tracking-tight">
+        Data Model
+      </h2>
+      <div className="rounded-xl border border-hairline bg-surface-subtle p-2">
+        <SolutionGraph entities={solution.entities} relations={solution.relations} />
+      </div>
+    </ContentCard>
   )
 
   const dataModel = (
@@ -857,10 +869,11 @@ function SolutionBody({
 
   return (
     <div className="flex flex-col gap-6 sm:gap-7">
+      {present && <PresentBanner />}
       <PageHeader
         size="detail"
         back={{
-          href: "/solutions",
+          href: href("/solutions"),
           label: "Solutions",
           current: client?.name ?? "Unknown client",
           onNavigate: (e) => {
@@ -886,7 +899,7 @@ function SolutionBody({
               {contract ? (
                 <StatusDot tone={health ? MEETING_HEALTH[health.health!].tone : contract.isActive ? "success" : "neutral"}>
                   <span>
-                    {engagementLabel(contract)} ·{" "}
+                    {present ? null : `${engagementLabel(contract)} · `}
                     {health ? `${health.health} on ${formatMeetingDate(health.date)}` : contractState(contract)}
                   </span>
                 </StatusDot>
@@ -902,16 +915,19 @@ function SolutionBody({
           </>
         }
         actions={
-          <>
-            <Button variant="outline" size="lg" onClick={() => openLog("new")}>
-              <Plus aria-hidden /> Log Work
-            </Button>
-            <Button variant="outline" size="lg" className="max-sm:hidden" onClick={() => setEditing(true)}>
-              <Pencil aria-hidden /> Edit Details
-            </Button>
-          </>
+          present ? undefined : (
+            <>
+              <PresentButton />
+              <Button variant="outline" size="lg" onClick={() => openLog("new")}>
+                <Plus aria-hidden /> Log Work
+              </Button>
+              <Button variant="outline" size="lg" className="max-sm:hidden" onClick={() => setEditing(true)}>
+                <Pencil aria-hidden /> Edit Details
+              </Button>
+            </>
+          )
         }
-        more={more}
+        more={present ? undefined : more}
       />
 
       {solution.target && (
@@ -939,6 +955,7 @@ function SolutionBody({
         engagements={engagements}
         opportunities={opportunities}
         canAdd={solution.steps.length < MAX_SOLUTION_STEPS}
+        readOnly={present}
         onOpen={(index) => setStepEdit({ index, session: Date.now() })}
         onAdd={() => setStepEdit({ index: "new", session: Date.now() })}
         onMove={moveTo}
@@ -972,7 +989,7 @@ function SolutionBody({
                 )}
                 <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
                   <span>
-                    Contract {engagementLabel(nowContract)} · {contractState(nowContract)}
+                    Contract {present ? null : `${engagementLabel(nowContract)} · `}{contractState(nowContract)}
                     {nowCall && ` · last call ${formatMeetingDate(nowCall.date)}`}
                   </span>
                   {nowHealth?.health && <StatusDot tone={MEETING_HEALTH[nowHealth.health].tone}>{MEETING_HEALTH[nowHealth.health].label}</StatusDot>}
@@ -1047,6 +1064,7 @@ function SolutionBody({
         userId={userId}
         today={today}
         onEdit={openLog}
+        readOnly={present}
       />
 
       <h2 className="-mb-2 text-xl font-semibold tracking-tight">What We Know</h2>
@@ -1057,7 +1075,7 @@ function SolutionBody({
           {filled} of {kindKeys.length} sections written
         </span>
         <SegmentedProgress size="banner" done={filled} total={kindKeys.length} className="max-sm:order-last max-sm:basis-full" />
-        {missing.length > 0 && (
+        {missing.length > 0 && !present && (
           <>
             <span className="text-subtle-foreground max-sm:hidden">
               Still to write:{" "}
@@ -1094,9 +1112,9 @@ function SolutionBody({
             {block("kpis")}
             {block("results")}
           </div>
-          {shown("model") && dataModel}
+          {shown("model") && (present ? solution.entities.length > 0 && presentModel : dataModel)}
           {(["requirements", "sources", "architecture", "steps", "history"] as const).filter(shown).map((key) => block(key))}
-          {addable.length > 0 && (
+          {addable.length > 0 && !present && (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="outline" size="lg" className="self-start">

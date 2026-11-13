@@ -42,6 +42,14 @@ export function estimateLine(
   return o && (OPEN_STAGES as readonly string[]).includes(o.stage) ? countIn(o.estimatedDaysPerMonth * o.estimatedDurationMonths, o.unit ?? "day") : null
 }
 
+/** A step state's shape, shared by the rail's markers and the list row's small track: filled, amber ring, ring, dashed ring. */
+export const STEP_MARK = {
+  done: "bg-foreground",
+  now: "border-2 border-warning-soft-foreground bg-background",
+  next: "border-2 border-muted-foreground bg-background",
+  later: "border-2 border-dashed border-muted-foreground bg-background",
+} as const
+
 /** The marker on the rail: a check for Done, an amber ring with a dot for Now, a numbered circle for Next, a dashed one for Later. */
 function Marker({ step, number }: { step: SolutionStep; number: number }) {
   return (
@@ -50,10 +58,10 @@ function Marker({ step, number }: { step: SolutionStep; number: number }) {
       data-marker
       className={cn(
         "flex size-8 shrink-0 items-center justify-center rounded-full text-[13px] font-semibold tabular-nums",
-        step.state === "done" && "bg-foreground text-background",
-        step.state === "now" && "border-2 border-warning-soft-foreground bg-background",
-        step.state === "next" && "border-2 border-muted-foreground bg-background text-muted-foreground",
-        step.state === "later" && "border-2 border-dashed border-muted-foreground bg-background text-subtle-foreground",
+        STEP_MARK[step.state],
+        step.state === "done" && "text-background",
+        step.state === "next" && "text-muted-foreground",
+        step.state === "later" && "text-subtle-foreground",
       )}
     >
       {step.state === "done" ? <Check className="size-4" strokeWidth={2.5} /> : step.state === "now" ? <span className="size-3 rounded-full bg-warning-soft-foreground" /> : number}
@@ -83,6 +91,7 @@ export function SolutionRoad({
   onMove,
   canAdd,
   busy,
+  readOnly = false,
 }: {
   steps: SolutionStep[]
   target: string | null
@@ -95,6 +104,8 @@ export function SolutionRoad({
   onMove: (from: number, to: number) => void
   canAdd: boolean
   busy: boolean
+  /** Presenting: a step opens nothing, drags nowhere, and there is no Add Step. */
+  readOnly?: boolean
 }) {
   const dragging = useRef<number | null>(null)
   const now = steps.findIndex((s) => s.state === "now")
@@ -117,7 +128,7 @@ export function SolutionRoad({
             return (
               <li
                 key={i}
-                draggable={!busy}
+                draggable={!busy && !readOnly}
                 onDragStart={(e) => {
                   dragging.current = i
                   e.dataTransfer.setData("text/plain", String(i))
@@ -129,7 +140,7 @@ export function SolutionRoad({
                   e.preventDefault()
                   const from = dragging.current
                   dragging.current = null
-                  if (from !== null && !busy) onMove(from, i)
+                  if (from !== null && !busy && !readOnly) onMove(from, i)
                 }}
                 className="flex gap-3 sm:flex-col"
               >
@@ -139,12 +150,14 @@ export function SolutionRoad({
                 </div>
                 <button
                   type="button"
-                  aria-haspopup="dialog"
+                  aria-haspopup={readOnly ? undefined : "dialog"}
                   aria-current={isNow ? "step" : undefined}
+                  disabled={readOnly}
                   onClick={() => onOpen(i)}
                   className={cn(
-                    "flex min-h-11 min-w-0 flex-1 cursor-grab flex-col items-start gap-1.5 rounded-lg border p-2.5 text-left transition-colors hover:bg-muted/60 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:outline-none max-sm:mb-4 sm:mr-3",
+                    "flex min-h-11 min-w-0 flex-1 flex-col items-start gap-1.5 rounded-lg border p-2.5 text-left transition-colors focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:outline-none max-sm:mb-4 sm:mr-3",
                     isNow ? "border-warning/40 bg-warning-soft/60" : "border-transparent",
+                    readOnly ? "cursor-default" : "cursor-grab hover:bg-muted/60",
                   )}
                 >
                   <span className="text-meta text-muted-foreground">
@@ -177,9 +190,9 @@ export function SolutionRoad({
         </ol>
       )}
       {/* Top right of the section from sm up (over the header's row), full width under the road on a phone. */}
-      <Button id="solution-add-step" variant="outline" size="lg" disabled={!canAdd} onClick={onAdd} className="max-sm:w-full sm:absolute sm:top-0 sm:right-0">
+      {!readOnly && <Button id="solution-add-step" variant="outline" size="lg" disabled={!canAdd} onClick={onAdd} className="max-sm:w-full sm:absolute sm:top-0 sm:right-0">
         <Plus aria-hidden /> Add Step
-      </Button>
+      </Button>}
     </section>
   )
 }

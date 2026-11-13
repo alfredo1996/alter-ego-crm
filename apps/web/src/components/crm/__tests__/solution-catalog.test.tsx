@@ -11,7 +11,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 
 
 import { SolutionCatalog } from "../solution-catalog"
-import { DATA } from "./solution-fixtures"
+import { CAPPED, DATA, ROAD, solution } from "./solution-fixtures"
 
 const writes = vi.hoisted(() => ({
   createSolution: vi.fn(async (_u: string, input: object) => ({ id: "s9", ...input })),
@@ -37,6 +37,7 @@ vi.mock("next/navigation", async () => {
   const { useSyncExternalStore } = await import("react")
   return {
     useRouter: () => ({ replace, push }),
+    usePathname: () => "/solutions",
     useSearchParams: () => new URLSearchParams(useSyncExternalStore(url.subscribe, () => url.search)),
   }
 })
@@ -59,6 +60,18 @@ beforeEach(() => {
   push.mockClear()
   Object.values(writes).forEach((w) => w.mockClear())
 })
+
+/** Swaps the faked backend's reads for one test. */
+async function withData(over: Record<string, unknown>, run: () => Promise<void>) {
+  const stored = { ...DATA }
+  Object.assign(DATA, over)
+  try {
+    await run()
+  } finally {
+    Object.assign(DATA, stored)
+  }
+}
+const journalEntry = (solutionId: string, date: string) => ({ id: "j1", userId: "u1", solutionId, clientId: "c1", kind: "work", date, stepTitle: null, text: "Worked", decisions: [], links: [], next: null, createdAt: new Date(2026, 9, 27), updatedAt: new Date(2026, 9, 27) })
 
 const type = (field: HTMLElement, value: string) => fireEvent.change(field, { target: { value } })
 
@@ -83,32 +96,54 @@ async function pick(combobox: HTMLElement, option: string) {
 }
 
 describe("the Solutions catalog", () => {
-  it("shows every solution as a card, newest updated first, with its contract's state and the sections written", async () => {
+  it("shows every solution as a row, newest updated first, with its client, kind, status, contract and stack", async () => {
     await show()
     expect(names()).toEqual(["Store search", "Product knowledge graph", "Churn model"])
     const graph = card("Product knowledge graph")
     expect(graph).toHaveTextContent("Nordwind Retail S.p.A.")
     expect(within(graph).getByText("Delivered")).toHaveClass("bg-success-soft")
-    expect(graph).toHaveTextContent(/One graph for the catalog,\s+so search/)
+    expect(within(graph).getByText("Product")).toBeInTheDocument()
     expect(graph).toHaveTextContent("neo4jgdskafka")
     expect(graph).toHaveTextContent("Product graph · Active")
-    expect(within(graph).getByText("4 of 7 sections written")).toHaveClass("sr-only")
-    expect(graph).toHaveTextContent("4/7")
-    expect(graph).toHaveTextContent(/2 entities · 1 relation · updated 1 Oct/)
     expect(card("Store search")).toHaveTextContent("Pre-sales")
     expect(card("Churn model")).toHaveTextContent("Retainer · Closed")
-    // The name links to the solution's page, stretched over the card, its focus ring with no white band in dark mode.
+    // The name links to the solution's page, stretched over the row, its focus ring with no white band in dark mode.
     expect(within(graph).getByRole("link")).toHaveAttribute("href", "/solutions/s1")
     expect(within(graph).getByRole("link")).toHaveClass("after:inset-0", "focus-visible:ring-offset-card")
   })
 
-  it("draws a solution with nothing written dashed, and asks for its purpose", async () => {
-    await show()
-    const search = card("Store search")
-    expect(search).toHaveClass("border-dashed")
-    expect(card("Product knowledge graph")).not.toHaveClass("border-dashed")
-    expect(search).toHaveTextContent("No purpose yet. Open it to start the interview.")
-    expect(search).toHaveTextContent(/No data model yet · updated 5 Oct/)
+  it("draws the road: target, a track of its steps, Now and Next, and the last activity", async () => {
+    await withData({ getSolutions: [ROAD], getJournal: [journalEntry("s4", "2026-10-27")] }, async () => {
+      await show()
+      const row = card("Guest 360")
+      expect(row).toHaveTextContent("One guest record on the front desk's screen.")
+      expect(within(row).getByRole("img", { name: "1 of 5 steps done" })).toBeInTheDocument()
+      expect(row).toHaveTextContent("Now: MVP on the client's server (step 2 of 5)")
+      expect(row).toHaveTextContent("Next: Front-desk guest card")
+      // The journal entry (27 Oct) is newer than the contract's last call (25 Oct).
+      expect(row).toHaveTextContent(/Last activity 27 Oct( 2026)?/)
+    })
+  })
+
+  it("says Reached and the Result once every step is done, and the call when it is the newest activity", async () => {
+    const done = ROAD.steps.map((x) => ({ ...x, state: "done" as const, doneOn: "2026-07-20", outcome: "Search is one query" }))
+    await withData({ getSolutions: [solution({ ...ROAD, status: "delivered", steps: done })] }, async () => {
+      await show()
+      const row = card("Guest 360")
+      expect(within(row).getByRole("img", { name: "All 5 steps done, target reached" })).toBeInTheDocument()
+      expect(row).toHaveTextContent("Reached: Target reached in Jul 2026.")
+      expect(row).toHaveTextContent("Result: Search is one query")
+      expect(row).toHaveTextContent(/Last activity 25 Oct( 2026)?/)
+    })
+  })
+
+  it("narrows by kind, into ?kind=", async () => {
+    await withData({ getSolutions: [ROAD, solution({ id: "s5", clientId: "c1", name: "Tuning", kind: "advisory" })] }, async () => {
+      await show()
+      await pick(screen.getByRole("combobox", { name: "Kind" }), "Advisory")
+      expect(replace).toHaveBeenLastCalledWith("/solutions?kind=advisory", { scroll: false })
+      await waitFor(() => expect(names()).toEqual(["Tuning"]))
+    })
   })
 
   it("counts each status over the other filters, and a tab writes ?status=", async () => {
@@ -195,6 +230,42 @@ describe("the Solutions catalog", () => {
     } finally {
       DATA.getSolutions = stored
     }
+  })
+})
+
+describe("Present", () => {
+  /** A contract without a name reads as its rate: the money Present must hide. */
+  const priced = { getSolutions: [ROAD], getEngagements: [{ ...CAPPED, name: null }] }
+
+  it("shows the rate in the row, and a Present button writes ?present=1", async () => {
+    await withData(priced, async () => {
+      await show()
+      expect(card("Guest 360")).toHaveTextContent("€600")
+      fireEvent.click(screen.getByRole("button", { name: "Present" }))
+      expect(replace).toHaveBeenLastCalledWith("/solutions?present=1", { scroll: false })
+    })
+  })
+
+  it("holds no € amount, no New Solution and no edit control, and keeps the link presenting", async () => {
+    await withData(priced, async () => {
+      await show("?present=1")
+      expect(document.body.textContent).not.toContain("€")
+      expect(screen.queryByRole("button", { name: "New Solution" })).not.toBeInTheDocument()
+      expect(screen.queryByRole("button", { name: /Edit/ })).not.toBeInTheDocument()
+      expect(screen.getByRole("status")).toHaveTextContent("Presenting")
+      expect(within(card("Guest 360")).getByRole("link")).toHaveAttribute("href", "/solutions/s4?present=1")
+      expect(card("Guest 360")).toHaveTextContent("Active")
+    })
+  })
+
+  it("keeps ?present=1 through a filter, and Stop Presenting drops it", async () => {
+    await withData(priced, async () => {
+      await show("?present=1")
+      fireEvent.mouseDown(screen.getByRole("tab", { name: "Building 1" }))
+      expect(replace).toHaveBeenLastCalledWith("/solutions?present=1&status=building", { scroll: false })
+      fireEvent.click(screen.getByRole("button", { name: "Stop Presenting" }))
+      expect(replace).toHaveBeenLastCalledWith("/solutions?status=building", { scroll: false })
+    })
   })
 })
 

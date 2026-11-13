@@ -25,7 +25,12 @@ const writes = vi.hoisted(() => ({
   deleteJournalEntry: vi.fn(async () => {}),
 }))
 const push = vi.hoisted(() => vi.fn())
-vi.mock("next/navigation", () => ({ useRouter: () => ({ push, replace: vi.fn() }) }))
+const nav = vi.hoisted(() => ({ search: "", replace: vi.fn() }))
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ push, replace: nav.replace }),
+  usePathname: () => "/solutions/s4",
+  useSearchParams: () => new URLSearchParams(nav.search),
+}))
 vi.mock("next/link", () => ({
   default: ({ href, onNavigate, children, ...rest }: { href: string; onNavigate?: (e: { preventDefault: () => void }) => void; children: ReactNode }) => (
     <a
@@ -57,6 +62,8 @@ vi.mock("@/lib/backend", () => ({
 
 // happy-dom never lays out: each observer is told 600 px at once, so the data model graph draws.
 beforeEach(() => {
+  nav.search = ""
+  nav.replace.mockClear()
   push.mockClear()
   Object.values(writes).forEach((w) => w.mockClear())
   vi.stubGlobal(
@@ -961,6 +968,44 @@ describe("the journal", () => {
       fireEvent.click(screen.getByRole("button", { name: "Delete session of 27 Oct: Loading rewritten as idempotent Cypher." }))
       fireEvent.click(await screen.findByRole("button", { name: "Delete Work Session" }))
       await waitFor(() => expect(writes.deleteJournalEntry.mock.calls[0]).toEqual(["u1", "j1"]))
+    })
+  })
+})
+
+describe("Present", () => {
+  /** A contract without a name reads as its rate: the money Present must hide. */
+  const priced = ROAD
+  const withRate = async (body: () => Promise<void>) => {
+    const stored = DATA.getEngagements
+    DATA.getEngagements = (stored as { id: string }[]).map((e) => (e.id === "e4" ? { ...e, name: null } : e))
+    try {
+      await withSolution(priced, body)
+    } finally {
+      DATA.getEngagements = stored
+    }
+  }
+
+  it("offers Present, which writes ?present=1", async () => {
+    await withRate(async () => {
+      expect(document.body.textContent).toContain("€600")
+      fireEvent.click(button("Present"))
+      expect(nav.replace).toHaveBeenLastCalledWith("/solutions/s4?present=1", { scroll: false })
+    })
+  })
+
+  it("holds no € amount and no way to edit, keeps the way back presenting, and Stop Presenting drops it", async () => {
+    nav.search = "?present=1"
+    await withRate(async () => {
+      expect(document.body.textContent).not.toContain("€")
+      for (const name of [/^Log Work/, /^Edit/, /^Add/, /^Write/, /^More actions/, /^Delete/]) {
+        expect(screen.queryByRole("button", { name })).not.toBeInTheDocument()
+      }
+      expect(screen.getByText(/^Presenting:/)).toBeInTheDocument()
+      expect(screen.getByRole("link", { name: "Back to Solutions" })).toHaveAttribute("href", "/solutions?present=1")
+      // The road shows, but its steps open nothing.
+      expect(screen.getByRole("heading", { level: 2, name: "Roadmap" })).toBeInTheDocument()
+      fireEvent.click(button("Stop Presenting"))
+      expect(nav.replace).toHaveBeenLastCalledWith("/solutions/s4", { scroll: false })
     })
   })
 })
