@@ -13,6 +13,7 @@ import {
   CalendarCheck,
   CalendarClock,
   CalendarRange,
+  FileSignature,
   FileText,
   House,
   Library,
@@ -47,6 +48,7 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       { label: "Pipeline", href: "/pipeline", icon: Target, module: "crm" },
       { label: "Clients", href: "/clients", icon: Users, module: "crm" },
+      { label: "Contracts", href: "/contracts", icon: FileSignature, module: "crm" },
       { label: "Collaborators", href: "/collaborators", icon: UserRound, module: "crm" },
       { label: "Solutions", href: "/solutions", icon: Library, module: "solutions" },
       { label: "Invoices", href: "/invoices", icon: FileText, module: "invoicing" },

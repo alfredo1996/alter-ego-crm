@@ -35,6 +35,7 @@ export default defineConfig({
         "settings.spec.ts",
         "mobile.spec.ts",
         "solutions.spec.ts",
+        "contracts.spec.ts",
         "plan-stable.spec.ts",
         "plan-time-off.spec.ts",
         "invoice-files.spec.ts",
