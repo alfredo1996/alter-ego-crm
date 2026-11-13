@@ -328,6 +328,9 @@ function SolutionBody({
   const shown = (key: SolutionSectionKey) =>
     kindKeys.includes(key) || written(solution, key) || added.includes(key) || drafts[key] !== undefined || (key === "model" && modelPresent)
   const SECTIONS = PAGE_ORDER.filter(shown).map((key) => ({ ...SECTION[key], label: labelOf(key) }))
+  // Presenting, a section with nothing written is not drawn: the Sections nav lists only those that are.
+  const rendered = (key: SolutionSectionKey) =>
+    !present || (key === "model" ? solution.entities.length > 0 : (solution.sections[key] ?? "").trim() !== "")
   const missing = PAGE_ORDER.filter((key) => kindKeys.includes(key) && !written(solution, key)).map((key) => ({ ...SECTION[key], label: labelOf(key) }))
   const filled = kindKeys.length - missing.length
   const addable = ADDABLE.filter((key) => !shown(key))
@@ -917,7 +920,7 @@ function SolutionBody({
         actions={
           present ? undefined : (
             <>
-              <PresentButton />
+              <PresentButton blockedBy={Object.keys(drafts).length > 0 || modelChanged ? "Save or cancel your edits first." : undefined} />
               <Button variant="outline" size="lg" onClick={() => openLog("new")}>
                 <Plus aria-hidden /> Log Work
               </Button>
@@ -989,7 +992,7 @@ function SolutionBody({
                 )}
                 <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
                   <span>
-                    Contract {present ? null : `${engagementLabel(nowContract)} · `}{contractState(nowContract)}
+                    Contract · {present ? null : `${engagementLabel(nowContract)} · `}{contractState(nowContract).toLowerCase()}
                     {nowCall && ` · last call ${formatMeetingDate(nowCall.date)}`}
                   </span>
                   {nowHealth?.health && <StatusDot tone={MEETING_HEALTH[nowHealth.health].tone}>{MEETING_HEALTH[nowHealth.health].label}</StatusDot>}
@@ -1098,7 +1101,7 @@ function SolutionBody({
       <div className="flex flex-col gap-6 lg:flex-row lg:gap-12">
         <OnThisPage
           aria-label="Sections"
-          items={SECTIONS.map(({ key, label }) => ({
+          items={SECTIONS.filter(({ key }) => rendered(key)).map(({ key, label }) => ({
             id: key,
             label,
             short: SHORT[key],

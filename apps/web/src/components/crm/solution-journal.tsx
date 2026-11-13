@@ -182,7 +182,7 @@ export function SolutionJournal({ solution, entries, meetings, contractIds, user
         ))}
       </div>
       {items.length === 0 ? (
-        <p className="text-sm text-muted-foreground">{EMPTY[filter]}</p>
+        <p className="text-sm text-muted-foreground">{readOnly && filter === "all" ? "Nothing logged yet" : EMPTY[filter]}</p>
       ) : (
         <Timeline items={items} />
       )}

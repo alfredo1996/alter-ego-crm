@@ -6,12 +6,19 @@ import { Presentation } from "lucide-react"
 import { usePresent } from "@/hooks/use-present"
 
 /** Present, beside a page's own actions; the page hides it while presenting. */
-export function PresentButton() {
+export function PresentButton({ blockedBy }: { blockedBy?: string }) {
   const { setPresent } = usePresent()
   return (
-    <Button variant="outline" size="lg" onClick={() => setPresent(true)}>
-      <Presentation aria-hidden /> Present
-    </Button>
+    <>
+      <Button variant="outline" size="lg" disabled={!!blockedBy} aria-describedby={blockedBy ? "present-blocked" : undefined} onClick={() => setPresent(true)}>
+        <Presentation aria-hidden /> Present
+      </Button>
+      {blockedBy && (
+        <span id="present-blocked" className="sr-only">
+          {blockedBy}
+        </span>
+      )}
+    </>
   )
 }
 

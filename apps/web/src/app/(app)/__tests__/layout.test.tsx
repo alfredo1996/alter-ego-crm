@@ -5,8 +5,8 @@ vi.mock("@/components/auth/auth-guard", () => ({ AuthGuard: ({ children }: { chi
 vi.mock("@/components/route-guard", () => ({ RouteGuard: ({ children }: { children: React.ReactNode }) => children }))
 vi.mock("@/components/app-sidebar", () => ({ AppSidebar: () => <nav aria-label="Main" /> }))
 vi.mock("@/components/mobile-nav", () => ({ MobileNav: () => <header aria-label="Mobile" /> }))
-const nav = vi.hoisted(() => ({ search: "" }))
-vi.mock("next/navigation", () => ({ useSearchParams: () => new URLSearchParams(nav.search) }))
+const nav = vi.hoisted(() => ({ search: "", path: "/solutions/s1" }))
+vi.mock("next/navigation", () => ({ useSearchParams: () => new URLSearchParams(nav.search), usePathname: () => nav.path }))
 
 import AppLayout from "../layout"
 
@@ -18,12 +18,21 @@ describe("app layout", () => {
     expect(screen.getByLabelText("Mobile")).toBeInTheDocument()
   })
 
-  it("hides both while ?present=1, and keeps the page", () => {
+  it("hides both while ?present=1 on a solutions page, and keeps the page", () => {
     nav.search = "?present=1"
     render(<AppLayout>page</AppLayout>)
     expect(screen.queryByRole("navigation", { name: "Main" })).not.toBeInTheDocument()
     expect(screen.queryByLabelText("Mobile")).not.toBeInTheDocument()
     expect(screen.getByText("page")).toBeInTheDocument()
+  })
+
+  it("keeps both on any other page, whatever the URL says", () => {
+    nav.search = "?present=1"
+    nav.path = "/invoices"
+    render(<AppLayout>page</AppLayout>)
+    expect(screen.getByRole("navigation", { name: "Main" })).toBeInTheDocument()
+    expect(screen.getByLabelText("Mobile")).toBeInTheDocument()
+    nav.path = "/solutions/s1"
   })
 
   it("puts every page in one centred column, 1120px at most", () => {

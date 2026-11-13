@@ -73,6 +73,7 @@ describe("filterSolutions", () => {
     expect(ids(filterSolutions(list, { ...none, q: "threshold" }))).toEqual(["written"])
     expect(ids(filterSolutions(list, { ...none, q: "retail" }))).toEqual(["written"])
     expect(ids(filterSolutions(list, { ...none, q: "GDS" }))).toEqual(["graph"])
+    expect(ids(filterSolutions([...list, solution({ id: "t", target: "One guest record on screen" })], { ...none, q: "GUEST RECORD" }))).toEqual(["t"])
     expect(ids(filterSolutions(list, { ...none, q: "kafka", client: "c1" }))).toEqual(["graph"])
     expect(filterSolutions(list, { ...none, q: "salesforce" })).toEqual([])
   })

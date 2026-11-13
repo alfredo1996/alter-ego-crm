@@ -118,7 +118,7 @@ export function SolutionRoad({
         description={steps.length === 0 ? null : now >= 0 ? `Step ${now + 1} of ${steps.length}` : `${steps.length} ${steps.length === 1 ? "step" : "steps"}`}
       />
       {steps.length === 0 ? (
-        <EmptyPrompt title="No steps yet" description="Add the steps that lead to the target, in order." />
+        <EmptyPrompt title="No steps yet" description={readOnly ? null : "Add the steps that lead to the target, in order."} />
       ) : (
         <ol className="flex flex-col sm:grid sm:grid-flow-col sm:auto-cols-[minmax(11rem,1fr)] sm:overflow-x-auto sm:pb-2">
           {steps.map((step, i) => {
@@ -184,7 +184,7 @@ export function SolutionRoad({
             </div>
             <div className="flex min-w-0 flex-col gap-1 p-2.5">
               <span className="text-[15px] font-semibold">Target</span>
-              <span className="line-clamp-3 text-[13px] text-muted-foreground [overflow-wrap:anywhere]">{target ?? "Not set yet. Add it in Edit Details."}</span>
+              <span className="line-clamp-3 text-[13px] text-muted-foreground [overflow-wrap:anywhere]">{target ?? (readOnly ? "No target set" : "Not set yet. Add it in Edit Details.")}</span>
             </div>
           </li>
         </ol>

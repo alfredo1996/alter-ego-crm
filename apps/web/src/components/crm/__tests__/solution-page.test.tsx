@@ -638,7 +638,7 @@ describe("the road", () => {
       expect(within(card).getByRole("progressbar", { name: "Days used" })).toHaveAttribute("aria-valuenow", "59")
       expect(within(card).getByText("Runs every night on their server.")).toBeInTheDocument()
       // The date of the last call (a later one that stated no health), then the newest stated health in the app's words.
-      expect(within(card).getByText("Contract Guest MVP · Active · last call 25 Oct 2026")).toBeInTheDocument()
+      expect(within(card).getByText("Contract · Guest MVP · active · last call 25 Oct 2026")).toBeInTheDocument()
       expect(within(card).getByText("Yellow")).toBeInTheDocument()
       expect(within(card).getAllByRole("listitem").map((li) => li.textContent)).toEqual(["Back up and restore12 Nov", "Handover session20 Nov"])
       expect(within(card).getByRole("link", { name: "Open in Tasks" })).toHaveAttribute("href", "/tasks")
@@ -1006,6 +1006,56 @@ describe("Present", () => {
       expect(screen.getByRole("heading", { level: 2, name: "Roadmap" })).toBeInTheDocument()
       fireEvent.click(button("Stop Presenting"))
       expect(nav.replace).toHaveBeenLastCalledWith("/solutions/s4", { scroll: false })
+    })
+  })
+
+  it("keeps the step cards from opening anything", async () => {
+    nav.search = "?present=1"
+    await withRate(async () => {
+      const road = screen.getByRole("heading", { level: 2, name: "Roadmap" }).closest("section")!
+      const cards = within(road).getAllByRole("button")
+      expect(cards).toHaveLength(ROAD.steps.length)
+      for (const card of cards) expect(card).toBeDisabled()
+      fireEvent.click(cards[0])
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument()
+    })
+  })
+
+  it("lists in Sections only what it shows, so no link points at nothing", async () => {
+    nav.search = "?present=1"
+    await withRate(async () => {
+      const anchors = Array.from(document.querySelectorAll<HTMLAnchorElement>('a[href^="#"]'))
+      for (const a of anchors) expect(document.getElementById(a.getAttribute("href")!.slice(1)), a.getAttribute("href")!).not.toBeNull()
+    })
+  })
+
+  it("cannot be turned on over an open editor or unsaved model edits", async () => {
+    await show()
+    expect(button("Present")).toBeEnabled()
+    fireEvent.click(button("Edit Requirements"))
+    expect(button("Present")).toBeDisabled()
+    expect(button("Present")).toHaveAccessibleDescription("Save or cancel your edits first.")
+    fireEvent.click(button("Cancel"))
+    expect(button("Present")).toBeEnabled()
+    fireEvent.mouseDown(screen.getByRole("tab", { name: "Entities" }))
+    fireEvent.click(button("Add Entity"))
+    expect(button("Present")).toBeDisabled()
+  })
+
+  it("says plainly what is missing, without pointing at controls it hides", async () => {
+    nav.search = "?present=1"
+    await withSolution(solution({ ...ROAD, target: null }), async () => {
+      expect(screen.getByText("No target set")).toBeInTheDocument()
+      expect(document.body.textContent).not.toMatch(/Edit Details|Log Work/)
+    })
+  })
+
+  it("says so too when there are no steps and nothing is logged", async () => {
+    nav.search = "?present=1"
+    await withSolution(solution({ ...ROAD, id: "s7", engagementId: null, steps: [] }), async () => {
+      expect(screen.getByText("No steps yet")).toBeInTheDocument()
+      expect(document.body.textContent).not.toContain("Add the steps")
+      expect(screen.getByText("Nothing logged yet")).toBeInTheDocument()
     })
   })
 })

@@ -362,7 +362,7 @@ export function SolutionCatalog() {
           <FilterBar
             search={{
               label: "Search solutions",
-              placeholder: "Search names, KPIs, history…",
+              placeholder: "Search name, target, stack, sections…",
               value: search,
               onChange: (value) => {
                 const q = value.trim() || null

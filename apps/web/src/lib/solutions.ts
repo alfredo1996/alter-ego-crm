@@ -46,7 +46,7 @@ export function solutionFilters(params: URLSearchParams): SolutionFilters {
   }
 }
 
-/** The solutions the filters leave, the most recently updated first. The search reads the name, domain, stack and every section. */
+/** The solutions the filters leave, the most recently updated first. The search reads the name, domain, target, stack and every section. */
 export function filterSolutions(solutions: Solution[], f: SolutionFilters): Solution[] {
   const q = f.q?.toLowerCase()
   return solutions
@@ -56,7 +56,7 @@ export function filterSolutions(solutions: Solution[], f: SolutionFilters): Solu
         (!f.status || s.status === f.status) &&
         (!f.kind || s.kind === f.kind) &&
         (!f.stack || s.stack.includes(f.stack)) &&
-        (!q || [s.name, s.domain, ...s.stack, ...Object.values(s.sections)].some((text) => text?.toLowerCase().includes(q))),
+        (!q || [s.name, s.domain, s.target, ...s.stack, ...Object.values(s.sections)].some((text) => text?.toLowerCase().includes(q))),
     )
     .sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime())
 }
