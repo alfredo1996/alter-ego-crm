@@ -57,6 +57,7 @@ describe("nav with every module on", () => {
     ["/pipeline", true],
     ["/clients", true],
     ["/clients/c1", true],
+    ["/contracts", true],
     ["/solutions", true],
     ["/collaborators", true],
     ["/invoices", true],
@@ -94,10 +95,16 @@ describe("nav with every module on", () => {
     expect(hrefs.indexOf("/cash-book")).toBe(hrefs.indexOf("/invoices") + 1)
   })
 
-  it("lists Collaborators right after Clients, and Solutions after them", async () => {
+  it("lists Contracts right after Clients", async () => {
     const nav = await loadNav()
     const hrefs = nav.visibleNavGroups()[0].items.map((i) => i.href)
-    expect(hrefs.indexOf("/collaborators")).toBe(hrefs.indexOf("/clients") + 1)
+    expect(hrefs.indexOf("/contracts")).toBe(hrefs.indexOf("/clients") + 1)
+  })
+
+  it("lists Collaborators right after Contracts, and Solutions after them", async () => {
+    const nav = await loadNav()
+    const hrefs = nav.visibleNavGroups()[0].items.map((i) => i.href)
+    expect(hrefs.indexOf("/collaborators")).toBe(hrefs.indexOf("/contracts") + 1)
     expect(hrefs.indexOf("/solutions")).toBe(hrefs.indexOf("/collaborators") + 1)
   })
 
@@ -113,7 +120,7 @@ describe("nav with modules left out", () => {
   it("drops the sidebar entries of a disabled module and keeps the rest of Company", async () => {
     const nav = await loadNav("invoicing,solutions")
     const company = nav.visibleNavGroups().find((g) => g.label === "Company")!
-    expect(company.items.map((i) => i.label)).toEqual(["Pipeline", "Clients", "Collaborators", "Cash Book", "Rent", "Month End", "Tasks", "Plan", "Deadlines", "Costs"])
+    expect(company.items.map((i) => i.label)).toEqual(["Pipeline", "Clients", "Contracts", "Collaborators", "Cash Book", "Rent", "Month End", "Tasks", "Plan", "Deadlines", "Costs"])
   })
 
   it.each(["/invoices", "/invoices/i1", "/solutions"])("closes %s", async (path) => {
@@ -129,6 +136,12 @@ describe("nav with modules left out", () => {
   it("leaves the other company routes open", async () => {
     const nav = await loadNav("invoicing,solutions")
     expect(["/clients", "/cash-book", "/plan"].map((p) => nav.isRouteEnabled(p))).toEqual([true, true, true])
+  })
+
+  it("leaving the crm module out takes the Contracts entry and its route", async () => {
+    const nav = await loadNav("crm,invoicing,solutions")
+    expect(nav.visibleNavGroups()[0].items.map((i) => i.href)).not.toContain("/contracts")
+    expect(nav.isRouteEnabled("/contracts")).toBe(false)
   })
 
   it("leaving Books out takes the cash book, costs and Month End with it", async () => {

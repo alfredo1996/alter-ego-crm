@@ -23,6 +23,7 @@ export const DEMO_PAGES: DemoPage[] = [
   { path: "/pipeline", nav: "Pipeline" },
   { path: "/clients", nav: "Clients" },
   { path: "/clients/[id]", nav: "Clients", open: "Nordwind Retail S.p.A." },
+  { path: "/contracts", nav: "Contracts" },
   { path: "/collaborators", nav: "Collaborators" },
   { path: "/solutions", nav: "Solutions" },
   { path: "/solutions/[id]", nav: "Solutions", open: "Product Knowledge Graph" },
