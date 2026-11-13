@@ -159,3 +159,12 @@ it("Earlier and Later move the window by a quarter", async () => {
   fireEvent.click(screen.getByRole("button", { name: "Later" }))
   expect(screen.getByText(windowLabel(windowFrom(format(today, "yyyy-MM-dd"), 1)))).toBeInTheDocument()
 })
+
+it("a contract with no ceiling says its days logged to date over planned to date, and the percentage agrees", async () => {
+  // The Retainer starts two months back at 2 days a month: 6 planned days to date; 3 days logged today.
+  DATA.getTimecards = [{ id: "t1", userId: "u1", engagementId: "e0", date: format(today, "yyyy-MM-dd"), hours: 24 }]
+  await show()
+  const detail = within(screen.getByRole("region", { name: "Contract detail" }))
+  expect(detail.getByText("No ceiling: 3 of 6 planned days logged")).toBeInTheDocument()
+  expect(detail.getByText("50%", { selector: "span" })).toBeInTheDocument()
+})

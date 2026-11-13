@@ -164,26 +164,6 @@ export function contractTimeline(input: TimelineInput): { bars: TimelineBar[]; s
   const thisQuarter = quarterOf(today.slice(0, 7))
   const clientName = new Map(input.clients.map((c) => [c.id, c.name]))
 
-  // The Plan's grid, over the window and this quarter, as the Plan burns it.
-  // A contract with no ceiling fills up to today, so the grid also reaches back to each contract's first month.
-  const firstAlloc = new Map<string, string>()
-  for (const a of input.allocations) if (a.yearMonth < (firstAlloc.get(a.engagementId) ?? "9")) firstAlloc.set(a.engagementId, a.yearMonth)
-  const firstHour = new Map<string, string>()
-  for (const t of input.timecards) if (t.date <= today && t.date.slice(0, 7) < (firstHour.get(t.engagementId) ?? "9")) firstHour.set(t.engagementId, t.date.slice(0, 7))
-  const firstMonth = (e: Engagement, logged: string | undefined): string | null =>
-    [e.startMonth, logged, firstAlloc.get(e.id)].filter((x): x is string => !!x).sort()[0] ?? null
-  const gridFrom = [months[0], thisQuarter.months[0], ...engagements.map((e) => firstMonth(e, firstHour.get(e.id)) ?? "9")].sort()[0]
-  const gridLast = [months.at(-1)!, thisQuarter.months[2]].sort().at(-1)!
-  const planned = new Map<string, number>()
-  for (const c of resolveAllocationGrid({
-    sources: toRevenueSources({ engagements, opportunities: [], clients: [], scenario: "committed" }),
-    allocations: input.allocations,
-    fromMonth: gridFrom,
-    months: differenceInCalendarMonths(parseYearMonth(gridLast), parseYearMonth(gridFrom)) + 1,
-  })) {
-    planned.set(`${c.sourceId}:${c.yearMonth}`, c.plannedDays)
-  }
-
   // Hours up to today, as clientBilling counts them.
   const hoursBy = new Map<string, number>()
   const firstLogged = new Map<string, string>()
@@ -196,6 +176,24 @@ export function contractTimeline(input: TimelineInput): { bars: TimelineBar[]; s
     if (ym < (firstLogged.get(t.engagementId) ?? "9")) firstLogged.set(t.engagementId, ym)
     if (ym > (lastLogged.get(t.engagementId) ?? "")) lastLogged.set(t.engagementId, ym)
   }
+  // The Plan's grid, over the window and this quarter, as the Plan burns it.
+  // A contract with no ceiling fills up to today, so the grid also reaches back to each contract's first month.
+  const firstAlloc = new Map<string, string>()
+  for (const a of input.allocations) if (a.yearMonth < (firstAlloc.get(a.engagementId) ?? "9")) firstAlloc.set(a.engagementId, a.yearMonth)
+  const firstMonth = (e: Engagement, logged: string | undefined): string | null =>
+    [e.startMonth, logged, firstAlloc.get(e.id)].filter((x): x is string => !!x).sort()[0] ?? null
+  const gridFrom = [months[0], thisQuarter.months[0], ...engagements.map((e) => firstMonth(e, firstLogged.get(e.id)) ?? "9")].sort()[0]
+  const gridLast = [months.at(-1)!, thisQuarter.months[2]].sort().at(-1)!
+  const planned = new Map<string, number>()
+  for (const c of resolveAllocationGrid({
+    sources: toRevenueSources({ engagements, opportunities: [], clients: [], scenario: "committed" }),
+    allocations: input.allocations,
+    fromMonth: gridFrom,
+    months: differenceInCalendarMonths(parseYearMonth(gridLast), parseYearMonth(gridFrom)) + 1,
+  })) {
+    planned.set(`${c.sourceId}:${c.yearMonth}`, c.plannedDays)
+  }
+
   const loggedIn = (id: string, ms: string[]) => hoursToDays(ms.reduce((s, ym) => s + (hoursBy.get(`${id}:${ym}`) ?? 0), 0))
   const plannedIn = (id: string, ms: string[]) => ms.reduce((s, ym) => s + (planned.get(`${id}:${ym}`) ?? 0), 0)
 

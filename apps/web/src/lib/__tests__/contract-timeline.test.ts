@@ -105,14 +105,22 @@ describe("a contract with no ceiling fills up to today", () => {
     expect(b).toMatchObject({ used: 32, plannedToDate: 60 })
     expect(b.fill).toBeCloseTo(32 / 60)
   })
+  it("reads planned to date from the Plan's grid, not from the default", () => {
+    // A stored row for 2026-08 replaces that month's 10 days with 0: 50 days to date, not 60.
+    const allocations = [{ id: "a", userId: "u", engagementId: "e1", yearMonth: "2026-08", days: 0, createdAt: at, updatedAt: at }] as Allocation[]
+    const b = bar({ engagements: [open()], allocations, timecards: cards }, "e1")
+    expect(b.plannedToDate).toBe(50)
+    expect(b.fill).toBeCloseTo(32 / 50)
+  })
   it("does not move with Earlier or Later", () => {
     const fills = ["2026-01", "2026-07", "2027-01"].map((from) => bar({ from, engagements: [open()], timecards: cards }, "e1").fill)
     expect(fills).toEqual([fills[0], fills[0], fills[0]])
     expect(fills[0]).toBeCloseTo(32 / 60)
   })
-  it("a contract with a cap keeps logged of contracted", () => {
-    const b = bar({ engagements: [open({ contractedDays: 100 })], timecards: cards }, "e1")
-    expect(b).toMatchObject({ total: 100, fill: 0.32 })
+  it("a contract with a cap keeps logged of contracted, whatever the Plan says to date", () => {
+    const allocations = [{ id: "a", userId: "u", engagementId: "e1", yearMonth: "2026-08", days: 0, createdAt: at, updatedAt: at }] as Allocation[]
+    const b = bar({ engagements: [open({ contractedDays: 100 })], allocations, timecards: cards }, "e1")
+    expect(b).toMatchObject({ total: 100, plannedToDate: 50, fill: 0.32 })
   })
 })
 
