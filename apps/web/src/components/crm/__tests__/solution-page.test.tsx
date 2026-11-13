@@ -1009,6 +1009,16 @@ describe("Present", () => {
     })
   })
 
+  it("shows no days: no usage, no bar, no estimate, on the road, the Now card or the pipeline", async () => {
+    nav.search = "?present=1"
+    await withRate(async () => {
+      expect(document.body.textContent).not.toMatch(/days? used|hours? used|\d+ days?\b/)
+      expect(screen.queryByRole("progressbar")).not.toBeInTheDocument()
+      // What pays stays: the pipeline still names its opportunities.
+      expect(screen.getByRole("heading", { level: 2, name: "Next Steps in the Pipeline" })).toBeInTheDocument()
+    })
+  })
+
   it("keeps the step cards from opening anything", async () => {
     nav.search = "?present=1"
     await withRate(async () => {

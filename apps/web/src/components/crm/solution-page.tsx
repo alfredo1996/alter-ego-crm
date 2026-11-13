@@ -978,7 +978,7 @@ function SolutionBody({
           {nowContract ? (
             <>
               <div className="flex flex-col gap-1.5">
-                {nowUsage ? (
+                {present ? null : nowUsage ? (
                   <>
                     <p className="text-sm font-medium tabular-nums">{nowLine}</p>
                     <ProgressBar
@@ -1041,9 +1041,9 @@ function SolutionBody({
                   </div>
                   <div className="flex items-center gap-3 text-sm">
                     <StatusPill tone={STAGE_TONE[full.stage]}>{STAGE_LABELS[full.stage]}</StatusPill>
-                    <span className="tabular-nums">
-                      {countIn(full.estimatedDaysPerMonth * full.estimatedDurationMonths, full.unit ?? "day")}
-                    </span>
+                    {!present && (
+                      <span className="tabular-nums">{countIn(full.estimatedDaysPerMonth * full.estimatedDurationMonths, full.unit ?? "day")}</span>
+                    )}
                   </div>
                 </li>
               )

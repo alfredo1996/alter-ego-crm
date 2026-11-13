@@ -104,9 +104,6 @@ describe("the Solutions catalog", () => {
     expect(within(graph).getByText("Delivered")).toHaveClass("bg-success-soft")
     expect(within(graph).getByText("Product")).toBeInTheDocument()
     expect(graph).toHaveTextContent("neo4jgdskafka")
-    expect(graph).toHaveTextContent("Product graph · Active")
-    expect(card("Store search")).toHaveTextContent("Pre-sales")
-    expect(card("Churn model")).toHaveTextContent("Retainer · Closed")
     // The name links to the solution's page, stretched over the row, its focus ring with no white band in dark mode.
     expect(within(graph).getByRole("link")).toHaveAttribute("href", "/solutions/s1")
     expect(within(graph).getByRole("link")).toHaveClass("after:inset-0", "focus-visible:ring-offset-card")
@@ -119,7 +116,10 @@ describe("the Solutions catalog", () => {
       expect(row).toHaveTextContent("One guest record on the front desk's screen.")
       expect(within(row).getByRole("img", { name: "1 of 5 steps done" })).toBeInTheDocument()
       expect(row).toHaveTextContent("Now: MVP on the client's server (step 2 of 5)")
-      expect(row).toHaveTextContent("Next: Front-desk guest card")
+      expect(row).toHaveTextContent("Next: Front-desk guest card, in Proposal")
+      // The days column: the Now step's contract as the page counts it, and the steps an open opportunity pays for.
+      expect(row).toHaveTextContent("6.5 of 11 days · 2 steps in the pipeline")
+      expect(row).not.toHaveTextContent("Guest MVP")
       // The journal entry (27 Oct) is newer than the contract's last call (25 Oct).
       expect(row).toHaveTextContent(/Last activity 27 Oct( 2026)?/)
     })
@@ -237,10 +237,9 @@ describe("Present", () => {
   /** A contract without a name reads as its rate: the money Present must hide. */
   const priced = { getSolutions: [ROAD], getEngagements: [{ ...CAPPED, name: null }] }
 
-  it("shows the rate in the row, and a Present button writes ?present=1", async () => {
+  it("a Present button writes ?present=1", async () => {
     await withData(priced, async () => {
       await show()
-      expect(card("Guest 360")).toHaveTextContent("€600")
       fireEvent.click(screen.getByRole("button", { name: "Present" }))
       expect(replace).toHaveBeenLastCalledWith("/solutions?present=1", { scroll: false })
     })
@@ -252,9 +251,11 @@ describe("Present", () => {
       expect(document.body.textContent).not.toContain("€")
       expect(screen.queryByRole("button", { name: "New Solution" })).not.toBeInTheDocument()
       expect(screen.queryByRole("button", { name: /Edit/ })).not.toBeInTheDocument()
-      expect(screen.getByRole("status")).toHaveTextContent("Presenting")
+      expect(screen.getByRole("status")).toHaveTextContent("Presenting: days, money and edit controls are hidden.")
       expect(within(card("Guest 360")).getByRole("link")).toHaveAttribute("href", "/solutions/s4?present=1")
-      expect(card("Guest 360")).toHaveTextContent("Active")
+      // No days: not the road's, not the row's.
+      expect(document.body.textContent).not.toMatch(/\d+ days?\b/)
+      expect(screen.queryByRole("progressbar")).not.toBeInTheDocument()
     })
   })
 

@@ -123,7 +123,7 @@ export function SolutionRoad({
         <ol className="flex flex-col sm:grid sm:grid-flow-col sm:auto-cols-[minmax(11rem,1fr)] sm:overflow-x-auto sm:pb-2">
           {steps.map((step, i) => {
             const payer = payerLine(step, engagements, opportunities)
-            const detail = step.state === "now" ? nowLine : estimateLine(step, opportunities)
+            const detail = readOnly ? null : step.state === "now" ? nowLine : estimateLine(step, opportunities)
             const isNow = step.state === "now"
             return (
               <li

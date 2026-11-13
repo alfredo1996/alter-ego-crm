@@ -7,8 +7,8 @@
 import { formatYearMonth } from "@alter-ego/kernel/dates"
 import { format } from "date-fns"
 
-import { contractUsage } from "@/lib/engagements"
-import { isOpen } from "@/lib/opportunities"
+import { contractUnit, contractUsage, countIn, inContractUnit, isOverBudget } from "@/lib/engagements"
+import { STAGE_LABELS, isOpen } from "@/lib/opportunities"
 import { SOLUTION_KIND_SECTIONS, SOLUTION_SECTIONS, solutionStepsSchema } from "@/types/schemas"
 
 import type { Engagement, JournalEntry, Meeting, Opportunity, Solution, Timecard, SolutionKind, SolutionSectionKey, SolutionStatus, SolutionStep, SolutionStepPayer } from "@/types"
@@ -113,12 +113,16 @@ export function nowStep(steps: SolutionStep[]): SolutionStep | undefined {
  * after it (the next open step, "The target" after the last). Every step done is Reached: the last day
  * a step was marked Done and its outcome.
  */
-export function roadRow(steps: SolutionStep[]) {
+export function roadRow(steps: SolutionStep[], opportunities: Pick<Opportunity, "id" | "stage" | "engagementId">[] = []) {
   const done = steps.filter((s) => s.state === "done").length
   const reached = steps.length > 0 && done === steps.length
   const now = steps.findIndex((s) => s.state === "now")
   const after = steps.find((s, i) => i > now && s.state !== "done")
   const last = steps[steps.length - 1]
+  // An open opportunity behind the next step names its stage: "Front-desk guest card, in Proposal".
+  const payer = after && stepContract(after, opportunities)
+  const opportunity = payer?.type === "opportunity" ? opportunities.find((o) => o.id === payer.id) : undefined
+  const stage = opportunity && isOpen(opportunity as Opportunity) ? `, in ${STAGE_LABELS[opportunity.stage]}` : ""
   return {
     done,
     total: steps.length,
@@ -126,7 +130,7 @@ export function roadRow(steps: SolutionStep[]) {
     reachedOn: reached ? steps.map((s) => s.doneOn ?? "").sort().pop() || null : null,
     result: reached ? last.outcome : null,
     now: now >= 0 ? { number: now + 1, title: steps[now].title } : null,
-    next: reached || steps.length === 0 ? null : (after?.title ?? (now >= 0 ? "The target" : null)),
+    next: reached || steps.length === 0 ? null : after ? `${after.title}${stage}` : now >= 0 ? "The target" : null,
   }
 }
 
@@ -258,6 +262,30 @@ export function pipelineSteps(
     const opportunity = payer?.type === "opportunity" ? opportunities.find((o) => o.id === payer.id) : undefined
     return opportunity && isOpen(opportunity as Opportunity) ? [{ number: i + 1, step, opportunity }] : []
   })
+}
+
+/**
+ * The row's days column: the days (hours on an hourly contract) the Now step's contract has used, or the
+ * solution's own when no step is Now, then the steps an open opportunity pays for: "6.5 of 11 days · 2 steps
+ * in the pipeline". Either part alone when the other is missing; null with neither.
+ */
+export function usageSummary(
+  solution: Pick<Solution, "engagementId" | "steps">,
+  engagements: (Parameters<typeof stepUsage>[0] & Parameters<typeof contractUnit>[0])[],
+  opportunities: Pick<Opportunity, "id" | "stage" | "engagementId">[],
+  timecards: Pick<Timecard, "engagementId" | "date" | "hours">[],
+  today: string,
+): string | null {
+  const now = nowStep(solution.steps)
+  const payer = now && stepContract(now, opportunities)
+  const id = payer?.type === "contract" ? payer.id : solution.engagementId
+  const contract = engagements.find((e) => e.id === id)
+  const usage = contract && stepUsage(contract, timecards, today)
+  const unit = contract ? contractUnit(contract) : "day"
+  const days = usage && `${inContractUnit(usage.used, unit)} of ${countIn(usage.total, unit)}${isOverBudget(usage) ? ", over budget" : ""}`
+  const n = pipelineSteps(solution.steps, opportunities).length
+  const pipeline = n > 0 ? `${n} ${n === 1 ? "step" : "steps"} in the pipeline` : null
+  return [days, pipeline].filter(Boolean).join(" · ") || null
 }
 
 /** The list with step `from` moved to position `to`; out of range, the list as it was. */

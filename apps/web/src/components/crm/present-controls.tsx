@@ -27,7 +27,7 @@ export function PresentBanner() {
   const { setPresent } = usePresent()
   return (
     <div role="status" className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-foreground px-4 py-3 text-sm text-background">
-      <span>Presenting: money and edit controls are hidden.</span>
+      <span>Presenting: days, money and edit controls are hidden.</span>
       <Button variant="outline" size="lg" className="border-background/40 bg-transparent text-background hover:bg-background/10 hover:text-background" onClick={() => setPresent(false)}>
         Stop Presenting
       </Button>

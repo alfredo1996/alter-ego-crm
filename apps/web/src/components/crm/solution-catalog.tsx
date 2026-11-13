@@ -28,6 +28,7 @@ import { useMeetings } from "@/hooks/use-meetings"
 import { useOpportunities } from "@/hooks/use-opportunities"
 import { usePresent } from "@/hooks/use-present"
 import { useSolutions } from "@/hooks/use-solutions"
+import { useTimecards } from "@/hooks/use-timecards"
 import { engagementLabel } from "@/lib/engagements"
 import {
   SOLUTION_STATUS,
@@ -41,11 +42,12 @@ import {
   shortDay,
   solutionContractIds,
   solutionFilters,
+  usageSummary,
   usedStack,
 } from "@/lib/solutions"
 
 
-import type { Engagement, Solution } from "@/types"
+import type { Engagement, Opportunity, Solution } from "@/types"
 
 /** The Status tabs' "no filter". */
 const ALL = "all"
@@ -138,35 +140,32 @@ export function SolutionCard({
   )
 }
 
-/** The contract's own state beside a dot, with no name: the name can be its rate. */
-function ContractState({ contract }: { contract: Engagement | undefined }) {
-  if (!contract) return <StatusDot outline>Pre-sales</StatusDot>
-  return <StatusDot tone={contract.isActive ? "success" : "neutral"}>{contractState(contract)}</StatusDot>
-}
-
 /**
  * One solution as a row of the list: client, kind and status over the name and the target; the road as a
  * small track of its steps ending in the flag, with Now and Next (Reached and Result once delivered); then
- * the last activity, the contract and the stack. Presenting, the contract shows its state alone: its name
- * can be its rate, and no money figure is on the screen. The name is the row's one control.
+ * the last activity, the days used and the pipeline, and the stack. Presenting, the days go: no days, no money.
+ * The name is the row's one control.
  */
 export function SolutionRow({
   solution: s,
   client,
-  contract,
+  usage,
+  opportunities,
   activity,
   href,
   presenting,
 }: {
   solution: Solution
   client: string
-  contract: Engagement | undefined
+  /** The days column ("6.5 of 11 days · 2 steps in the pipeline"); null = none. */
+  usage: string | null
+  opportunities: Pick<Opportunity, "id" | "stage" | "engagementId">[]
   /** "YYYY-MM-DD" of the newest journal entry or call; null = none. */
   activity: string | null
   href: string
   presenting: boolean
 }) {
-  const road = roadRow(s.steps)
+  const road = roadRow(s.steps, opportunities)
   const titleId = `solution-${s.id}`
   const trackLabel = road.reached ? `All ${road.total} steps done, target reached` : `${road.done} of ${road.total} steps done`
   return (
@@ -243,7 +242,7 @@ export function SolutionRow({
 
       <div className="flex min-w-0 flex-col gap-1.5 text-[13px] text-subtle-foreground sm:max-lg:col-span-2 lg:col-span-1">
         <span>{activity ? `Last activity ${shortDay(new Date(`${activity}T00:00:00`))}` : "No activity yet"}</span>
-        {presenting ? <ContractState contract={contract} /> : <Contract contract={contract} />}
+        {!presenting && usage && <span className="tabular-nums">{usage}</span>}
         {s.stack.length > 0 && <TagList items={s.stack} max={4} />}
       </div>
     </ContentCard>
@@ -265,6 +264,7 @@ export function SolutionCatalog() {
   const journalQuery = useJournal(user?.id)
   const meetingsQuery = useMeetings(user?.id)
   const opportunitiesQuery = useOpportunities(user?.id)
+  const timecardsQuery = useTimecards(user?.id)
   const { present, href } = usePresent()
   const { data: solutions = [] } = solutionsQuery
   const { data: clients = [] } = clientsQuery
@@ -272,6 +272,7 @@ export function SolutionCatalog() {
   const { data: journal = [] } = journalQuery
   const { data: meetings = [] } = meetingsQuery
   const { data: opportunities = [] } = opportunitiesQuery
+  const { data: timecards = [] } = timecardsQuery
   const router = useRouter()
   const params = useSearchParams()
   // New Solution; a solution is edited on its own page.
@@ -298,7 +299,7 @@ export function SolutionCatalog() {
     if (legacy) router.replace(`/solutions/${encodeURIComponent(legacy)}`)
   }, [legacy, router])
 
-  const gate = legacy ? <PageLoader /> : pageState([solutionsQuery, clientsQuery, engagementsQuery, journalQuery, meetingsQuery, opportunitiesQuery])
+  const gate = legacy ? <PageLoader /> : pageState([solutionsQuery, clientsQuery, engagementsQuery, journalQuery, meetingsQuery, opportunitiesQuery, timecardsQuery])
   if (gate) return gate
 
   const filters = { ...solutionFilters(params), q: search.trim() || null }
@@ -315,7 +316,6 @@ export function SolutionCatalog() {
   // Each tab counts what the other filters leave.
   const anyStatus = filterSolutions(solutions, { ...filters, status: null })
   const clientName = new Map(clients.map((c) => [c.id, c.name]))
-  const contractOf = (s: Solution) => engagements.find((e) => e.id === s.engagementId)
   // The clients with a solution, and the one a link filtered by even with none yet.
   const clientOptions = clients
     .filter((c) => c.id === filters.client || solutions.some((s) => s.clientId === c.id))
@@ -429,7 +429,8 @@ export function SolutionCatalog() {
                     <SolutionRow
                       solution={s}
                       client={clientName.get(s.clientId) ?? "Unknown client"}
-                      contract={contractOf(s)}
+                      usage={usageSummary(s, engagements, opportunities, timecards, format(new Date(), "yyyy-MM-dd"))}
+                      opportunities={opportunities}
                       activity={activityOf(s)}
                       href={href(`/solutions/${s.id}`)}
                       presenting={present}

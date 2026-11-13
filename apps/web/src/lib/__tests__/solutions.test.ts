@@ -18,6 +18,7 @@ import {
   sectionsFor,
   stepContract,
   stepUsage,
+  usageSummary,
   stepWhen,
   solutionContractIds,
   solutionFilters,
@@ -280,6 +281,40 @@ describe("stepUsage", () => {
   })
 })
 
+describe("usageSummary", () => {
+  const e1 = { id: "e1", contractedDays: 11, unit: "day" as const }
+  const hourly = { id: "e2", contractedDays: 5, unit: "hour" as const }
+  const uncapped = { id: "e3", contractedDays: null }
+  const timecards = [
+    { engagementId: "e1", date: "2026-10-05", hours: 52 },
+    { engagementId: "e2", date: "2026-10-05", hours: 8 },
+    { engagementId: "e3", date: "2026-10-05", hours: 8 },
+  ]
+  const opps = [
+    { id: "o1", stage: "proposal", engagementId: null },
+    { id: "o2", stage: "lead", engagementId: null },
+    { id: "o3", stage: "lost", engagementId: null },
+  ] as never
+  const paid = (title: string, state: SolutionStep["state"], paidBy: SolutionStep["paidBy"]) => stp(title, state, { paidBy })
+  const summary = (s: Solution, engagements: never[] = [e1, hourly, uncapped] as never[]) => usageSummary(s, engagements, opps, timecards, "2026-11-10")
+
+  it.each([
+    ["the days used and the steps in the pipeline", solution({ id: "a", engagementId: "e1", steps: [paid("A", "now", { type: "contract", id: "e1" }), paid("B", "next", { type: "opportunity", id: "o1" }), paid("C", "later", { type: "opportunity", id: "o2" }), paid("D", "later", { type: "opportunity", id: "o3" })] }), "6.5 of 11 days · 2 steps in the pipeline"],
+    ["one step, singular", solution({ id: "b", engagementId: "e1", steps: [paid("B", "next", { type: "opportunity", id: "o1" })] }), "6.5 of 11 days · 1 step in the pipeline"],
+    ["the days alone with nothing in the pipeline", solution({ id: "c", engagementId: "e1" }), "6.5 of 11 days"],
+    ["hours on an hourly contract, followed from the Now step", solution({ id: "d", engagementId: "e1", steps: [paid("A", "now", { type: "contract", id: "e2" })] }), "8 of 40 hours"],
+    ["the pipeline alone with no contract", solution({ id: "e", steps: [paid("B", "next", { type: "opportunity", id: "o1" })] }), "1 step in the pipeline"],
+    ["the pipeline alone on a contract with no cap", solution({ id: "f", engagementId: "e3", steps: [paid("B", "next", { type: "opportunity", id: "o1" })] }), "1 step in the pipeline"],
+    ["nothing with neither", solution({ id: "g" }), null],
+  ])("reads %s", (_name, s, expected) => {
+    expect(summary(s)).toBe(expected)
+  })
+
+  it("says so in words when the days are over the contract's", () => {
+    expect(usageSummary(solution({ id: "h", engagementId: "e1" }), [{ ...e1, contractedDays: 5 }] as never[], opps, timecards, "2026-11-10")).toBe("6.5 of 5 days, over budget")
+  })
+})
+
 describe("pipelineSteps", () => {
   const opps = [
     { id: "o1", stage: "proposal", engagementId: null },
@@ -395,6 +430,15 @@ describe("roadRow", () => {
     ["nothing on a solution with no steps", [], { done: 0, total: 0, now: null, next: null, reached: false }],
   ])("reads %s", (_name, steps, expected) => {
     expect(roadRow(steps)).toEqual({ ...none, ...expected })
+  })
+
+  it("names the stage of the open opportunity behind the next step, and only that", () => {
+    const opps = [{ id: "o1", stage: "proposal", engagementId: null }, { id: "o2", stage: "lost", engagementId: null }] as never
+    const next = (paidBy: SolutionStep["paidBy"]) => roadRow([st("A", "now"), st("B", "next", { paidBy })], opps).next
+    expect(next({ type: "opportunity", id: "o1" })).toBe("B, in Proposal")
+    expect(next({ type: "opportunity", id: "o2" })).toBe("B")
+    expect(next({ type: "contract", id: "e1" })).toBe("B")
+    expect(next(null)).toBe("B")
   })
 
   it("is reached when every step is done: the last day and the last outcome", () => {
