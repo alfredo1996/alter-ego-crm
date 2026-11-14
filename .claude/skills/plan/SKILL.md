@@ -34,7 +34,7 @@ Deep planning mode for complex features. Produces a detailed implementation plan
    - Flag any breaking changes to existing hooks or components
 
 5. **Write the plan**
-   - Output to `docs/plans/<feature-name>.md`
+   - Post it on the issue the plan is for, as a comment (`gh issue comment <N> --body-file <file>`). With no issue yet, file one with the plan as its body. Nothing is written under `docs/`.
    - Structure:
      - Overview
      - Impact analysis (files, tests, adapter interfaces)

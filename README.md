@@ -8,8 +8,8 @@ Alter Ego CRM is the management app of an Italian SRL (a small consultancy, for
 one owner), built on Next.js 16. It covers:
 
 - **CRM** — the sales pipeline, clients, contracts and their amendments,
-  collaborators, tasks, deadlines, and the Plan: capacity, hours, the runway
-  and the quarters.
+  collaborators, tasks, deadlines, and the Plan: capacity and hours (the runway
+  appears with Books, the quarters with Books and Invoicing).
 - **Invoicing** — invoices and credit notes, unbilled hours, invoice files
   (FatturaPA XML, signed or not, or PDF) and the accountant's package.
 - **Books** — the cash book over the company accounts (with the workbook
@@ -21,10 +21,10 @@ Each area is a **module** that a deployment can switch off with
 `NEXT_PUBLIC_DISABLED_MODULES`: its pages, links and connector tools go, and its
 data is not touched. The backend is swappable through an adapter (`mock` or
 Firebase), and an MCP server exposes the same data to an AI client over HTTP
-(OAuth 2.1) or stdio. This is the server behind the Gemini CRM connector.
+(OAuth 2.1) or stdio.
 
-AI features enhance the experience but never gate it: the app is 100% functional
-with AI turned off. The app never computes taxes: it keeps the cash flow, and
+The app has no AI layer of its own: the MCP connector is the only AI surface, and
+every feature works without it. The app never computes taxes: it keeps the cash flow, and
 the tax return stays with the accountant.
 
 ## Tech Stack
@@ -52,13 +52,19 @@ the tax return stays with the accountant.
 ### Quick Start (mock backend — zero config)
 
 ```bash
+git clone https://github.com/alfredo1996/alter-ego-crm.git
+cd alter-ego-crm
 pnpm install
 pnpm dev          # http://localhost:3000
 ```
 
-Sign in with any email and password — the mock backend stores everything in memory.
+Sign in with a valid email and a password of six or more characters — the mock backend stores everything in memory.
 Data lives in the browser tab and is gone on reload — fine for a look around,
 not for real use.
+
+On a real backend, any Auth account can sign in, but the Firestore rules admit
+one user id (set in `apps/web/src/lib/owner-uid.ts` and in the rules) and deny
+the rest; see [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
 
 ### Self-hosted, with data that persists
 
@@ -105,7 +111,7 @@ server, which uses the Admin SDK and bypasses Firestore rules:
 
 ## MCP server
 
-- 67 tools over the company data, for Claude, Gemini or any MCP client; a module
+- 67 tools over the company data, for Claude or any MCP client; a module
   that is switched off serves none of its tools
 - Remote over HTTP at `/api/mcp` with OAuth 2.1 + PKCE (scopes `data:read` and
   `data:write`) or an API key, or local over stdio with no auth at all
@@ -153,7 +159,7 @@ The adapter is selected by `NEXT_PUBLIC_BACKEND` (`mock` | `firebase`). Each ada
 
 ### State Management
 
-- **Zustand** (`useSettingsStore`) for client-only settings: currency, locale, theme, AI mode
+- **Zustand** (`useSettingsStore`) for client-only settings: the theme
 - **TanStack Query** for all server state: clients, contracts, invoices, the cash book, and so on.
 
 ### AI Philosophy
@@ -191,7 +197,7 @@ Month End, Rent, the Plan, the phone layout and the loading states.
 
 ### Contract Tests
 
-The adapter contract test suite (`src/lib/backend/__tests__/adapter-contract.ts`) defines shared tests that any backend adapter must pass. It runs against mock (always) and Firebase (under the emulator).
+The adapter contract test suite (`apps/web/src/lib/backend/__tests__/adapter-contract.ts`) defines shared tests that any backend adapter must pass. It runs against mock (always) and Firebase (under the emulator).
 
 ```bash
 pnpm test:firebase           # needs the emulators running
@@ -224,9 +230,8 @@ pnpm test:firebase:docker    # starts the emulator via Docker first
 
 ## Documentation
 
-- **`/docs`** — Fumadocs site covering architecture, the backend adapters, deployment, and contributing guides (English, and Italian under `/it/docs`)
+- **[alfredo1996.github.io/alter-ego-crm](https://alfredo1996.github.io/alter-ego-crm/)** — the docs site, covering architecture, the backend adapters, deployment, and contributing guides, in English and Italian. The app serves the same pages under `/docs`
 - **[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)** — Deploy your own on Firebase App Hosting
-- **[docs/LOCAL-DEVELOPMENT.md](docs/LOCAL-DEVELOPMENT.md)** — Local development setup guide
 - **[docs/SELF-HOSTING.md](docs/SELF-HOSTING.md)** — Running it locally with persistent data, and connecting an MCP client
 
 ## Contributing
@@ -239,7 +244,10 @@ pnpm test:firebase:docker    # starts the emulator via Docker first
 - **Styling**: Use `cn()` utility for conditional Tailwind classes
 - **Testing**: Add unit tests for new utilities/logic, E2E tests for new user flows
 
-See the [contributing guide](/docs/contributing/conventions) in the Fumadocs site for full details.
+See the [contributing guide](content/docs/en/contributing/conventions.mdx) for full details.
+
+The personal-finance app is a separate project:
+[alter-ego](https://github.com/alfredo1996/alter-ego).
 
 ## License
 

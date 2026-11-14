@@ -6,7 +6,7 @@ description: Coding conventions and patterns used in Alter Ego
 ## File Naming
 
 - **kebab-case** for all files: `use-clients.ts`, `client-card.tsx`
-- Tests colocated in `__tests__/` directories: `src/lib/__tests__/dates.test.ts`
+- Tests colocated in `__tests__/` directories: `apps/web/src/lib/__tests__/cash-book.test.ts`
 
 ## Exports
 
@@ -63,13 +63,14 @@ import { collection, getDocs } from "firebase/firestore"
 
 ## Currency
 
-Always use the `useCurrency()` hook — never hardcode `Intl.NumberFormat`:
+Company money is euro. Format it with `eur` (whole euros) or `eurShort` (cents kept when there are any) from `@alter-ego/kernel/currency`; a component builds its own `Intl.NumberFormat` only for a form the kernel lacks:
 
 ```typescript
-const { format } = useCurrency()
-// format(1234.56) → "$1,234.56"
+import { eur } from "@alter-ego/kernel/currency"
+
+eur(1234.56) // "€1,235"
 ```
 
 ## Charts
 
-All charts are pure SVG. The `format` function is always passed as a prop, never imported directly inside chart components.
+All charts are pure SVG, with no external chart library.

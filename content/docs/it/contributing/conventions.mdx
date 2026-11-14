@@ -6,7 +6,7 @@ description: Convenzioni di codifica e pattern utilizzati in Alter Ego
 ## Nomenclatura File
 
 - **kebab-case** per tutti i file: `use-clients.ts`, `client-card.tsx`
-- Test collocati in directory `__tests__/`: `src/lib/__tests__/dates.test.ts`
+- Test collocati in directory `__tests__/`: `apps/web/src/lib/__tests__/cash-book.test.ts`
 
 ## Esportazioni
 
@@ -63,13 +63,14 @@ import { collection, getDocs } from "firebase/firestore"
 
 ## Valuta
 
-Usa sempre l'hook `useCurrency()` — mai hardcodare `Intl.NumberFormat`:
+Il denaro aziendale è in euro. Formattalo con `eur` (euro interi) o `eurShort` (centesimi se ci sono) da `@alter-ego/kernel/currency`; un componente costruisce un proprio `Intl.NumberFormat` solo per una forma che il kernel non offre:
 
 ```typescript
-const { format } = useCurrency()
-// format(1234.56) → "€1.234,56"
+import { eur } from "@alter-ego/kernel/currency"
+
+eur(1234.56) // "€1,235"
 ```
 
 ## Grafici
 
-Tutti i grafici sono SVG puri. La funzione `format` viene sempre passata come prop, mai importata direttamente dentro i componenti grafici.
+Tutti i grafici sono SVG puri, senza librerie di grafici esterne.

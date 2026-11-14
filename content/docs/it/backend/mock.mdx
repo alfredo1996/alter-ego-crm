@@ -9,7 +9,7 @@ Il backend mock memorizza tutti i dati in memoria e riparte vuoto a ogni caricam
 
 ## Funzionalità
 
-- Accetta qualsiasi email e password e parte vuoto
+- Accetta un'email valida e una password di almeno sei caratteri, e parte vuoto
 - Tiene in memoria anche i file delle fatture
 - Implementazione completa di tutti i metodi `DatabaseAdapter`
 - `__resetMockState()` per l'isolamento dei test
@@ -27,10 +27,9 @@ Nessuna configurazione aggiuntiva necessaria — basta eseguire `pnpm dev`.
 Il backend mock è utilizzato in tutti i test unitari Vitest. Chiama `__resetMockState()` nel `beforeEach` per garantire uno stato pulito tra i test:
 
 ```typescript
-import { getBackend } from "@/lib/backend"
+import { __resetMockState } from "@/lib/backend/mock"
 
 beforeEach(() => {
-  const backend = getBackend() as MockBackend
-  backend.__resetMockState()
+  __resetMockState()
 })
 ```

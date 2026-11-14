@@ -32,8 +32,8 @@ pnpm local:stop      # exports data on the way out
 
 ## Invoice files
 
-Not on `pnpm dev:emulator`: that emulator image has no Storage, so attaching an invoice file to a cost or an
-invoice fails there. The mock backend (`pnpm dev`) and the project's own `docker compose up` emulator have it.
+Not on `pnpm dev:emulator`: `docker-compose.local.yml` starts only Auth and Firestore (`--only auth,firestore`) and mounts no `storage.rules`; `docker-compose.yml` also runs Storage, on port 19199. So attaching an invoice file to a cost or an
+invoice fails there. The mock backend (`pnpm dev`) holds invoice files in memory.
 
 ## Where your data lives
 
@@ -89,10 +89,10 @@ The HTTP endpoint (`/api/mcp`) authenticates with OAuth 2.1 + PKCE and grants tw
 scopes: **`data:read`** and **`data:write`**. Clients discover them from
 `/.well-known/oauth-authorization-server`, so there is nothing to configure.
 
-These were named `crm:read` / `crm:write` until September 2026, back when the
-company tools were the only consumer. **A token issued before the rename no
-longer satisfies the gate** — reconnect the connector once and the new scopes are
-requested automatically. Nothing else about the flow changed.
+Creating an API key (`/api/keys`) and approving a remote client
+(`/api/oauth/authorize`) call `isOwner` on the emulator too, so for either one your
+uid has to be in `apps/web/src/lib/owner-uid.ts`. Everything else in the UI, and
+the stdio MCP server, work with any local account.
 
 Try it without a client:
 
@@ -112,8 +112,8 @@ large datasets, or unattended uptime.
 
 If it outgrows that, the adapter boundary is the seam to replace: implement
 `DatabaseAdapter` (`CrmAdapter`, `RentAdapter` and the API keys) against
-whatever store you prefer, and add it to `NEXT_PUBLIC_BACKEND` in `src/lib/env.ts`.
-The shared contract in `src/lib/backend/__tests__/adapter-contract.ts` is what a
+whatever store you prefer, and add it to `NEXT_PUBLIC_BACKEND` in `apps/web/src/lib/env.ts`.
+The shared contract in `apps/web/src/lib/backend/__tests__/adapter-contract.ts` is what a
 new backend has to satisfy.
 
 ## Why this is separate from the test emulator
