@@ -142,4 +142,16 @@ describe("documentation matches the repository", () => {
     );
     expect(bad).toEqual([]);
   });
+
+  // The one fenced block that is checked: the routes in the README's project tree.
+  it("lists the app's routes in the README's project tree", () => {
+    const readme = readFileSync(join(ROOT, "README.md"), "utf8");
+    const tree = /\(app\)\/([\s\S]*?)── api\//.exec(readme)?.[1] ?? "";
+    const routes = readdirSync(join(process.cwd(), "src/app/(app)"), {
+      withFileTypes: true,
+    })
+      .filter((d) => d.isDirectory() && !d.name.startsWith("_"))
+      .map((d) => `/${d.name}`);
+    expect((tree.match(/\/[a-z-]+/g) ?? []).sort()).toEqual(routes.sort());
+  });
 });

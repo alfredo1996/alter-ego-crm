@@ -123,9 +123,9 @@ server, which uses the Admin SDK and bypasses Firestore rules:
 apps/web/src/   (kernel: packages/kernel; UI kit: packages/ui; Rent: packages/modules/rent)
 ├── app/
 │   ├── (auth)/              # /login, /register (sign-up is closed)
-│   ├── (app)/               # /pipeline, /clients, /collaborators, /solutions,
-│   │                        #   /invoices, /cash-book, /rent, /month-end, /tasks,
-│   │                        #   /plan, /deadlines, /costs, /settings
+│   ├── (app)/               # /pipeline, /clients, /contracts, /collaborators,
+│   │                        #   /solutions, /invoices, /cash-book, /rent, /month-end,
+│   │                        #   /tasks, /plan, /deadlines, /costs, /settings
 │   ├── api/                 # MCP server, OAuth endpoints, API keys
 │   └── [lang]/docs/         # Fumadocs pages
 ├── components/              # crm, plan, deadlines, company-expenses, cash-book,
