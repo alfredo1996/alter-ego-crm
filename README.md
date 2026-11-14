@@ -111,7 +111,7 @@ server, which uses the Admin SDK and bypasses Firestore rules:
 
 ## MCP server
 
-- 67 tools over the company data, for Claude or any MCP client; a module
+- 68 tools over the company data, for Claude or any MCP client; a module
   that is switched off serves none of its tools
 - Remote over HTTP at `/api/mcp` with OAuth 2.1 + PKCE (scopes `data:read` and
   `data:write`) or an API key, or local over stdio with no auth at all
