@@ -54,8 +54,8 @@ describe("tool module registrations", () => {
 
   // The README's count went stale once: it is checked here now. ping is not counted.
   it("the README counts every tool served, ping excluded", () => {
-    expect(crmRead.length + crmWrite.length + rentTools.length).toBe(67)
-    expect(readFileSync("../../README.md", "utf8")).toContain("- 67 tools over the company data")
+    expect(crmRead.length + crmWrite.length + rentTools.length).toBe(68)
+    expect(readFileSync("../../README.md", "utf8")).toContain("- 68 tools over the company data")
   })
 })
 
