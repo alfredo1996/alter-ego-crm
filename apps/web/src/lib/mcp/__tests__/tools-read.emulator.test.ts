@@ -1738,6 +1738,10 @@ describe("get_hours_left", () => {
     expect(payload).toMatchObject({ day: { logged: 3, left: 5, onOtherContracts: 3 }, most: 5 })
     const refused = await callTool("log_time", { engagementId: migrazione.id, date: day, hours: 6 })
     expect(refused.isError).toBe(true)
+    expect(JSON.stringify(refused.payload)).toContain("That makes 9 h on this client in one day: more than 8.")
+    const at = await callTool("log_time", { engagementId: migrazione.id, date: day, hours: 5 })
+    expect(at.isError).toBe(false)
+    await callTool("log_time", { engagementId: migrazione.id, date: day, hours: 0 })
   })
 
   it("reports the contract's days left where log_time starts refusing", async () => {
@@ -1746,11 +1750,24 @@ describe("get_hours_left", () => {
     expect(payload).toMatchObject({ contractLeft: { daysLeft: 0.75, hoursLeft: 6 }, most: 6, binds: "contract" })
     const above = await callTool("log_time", { engagementId: gamma, date: day, hours: 6.25 })
     expect(above.isError).toBe(true)
+    expect(JSON.stringify(above.payload)).toContain("The contract has 6 h left")
     const at = await callTool("log_time", { engagementId: gamma, date: day, hours: 6 })
     expect(at.isError).toBe(false)
     // The hours are in now: the same day shows them as logged, and nothing more to add.
     const after = await callTool("get_hours_left", { engagementId: gamma, date: day })
     expect(after.payload).toMatchObject({ day: { logged: 6, left: 2, onThisContract: 6 }, contractLeft: { hoursLeft: 0 }, most: 0 })
+  })
+
+  it("refuses a date that does not exist", async () => {
+    const { isError, payload } = await callTool("get_hours_left", { engagementId: gamma, date: "2026-02-30" })
+    expect(isError).toBe(true)
+    expect(JSON.stringify(payload)).toContain("does not exist")
+  })
+
+  it("asks for the contract when the client alone has several active ones", async () => {
+    const { isError, payload } = await callTool("get_hours_left", { client: "Acme Spa", date: day })
+    expect(isError).toBe(true)
+    expect(JSON.stringify(payload)).toContain("active contracts")
   })
 
   it("says why a date takes no hours", async () => {
