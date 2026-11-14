@@ -81,6 +81,7 @@ packages/
                           # is a PageHeader), FiltersSheet, use-toast, cn(), tokens.css.
                           # Imports only the kernel and its own dependencies
 firestore/, firestore.rules, storage.rules, firebase.json, docker/   # stay at the root
+skills/                   # Claude Code skills shipped with the repo (file-work)
 ```
 
 Import the packages as `@alter-ego/ui/ui/button`, `@alter-ego/ui/page/page-header`,

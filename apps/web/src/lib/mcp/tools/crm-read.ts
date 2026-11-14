@@ -1197,7 +1197,7 @@ export function registerCrmReadTools(server: McpServer): void {
         "it is only a warning), the most that can be added and which limit binds (day, contract or date), and the reason " +
         "when the date takes no hours. Computed by the functions log_time enforces: hours at most `most` pass, one " +
         "more is refused. hours is the day's TOTAL on the contract, so to add to stored hours, log_time takes " +
-        "day.onThisContract + the addition with replace: true. Hourly contracts read in hours.",
+        "day.onThisContract + the addition with replace: true. Hourly contracts read in hours (planned and left in hours, no day fields).",
       inputSchema: z.object({
         client: z.string().min(1).optional(),
         engagementId: z.string().optional(),
@@ -1229,13 +1229,7 @@ export function registerCrmReadTools(server: McpServer): void {
           today,
           plannedDays: monthPlanDays(engagement, allocations, yearMonth, today.slice(0, 7)),
         })
-        const clientOf = new Map(engagements.map((e) => [e.id, e.clientId]))
-        const byClient = new Map<string, number>()
-        for (const t of timecards) {
-          const c = clientOf.get(t.engagementId)
-          if (t.date === date && !t.collaboratorId && c && c !== engagement.clientId) byClient.set(c, (byClient.get(c) ?? 0) + t.hours)
-        }
-        const otherClients = [...byClient].map(([c, hours]) => ({ client: clientName(c), hours: round2(hours) }))
+        const otherClients = room.otherClients.map((o) => ({ client: clientName(o.clientId), hours: o.hours }))
 
         const hourly = room.unit === "hour"
         const left = (days: number | null, hours: number | null) =>
@@ -1268,7 +1262,7 @@ export function registerCrmReadTools(server: McpServer): void {
           contract: engagementLabel(engagement),
           date,
           ...room,
-          otherClients,
+          otherClients, // by name, over room's by id
         })
       } catch (e) {
         return toolError(e)
