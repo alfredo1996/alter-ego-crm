@@ -134,6 +134,71 @@ export function cellLimits(input: {
   }
 }
 
+export interface HoursRoom {
+  unit: ContractUnit
+  /** hoursRefusal for the date: a refused date takes no hours. */
+  refusal: HoursRefusal | null
+  /** The owner's day on this client, of MAX_HOURS_A_DAY; other clients' hours count only on them. */
+  day: { logged: number; left: number; of: number; onThisContract: number; onOtherContracts: number; onOtherClients: number }
+  /** What the contract's days still take now; null = no contracted days. */
+  contractLeft: { daysLeft: number | null; hoursLeft: number | null }
+  /** The month's plan, this contract's hours in it (everyone's); the plan null = none. Past the plan is a warning, so left can be negative. */
+  month: { yearMonth: string; plannedDays: number | null; loggedHours: number; leftHours: number | null; leftDays: number | null }
+  /** The most hours that can still be added to the day on this contract, and which limit binds. */
+  most: number
+  binds: "day" | "contract" | "date"
+}
+
+/**
+ * The room get_hours_left shows, from the same cellLimits log_time enforces: what
+ * `engagement` can still take on `date` from the owner. `most` is limitRefusal's own
+ * edge, so one more hour is refused with the kind named in `binds`.
+ */
+export function hoursRoom(input: {
+  timecards: readonly Pick<Timecard, "engagementId" | "date" | "hours" | "collaboratorId">[]
+  engagements: readonly LimitContract[]
+  engagement: LimitContract & Pick<Engagement, "isActive" | "startMonth" | "endMonth" | "endDate"> & { unit?: ContractUnit | null }
+  date: string
+  today: string
+  plannedDays: number | null
+}): HoursRoom {
+  const { engagement: e, date } = input
+  const l = cellLimits({ ...input, who: null })
+  const clientOf = new Map(input.engagements.map((x) => [x.id, x.clientId]))
+  const sum = (pool: typeof input.timecards) => round2(pool.reduce((s, t) => s + t.hours, 0))
+  const ownerDay = input.timecards.filter((t) => t.date === date && !t.collaboratorId)
+  const stored = sum(ownerDay.filter((t) => t.engagementId === e.id))
+  const refusal = hoursRefusal(e, date, input.today)
+  const dayRoom = round2(MAX_HOURS_A_DAY - l.otherHours)
+  const contractRoom = l.contractLeft
+  const total = Math.min(dayRoom, contractRoom ?? Infinity)
+  const hoursLeft = contractRoom === null ? null : Math.max(0, round2(contractRoom - stored))
+  const loggedHours = round2(l.monthOthers + stored)
+  const leftHours = l.planHours === null ? null : round2(l.planHours - loggedHours)
+  return {
+    unit: contractUnit(e),
+    refusal,
+    day: {
+      logged: round2(l.otherHours + stored),
+      left: Math.max(0, round2(dayRoom - stored)),
+      of: MAX_HOURS_A_DAY,
+      onThisContract: stored,
+      onOtherContracts: l.otherHours,
+      onOtherClients: sum(ownerDay.filter((t) => clientOf.get(t.engagementId) !== e.clientId)),
+    },
+    contractLeft: { daysLeft: hoursLeft === null ? null : hoursToDays(hoursLeft), hoursLeft },
+    month: {
+      yearMonth: date.slice(0, 7),
+      plannedDays: input.plannedDays,
+      loggedHours,
+      leftHours,
+      leftDays: leftHours === null ? null : hoursToDays(leftHours),
+    },
+    most: refusal ? 0 : Math.max(0, round2(total - stored)),
+    binds: refusal ? "date" : contractRoom !== null && contractRoom < dayRoom ? "contract" : "day",
+  }
+}
+
 export type HoursEdit =
   | { kind: "same" }
   | { kind: "set"; hours: number; warning?: string }

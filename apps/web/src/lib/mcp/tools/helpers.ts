@@ -290,6 +290,68 @@ export function resolveEngagement(pool: Engagement[], clients: Client[], query: 
 export const candidate = (e: Engagement) => `${engagementLabel(e)} (id ${e.id})${closedMark(e)}`
 
 /**
+ * Resolves a contract among the active ones first, then among all of them: a closed
+ * contract stays reachable (#156) without making ambiguous a name that matched a
+ * single active contract before — a renewal sharing its predecessor's name. The
+ * fallback searches a superset, so a real miss or ambiguity still throws, listing
+ * closed contracts too.
+ */
+export function resolvePreferringActive(pool: Engagement[], clients: Client[], query: string): Engagement {
+  try {
+    return resolveEngagement(pool.filter((e) => e.isActive), clients, query)
+  } catch {
+    return resolveEngagement(pool, clients, query)
+  }
+}
+
+/**
+ * The engagement a client-scoped write should target. `engagement` (id or contract
+ * name) reaches a closed contract of the client too, so a correction to its days or
+ * a late verbale can still land (#156); without it, the client's only active contract.
+ */
+export function pickEngagement(
+  engagements: Engagement[],
+  clients: Client[],
+  client: Client,
+  engagement: string | undefined
+): Engagement {
+  const own = engagements.filter((e) => e.clientId === client.id)
+  if (engagement) return resolvePreferringActive(own, clients, engagement)
+  const candidates = own.filter((e) => e.isActive)
+  if (candidates.length === 0) {
+    throw new ToolInputError(
+      `No active contract for ${client.name}.` +
+        (own.length > 0
+          ? ` Contracts: ${own.map(candidate).join("; ")}. For a closed one pass engagementId (id or name).`
+          : " Create the contract in the web app first.")
+    )
+  }
+  if (candidates.length > 1) {
+    const list = candidates.map(candidate).join("; ")
+    throw new ToolInputError(
+      `${client.name} has ${candidates.length} active contracts: ${list}. Pass engagementId (id or name).`
+    )
+  }
+  return candidates[0]
+}
+
+/**
+ * The contract a write names: the client's (engagementId picking among several),
+ * or engagementId alone, active contracts first and then closed ones (#156).
+ */
+export function targetEngagement(
+  engagements: Engagement[],
+  clients: Client[],
+  input: { client?: string; engagementId?: string }
+): Engagement {
+  if (input.client) {
+    return pickEngagement(engagements, clients, resolveClient(clients, input.client), input.engagementId)
+  }
+  if (input.engagementId) return resolvePreferringActive(engagements, clients, input.engagementId)
+  throw new ToolInputError("Pass client or engagementId (the contract's id or name).")
+}
+
+/**
  * The contract update_engagement and amend_contract act on: engagementId (id or
  * name) among every contract, closed ones too, or among the client's when client
  * is passed; a client's only contract needs no engagementId — the unnamed one of

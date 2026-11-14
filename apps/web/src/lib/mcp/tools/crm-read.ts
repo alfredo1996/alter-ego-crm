@@ -69,6 +69,7 @@ import {
   resolveSolution,
   revenueCells,
   solutionCard,
+  targetEngagement,
 } from "@/lib/mcp/tools/helpers"
 import { registerGetFile } from "@/lib/mcp/tools/invoice-files"
 import { sortMeetings } from "@/lib/meetings"
@@ -85,10 +86,10 @@ import {
 import { margin as quarterMargin, quarterRows } from "@/lib/quarters"
 import { filterSolutions, sectionsFor } from "@/lib/solutions"
 import { isTaskOverdue, normalizeLabels, sortTasks, statusOf, taskClientId } from "@/lib/tasks"
-import { hoursAction, monthHours, planCells } from "@/lib/timecards"
+import { hoursAction, hoursRoom, monthHours, monthPlanDays, planCells, refusalMessage } from "@/lib/timecards"
 import { z } from "@/lib/zod"
 import { isModuleOn } from "@/modules"
-import { companyDeadlineKindSchema, SOLUTION_SECTIONS, solutionSectionKeySchema, solutionStatusSchema } from "@/types/schemas"
+import { companyDeadlineKindSchema, setTimecardSchema, SOLUTION_SECTIONS, solutionSectionKeySchema, solutionStatusSchema } from "@/types/schemas"
 
 import type { CashRow } from "@/lib/cash-book"
 import type { StepKey } from "@/lib/month-end"
@@ -1176,6 +1177,98 @@ export function registerCrmReadTools(server: McpServer): void {
           byContract,
           rows,
           ...(ahead.length > 0 && { scheduled: { hours: aheadHours, days: hoursToDays(aheadHours), rows: aheadRows } }),
+        })
+      } catch (e) {
+        return toolError(e)
+      }
+    }
+  )
+
+  server.registerTool(
+    "get_hours_left",
+    {
+      title: "Hours Left",
+      description:
+        "The room for hours on one contract on one day, before log_time: «quante ore posso ancora mettere oggi su " +
+        "Dunder?» → client 'Dunder'. Takes log_time's own inputs (client, engagementId as id or name, date, default " +
+        "today in Europe/Rome), so one set of arguments goes to both. Replies with the day on the client (logged, left, " +
+        "of 8: other clients' hours that day count only on them), the contract's days and hours left (null with no " +
+        "contracted days), the month's planned days with this contract's hours and what is left (null with no plan; past " +
+        "it is only a warning), the most that can be added and which limit binds (day, contract or date), and the reason " +
+        "when the date takes no hours. Computed by the functions log_time enforces: hours at most `most` pass, one " +
+        "more is refused. hours is the day's TOTAL on the contract, so to add to stored hours, log_time takes " +
+        "day.onThisContract + the addition with replace: true. Hourly contracts read in hours.",
+      inputSchema: z.object({
+        client: z.string().min(1).optional(),
+        engagementId: z.string().optional(),
+        date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Use YYYY-MM-DD").optional(),
+      }),
+    },
+    async (input, ctx) => {
+      try {
+        const userId = userIdOf(ctx)
+        const today = isoDate(new Date())
+        const date = input.date ?? today
+        if (!setTimecardSchema.shape.date.safeParse(date).success) {
+          throw new ToolInputError(`Invalid date: "${date}" does not exist.`)
+        }
+        const yearMonth = date.slice(0, 7)
+        const [clients, engagements, timecards, allocations] = await Promise.all([
+          db().getClients(userId),
+          db().getEngagements(userId),
+          db().getTimecards(userId),
+          db().getAllocations(userId, { from: yearMonth, to: yearMonth }),
+        ])
+        const engagement = targetEngagement(engagements, clients, input)
+        const clientName = (id: string) => clients.find((c) => c.id === id)?.name ?? id
+        const room = hoursRoom({
+          timecards,
+          engagements,
+          engagement,
+          date,
+          today,
+          plannedDays: monthPlanDays(engagement, allocations, yearMonth, today.slice(0, 7)),
+        })
+        const clientOf = new Map(engagements.map((e) => [e.id, e.clientId]))
+        const byClient = new Map<string, number>()
+        for (const t of timecards) {
+          const c = clientOf.get(t.engagementId)
+          if (t.date === date && !t.collaboratorId && c && c !== engagement.clientId) byClient.set(c, (byClient.get(c) ?? 0) + t.hours)
+        }
+        const otherClients = [...byClient].map(([c, hours]) => ({ client: clientName(c), hours: round2(hours) }))
+
+        const hourly = room.unit === "hour"
+        const left = (days: number | null, hours: number | null) =>
+          hours === null ? null : hourly ? `${hours} h left` : `${plural(round2(days ?? 0), "day", "days")} left (${hours} h)`
+        const when = date === today ? "Today" : date
+        const client = clientName(engagement.clientId)
+        const monthName = format(new Date(`${date}T00:00:00`), "MMMM")
+        const { day, contractLeft, month } = room
+        const monthLine =
+          month.leftHours === null
+            ? `${monthName} plan: none for this contract.`
+            : month.leftHours < 0
+              ? `${monthName} plan: ${round2(-month.leftHours)} h past it (a warning, not a refusal).`
+              : `${monthName} plan: ${left(month.leftDays, month.leftHours)}.`
+        const summary = [
+          `${when} on ${client}: ${day.logged === 0 ? "nothing yet" : `${day.logged} h logged`}, ${day.left} h left of ${day.of}.`,
+          ...(otherClients.length > 0
+            ? [`Your ${otherClients.map((o) => `${o.hours} h on ${o.client}`).join(", ")} ${date === today ? "today" : "that day"} count only there.`]
+            : []),
+          contractLeft.hoursLeft === null ? "Contract: no contracted days." : `Contract: ${left(contractLeft.daysLeft, contractLeft.hoursLeft)}.`,
+          monthLine,
+          room.refusal
+            ? `${refusalMessage[room.refusal]} No hours can be added.`
+            : `At most ${room.most} h can be added (${room.binds === "day" ? `the ${day.of}-hour day` : "the contract's days"}).`,
+        ].join(" ")
+        return ok({
+          summary,
+          client,
+          engagementId: engagement.id,
+          contract: engagementLabel(engagement),
+          date,
+          ...room,
+          otherClients,
         })
       } catch (e) {
         return toolError(e)
