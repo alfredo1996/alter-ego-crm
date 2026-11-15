@@ -1699,3 +1699,79 @@ describe("get_client, a contract worked past its budget (#308)", () => {
     expect(engs.find((e) => e.id === under.id)?.exhaustionMonth).toMatch(/^\d{4}-\d{2}$/)
   })
 })
+
+describe("get_hours_left", () => {
+  // A fixed past day, away from list_time's rows; the contracts are seeded last so no other suite sees them.
+  const day = "2026-05-19"
+  let migrazione: Engagement
+  let beta: Engagement
+  let pilot: string
+  let gamma: string
+
+  beforeAll(async () => {
+    migrazione = engagements.find((e) => e.name === "Migrazione cloud")!
+    beta = engagements.find((e) => e.name === null)!
+    pilot = await seedEngagement({ clientId: migrazione.clientId, dailyRate: 900, defaultDaysPerMonth: 2, name: "Pilot" })
+    const gammaClient = await admin.createClient(userId, { name: "Gamma Srl" })
+    gamma = await seedEngagement({ clientId: gammaClient.id, dailyRate: 800, defaultDaysPerMonth: 1, contractedDays: 2, name: "Gamma Build" })
+    await admin.setTimecard(userId, { engagementId: beta.id, date: day, hours: 2, notes: null })
+  })
+
+  it("leaves the client its 8 h when 2 h went on another client that day", async () => {
+    const { isError, payload } = await callTool("get_hours_left", { engagementId: migrazione.id, date: day })
+    expect(isError).toBe(false)
+    expect(payload).toMatchObject({
+      client: "Acme Spa",
+      contract: "Migrazione cloud",
+      date: day,
+      day: { logged: 0, left: 8, of: 8, onOtherContracts: 0, onOtherClients: 2 },
+      most: 8,
+      binds: "day",
+      otherClients: [{ client: "Beta Srl", hours: 2 }],
+    })
+    expect(payload.summary).toContain("2026-05-19 on Acme Spa: nothing yet, 8 h left of 8. Your 2 h on Beta Srl that day count only there.")
+  })
+
+  it("takes 3 h on the client's other contract off the day: 5 h left", async () => {
+    await admin.setTimecard(userId, { engagementId: pilot, date: day, hours: 3, notes: null })
+    const { payload } = await callTool("get_hours_left", { client: "Acme Spa", engagementId: migrazione.id, date: day })
+    expect(payload).toMatchObject({ day: { logged: 3, left: 5, onOtherContracts: 3 }, most: 5 })
+    const refused = await callTool("log_time", { engagementId: migrazione.id, date: day, hours: 6 })
+    expect(refused.isError).toBe(true)
+    expect(JSON.stringify(refused.payload)).toContain("That makes 9 h on this client in one day: more than 8.")
+    const at = await callTool("log_time", { engagementId: migrazione.id, date: day, hours: 5 })
+    expect(at.isError).toBe(false)
+    await callTool("log_time", { engagementId: migrazione.id, date: day, hours: 0 })
+  })
+
+  it("reports the contract's days left where log_time starts refusing", async () => {
+    await admin.setTimecard(userId, { engagementId: gamma, date: "2026-05-12", hours: 10, notes: null })
+    const { payload } = await callTool("get_hours_left", { engagementId: gamma, date: day })
+    expect(payload).toMatchObject({ contractLeft: { daysLeft: 0.75, hoursLeft: 6 }, most: 6, binds: "contract" })
+    const above = await callTool("log_time", { engagementId: gamma, date: day, hours: 6.25 })
+    expect(above.isError).toBe(true)
+    expect(JSON.stringify(above.payload)).toContain("The contract has 6 h left")
+    const at = await callTool("log_time", { engagementId: gamma, date: day, hours: 6 })
+    expect(at.isError).toBe(false)
+    // The hours are in now: the same day shows them as logged, and nothing more to add.
+    const after = await callTool("get_hours_left", { engagementId: gamma, date: day })
+    expect(after.payload).toMatchObject({ day: { logged: 6, left: 2, onThisContract: 6 }, contractLeft: { hoursLeft: 0 }, most: 0 })
+  })
+
+  it("refuses a date that does not exist", async () => {
+    const { isError, payload } = await callTool("get_hours_left", { engagementId: gamma, date: "2026-02-30" })
+    expect(isError).toBe(true)
+    expect(JSON.stringify(payload)).toContain("does not exist")
+  })
+
+  it("asks for the contract when the client alone has several active ones", async () => {
+    const { isError, payload } = await callTool("get_hours_left", { client: "Acme Spa", date: day })
+    expect(isError).toBe(true)
+    expect(JSON.stringify(payload)).toContain("active contracts")
+  })
+
+  it("says why a date takes no hours", async () => {
+    const { payload } = await callTool("get_hours_left", { engagementId: gamma, date: "2099-01-05" })
+    expect(payload).toMatchObject({ refusal: "tooFar", most: 0, binds: "date" })
+  })
+})

@@ -6,6 +6,8 @@ import {
   hoursEdit,
   hoursLine,
   hoursRefusal,
+  hoursRoom,
+  planWarning,
   lastLoggableDay,
   limitMessage,
   limitRefusal,
@@ -717,5 +719,97 @@ describe("weekResult with two people on a contract", () => {
 
   it("reports the owner's own hours apart", () => {
     expect(r.own).toEqual({ worked: 8, scheduled: 0, workedValue: 500, scheduledValue: 0 })
+  })
+})
+
+describe("hoursRoom", () => {
+  const day = "2026-11-12"
+  const today = "2026-11-12"
+  const eng = (id: string, clientId: string, over: Record<string, unknown> = {}) =>
+    ({ id, clientId, contractedDays: null, amendments: [], unit: "day", isActive: true, startMonth: "2026-10", endMonth: null, endDate: null, ...over }) as unknown as Engagement
+  const A1 = eng("a1", "A", { contractedDays: 11 })
+  const A2 = eng("a2", "A")
+  const B1 = eng("b1", "B")
+  const tc = (engagementId: string, hours: number, date = day, collaboratorId: string | null = null) => ({ engagementId, date, hours, collaboratorId })
+  const room = (timecards: ReturnType<typeof tc>[], e: Engagement = A1, plannedDays: number | null = 4) =>
+    hoursRoom({ timecards, engagements: [A1, A2, B1], engagement: e, date: day, today, plannedDays })
+
+  it("the board's day: 52 h before today, 20 of them in November, 2 h on another client today", () => {
+    const r = room([tc("a1", 32, "2026-10-20"), tc("a1", 20, "2026-11-03"), tc("b1", 2)])
+    expect(r).toMatchObject({
+      refusal: null,
+      day: { logged: 0, left: 8, of: 8, onThisContract: 0, onOtherContracts: 0, onOtherClients: 2 },
+      contractLeft: { daysLeft: 4.5, hoursLeft: 36 },
+      month: { yearMonth: "2026-11", plannedDays: 4, loggedHours: 20, leftHours: 12, leftDays: 1.5 },
+      most: 8,
+      binds: "day",
+    })
+  })
+
+  it("another contract of the client takes 3 h of the day; a collaborator's hours reach the contract, not the owner's day", () => {
+    const r = room([tc("a2", 3), tc("a1", 5, "2026-11-02", "c1")])
+    expect(r.day).toMatchObject({ logged: 3, left: 5, onOtherContracts: 3 })
+    expect(r.most).toBe(5)
+    expect(r.contractLeft.hoursLeft).toBe(83)
+  })
+
+  it("a day already holding hours on the contract: most is what can still be added", () => {
+    const r = room([tc("a1", 2), tc("a2", 3)])
+    expect(r).toMatchObject({ day: { logged: 5, left: 3, onThisContract: 2 }, most: 3, binds: "day" })
+  })
+
+  it("the contract binds when its days run out before the day does", () => {
+    const r = room([tc("a1", 86, "2026-10-20")])
+    expect(r).toMatchObject({ contractLeft: { daysLeft: 0.25, hoursLeft: 2 }, most: 2, binds: "contract" })
+  })
+
+  it("a contract with no days has no ceiling and no plan has no month left", () => {
+    const r = room([], A2, null)
+    expect(r).toMatchObject({ contractLeft: { daysLeft: null, hoursLeft: null }, month: { plannedDays: null, leftHours: null, leftDays: null }, most: 8 })
+  })
+
+  it("an hourly contract reads in hours: no day fields, the plan in hours", () => {
+    const r = room([], eng("h1", "A", { unit: "hour", contractedDays: 2 }), 1)
+    expect(r.unit).toBe("hour")
+    expect(r.contractLeft).toEqual({ daysLeft: null, hoursLeft: 16 })
+    expect(r.month).toMatchObject({ plannedDays: null, plannedHours: 8, leftHours: 8, leftDays: null })
+  })
+
+  it("a daily contract's days are rounded to hundredths", () => {
+    const r = room([tc("a1", 85.67, "2026-10-20")])
+    expect(r.contractLeft).toEqual({ daysLeft: 0.29, hoursLeft: 2.33 })
+  })
+
+  it("lists the other clients' hours by client, orphan contracts included, summing to onOtherClients", () => {
+    const r = room([tc("b1", 2), tc("b1", 1), tc("gone", 0.5), tc("a2", 3)])
+    expect(r.otherClients).toEqual([{ clientId: "B", hours: 3 }, { clientId: "gone", hours: 0.5 }])
+    expect(r.day.onOtherClients).toBe(3.5)
+  })
+
+  it("a plan nearly used up leaves the day's room alone and warns", () => {
+    const timecards = [tc("a1", 30, "2026-11-03")]
+    const r = room(timecards, A1, 4)
+    expect(r).toMatchObject({ month: { leftHours: 2, leftDays: 0.25 }, most: 8, binds: "day" })
+    const limits = cellLimits({ timecards, engagements: [A1, A2, B1], engagement: A1, date: day, who: null, plannedDays: 4 })
+    expect(planWarning(r.most, limits)).toBe("That is 38 h this month: past the plan's 32 h.")
+  })
+
+  it("a date the contract refuses takes nothing", () => {
+    const r = hoursRoom({ timecards: [], engagements: [A1], engagement: eng("a1", "A", { startMonth: "2026-12" }), date: day, today, plannedDays: null })
+    expect(r).toMatchObject({ refusal: "beforeStart", most: 0, binds: "date" })
+  })
+
+  it.each([
+    ["day", [tc("a2", 3)], 0],
+    ["contract", [tc("a1", 86, "2026-10-20")], 0],
+    ["day, hours already on the contract", [tc("a2", 3), tc("a1", 2)], 2],
+    ["contract, hours already on the contract", [tc("a1", 86, "2026-10-20"), tc("a1", 1)], 1],
+  ])("the most passes limitRefusal and a quarter hour more is refused with the same kind (%s)", (name, timecards, stored) => {
+    const kind = name.split(",")[0]
+    const r = room(timecards)
+    const limits = cellLimits({ timecards, engagements: [A1, A2, B1], engagement: A1, date: day, who: null, plannedDays: 4 })
+    expect(limitRefusal(stored + r.most, stored, limits)).toBeNull()
+    expect(limitRefusal(stored + r.most + 0.25, stored, limits)?.kind).toBe(kind)
+    expect(r.binds).toBe(kind)
   })
 })
