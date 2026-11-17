@@ -11,7 +11,7 @@
     "fumadocs-core": "^16.6.9",
     "fumadocs-mdx": "^14.2.9",
     "fumadocs-ui": "^16.6.9",
-    "next": "16.4.3",
+    "next": "16.4.5",
     "react": "19.2.3",
     "react-dom": "19.2.3"
   },
