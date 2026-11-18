@@ -64,8 +64,9 @@ export function useOpenGroup(groups: NavGroup[]) {
   const [came, setCame] = useState<string | null>(null)
   if (here && here !== came) setCame(here)
   const [pick, setPick] = useState<{ path: string; label: string | null } | null>(null)
+  if (pick && pick.path !== pathname) setPick(null)
   const base = here ?? came ?? groups[0]?.label ?? null
-  const open = pick && pick.path === pathname ? pick.label : base
+  const open = pick ? pick.label : base
   return { open, toggle: (label: string) => setPick({ path: pathname, label: open === label ? null : label }) }
 }
 

@@ -41,6 +41,12 @@ test.describe("Navigation", () => {
     await nav.getByRole("link", { name: "Invoices", exact: true }).click()
     await expect(page).toHaveURL("/invoices")
     await expect(nav.getByRole("button", { name: "Accounting" })).toHaveAttribute("aria-expanded", "true")
+
+    // Back to the page where a heading was pressed: its own group, not the picked one.
+    await page.goBack()
+    await expect(page).toHaveURL("/clients")
+    await expect(nav.getByRole("button", { name: "Consulting" })).toHaveAttribute("aria-expanded", "true")
+    await expect(nav.getByRole("link", { name: "Clients", exact: true })).toBeVisible()
   })
 
   // next/font's variables must sit on <html>: on <body> the preflight's html font-family found

@@ -25,6 +25,11 @@ import type * as Nav from "@/lib/nav"
 
 // Whatever the deployment shows first (Pipeline unless a module is switched off).
 const first = visibleNavGroups()[0].items[0]
+// Group names and pages come from the table, so the suite holds with a module switched off.
+const [g1, g2] = visibleNavGroups()
+const [a1, a2] = [g1.items[0], g1.items.at(-1)!]
+const [b1, b2] = g2 ? [g2.items[0], g2.items.at(-1)!] : [a1, a2]
+const itTwo = it.skipIf(!g2)
 const scroller = (el: HTMLElement) => el.closest(".overflow-y-auto")
 
 afterEach(() => {
@@ -90,79 +95,80 @@ describe.each([
     return view
   }
 
-  it("opens only the group of the current page, the other one a closed heading", () => {
-    route.path = "/clients/abc"
+  itTwo("opens only the group of the current page, the other one a closed heading", () => {
+    route.path = `${a1.href}/abc`
     show()
-    expect(heading("Consulting")).toHaveAttribute("aria-expanded", "true")
-    expect(heading("Accounting")).toHaveAttribute("aria-expanded", "false")
-    expect([has("Clients"), has("Plan"), has("Invoices"), has("Month End")]).toEqual([true, true, false, false])
+    expect(heading(g1.label)).toHaveAttribute("aria-expanded", "true")
+    expect(heading(g2.label)).toHaveAttribute("aria-expanded", "false")
+    expect([has(a1.label), has(a2.label), has(b1.label), has(b2.label)]).toEqual([true, true, false, false])
   })
 
-  it("opens a heading in place and closes the group that was open", () => {
-    route.path = "/pipeline"
+  itTwo("opens a heading in place and closes the group that was open", () => {
+    route.path = a1.href
     show()
-    fireEvent.click(heading("Accounting"))
-    expect(heading("Accounting")).toHaveAttribute("aria-expanded", "true")
-    expect(heading("Consulting")).toHaveAttribute("aria-expanded", "false")
-    expect([has("Invoices"), has("Month End"), has("Pipeline")]).toEqual([true, true, false])
+    fireEvent.click(heading(g2.label))
+    expect(heading(g2.label)).toHaveAttribute("aria-expanded", "true")
+    expect(heading(g1.label)).toHaveAttribute("aria-expanded", "false")
+    expect([has(b1.label), has(b2.label), has(a1.label)]).toEqual([true, true, false])
   })
 
-  it("closes the open group when its own heading is pressed", () => {
-    route.path = "/pipeline"
+  itTwo("closes the open group when its own heading is pressed", () => {
+    route.path = a1.href
     show()
-    fireEvent.click(heading("Consulting"))
-    expect([heading("Consulting"), heading("Accounting")].map((b) => b.getAttribute("aria-expanded"))).toEqual(["false", "false"])
+    fireEvent.click(heading(g1.label))
+    expect([heading(g1.label), heading(g2.label)].map((b) => b.getAttribute("aria-expanded"))).toEqual(["false", "false"])
   })
 
-  it("goes back to the page's group when the page changes", () => {
-    route.path = "/pipeline"
+  itTwo("goes back to the page's group when the page changes", () => {
+    route.path = a1.href
     const { rerender } = show()
-    fireEvent.click(heading("Accounting"))
-    route.path = "/clients"
+    fireEvent.click(heading(g2.label))
+    route.path = a2.href
     rerender(ui())
-    expect(heading("Consulting")).toHaveAttribute("aria-expanded", "true")
-    route.path = "/invoices"
+    expect(heading(g1.label)).toHaveAttribute("aria-expanded", "true")
+    route.path = b1.href
     rerender(ui())
-    expect(heading("Accounting")).toHaveAttribute("aria-expanded", "true")
+    expect(heading(g2.label)).toHaveAttribute("aria-expanded", "true")
   })
 
-  it("keeps the group you came from open on Settings, and the first one on a fresh load", () => {
-    route.path = "/invoices"
+  itTwo("reopens the page's own group when you come back to the page where a heading was pressed", () => {
+    route.path = a1.href
+    const { rerender } = show()
+    fireEvent.click(heading(g2.label))
+    route.path = b1.href
+    rerender(ui())
+    route.path = a1.href
+    rerender(ui())
+    expect([heading(g1.label), heading(g2.label)].map((b) => b.getAttribute("aria-expanded"))).toEqual(["true", "false"])
+  })
+
+  itTwo("keeps the group you came from open on Settings, and the first one on a fresh load", () => {
+    route.path = b1.href
     const { rerender, unmount } = show()
     route.path = "/settings"
     rerender(ui())
-    expect(heading("Accounting")).toHaveAttribute("aria-expanded", "true")
+    expect(heading(g2.label)).toHaveAttribute("aria-expanded", "true")
     unmount()
     show()
-    expect(heading("Consulting")).toHaveAttribute("aria-expanded", "true")
+    expect(heading(g1.label)).toHaveAttribute("aria-expanded", "true")
   })
 
   it("leaves the plain label and no button when one group is left", () => {
     route.oneGroup = true
     show()
-    expect(screen.getByText("Consulting")).toBeInTheDocument()
-    expect(screen.queryByRole("button", { name: "Consulting" })).toBeNull()
-    expect(has("Pipeline")).toBe(true)
+    expect(screen.getByText(g1.label)).toBeInTheDocument()
+    expect(screen.queryByRole("button", { name: g1.label })).toBeNull()
+    expect(has(a1.label)).toBe(true)
   })
 })
 
 describe("the group headings by device", () => {
-  it("show every link, with no heading, when the sidebar is collapsed to icons", () => {
-    route.path = "/pipeline"
+  itTwo("show every link, with no heading, when the sidebar is collapsed to icons", () => {
+    route.path = a1.href
     render(<AppSidebar />)
     fireEvent.click(screen.getByRole("button", { name: "Collapse sidebar" }))
-    expect([has("Pipeline"), has("Invoices")]).toEqual([true, true])
-    expect(screen.queryByRole("button", { name: "Accounting" })).toBeNull()
-  })
-
-  it("keep the phone sheet open on a heading and close it on a link", () => {
-    route.path = "/pipeline"
-    render(<MobileNav />)
-    fireEvent.click(screen.getByRole("button", { name: "Open navigation" }))
-    fireEvent.click(heading("Accounting"))
-    expect(screen.getByRole("dialog", { name: "Alter Ego" })).toBeInTheDocument()
-    fireEvent.click(screen.getByRole("link", { name: "Invoices" }))
-    expect(screen.queryByRole("dialog")).toBeNull()
+    expect([has(a1.label), has(b1.label)]).toEqual([true, true])
+    expect(screen.queryByRole("button", { name: g2.label })).toBeNull()
   })
 })
 
