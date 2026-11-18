@@ -32,6 +32,18 @@ test.describe("Mobile", () => {
     await expect(page).toHaveURL("/settings")
   })
 
+  test("a heading in the nav sheet opens its group and keeps the sheet open; a link closes it", async ({ page }) => {
+    await page.getByRole("button", { name: /open navigation/i }).click()
+    const sheet = page.getByRole("dialog")
+    await expect(sheet.getByRole("button", { name: "Consulting" })).toHaveAttribute("aria-expanded", "true")
+    await sheet.getByRole("button", { name: "Accounting" }).click()
+    await expect(sheet.getByRole("button", { name: "Accounting" })).toHaveAttribute("aria-expanded", "true")
+    await expect(sheet.getByRole("link", { name: "Cash Book", exact: true })).toBeVisible()
+    await sheet.getByRole("link", { name: "Cash Book", exact: true }).click()
+    await expect(page).toHaveURL("/cash-book")
+    await expect(sheet).toHaveCount(0)
+  })
+
   test("Add Movement's pinned footer is one row on a 360 px phone", async ({ page }) => {
     await page.setViewportSize({ width: 360, height: 740 })
     await seedCashBook(page)

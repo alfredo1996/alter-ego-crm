@@ -21,18 +21,19 @@ import {
 import { cn } from "@alter-ego/ui/utils"
 import {
   Settings,
+  ChevronDown,
   ChevronsLeft,
   ChevronsRight,
   LogOut,
 } from "lucide-react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { forwardRef, useState } from "react"
+import { forwardRef, useId, useState } from "react"
 
 import { useAuth } from "@/hooks/use-auth"
-import { visibleNavGroups, BOTTOM_ITEMS, isOnRoute, type NavGroup, type NavItem } from "@/lib/nav"
+import { visibleNavGroups, BOTTOM_ITEMS, groupOf, isOnRoute, type NavGroup, type NavItem } from "@/lib/nav"
 
-import type { ComponentPropsWithoutRef } from "react"
+import type { ComponentPropsWithoutRef, ReactNode } from "react"
 
 export function useNavGroups(): NavGroup[] {
   return visibleNavGroups()
@@ -51,6 +52,63 @@ export function getInitials(name: string | null): string {
 // Shared with the phone's nav sheet. Group labels are 11px eyebrows, spaced rather than ruled off.
 export const NAV_GROUP_LABEL =
   "px-2 pt-2 pb-1.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground"
+
+/**
+ * Which group is open: the current page's, with one local pick that a navigation resets.
+ * Settings is in no group, so it keeps the one you came from (the first on a fresh load).
+ * Nothing is stored. `null` is a heading pressed shut.
+ */
+export function useOpenGroup(groups: NavGroup[]) {
+  const pathname = usePathname()
+  const here = groupOf(pathname)
+  const [came, setCame] = useState<string | null>(null)
+  if (here && here !== came) setCame(here)
+  const [pick, setPick] = useState<{ path: string; label: string | null } | null>(null)
+  const base = here ?? came ?? groups[0]?.label ?? null
+  const open = pick && pick.path === pathname ? pick.label : base
+  return { open, toggle: (label: string) => setPick({ path: pathname, label: open === label ? null : label }) }
+}
+
+interface NavGroupSectionProps {
+  group: NavGroup
+  /** More than one group: the label is a heading button; alone, it is the plain eyebrow. */
+  disclosure: boolean
+  open: boolean
+  onToggle: () => void
+  children: ReactNode
+}
+
+/** A group: its label (a button when there are several groups) and, while open, its links. */
+export function NavGroupSection({ group, disclosure, open, onToggle, children }: NavGroupSectionProps) {
+  const id = useId()
+  return (
+    <div className="flex flex-col gap-1">
+      {disclosure ? (
+        <button
+          type="button"
+          aria-expanded={open}
+          aria-controls={id}
+          onClick={onToggle}
+          className={cn(
+            NAV_GROUP_LABEL,
+            "flex w-full items-center justify-between rounded-lg text-left transition-colors pointer-coarse:min-h-11",
+            "hover:text-sidebar-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring motion-reduce:transition-none",
+          )}
+        >
+          {group.label}
+          <ChevronDown aria-hidden className={cn("size-3.5 transition-transform motion-reduce:transition-none", !open && "-rotate-90")} />
+        </button>
+      ) : (
+        <p className={NAV_GROUP_LABEL}>{group.label}</p>
+      )}
+      {open && (
+        <div id={id} className="flex flex-col gap-1">
+          {children}
+        </div>
+      )}
+    </div>
+  )
+}
 
 interface NavLinkProps extends Omit<ComponentPropsWithoutRef<typeof Link>, "href"> {
   item: NavItem
@@ -90,6 +148,7 @@ export function AppSidebar() {
   const pathname = usePathname()
   const { user, loading, signOut } = useAuth()
   const navGroups = useNavGroups()
+  const { open, toggle } = useOpenGroup(navGroups)
 
   const link = (item: NavItem, active: boolean) =>
     collapsed ? (
@@ -120,12 +179,24 @@ export function AppSidebar() {
             screen never pushes them out of sight. */}
         <nav aria-label="Main" className="flex min-h-0 flex-1 flex-col">
           <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-3 pt-0.5 pb-3">
-            {navGroups.map((group) => (
-              <div key={group.label} className="flex flex-col gap-1">
-                {!collapsed && <p className={NAV_GROUP_LABEL}>{group.label}</p>}
-                {group.items.map((item) => link(item, isOnRoute(pathname, item.href)))}
-              </div>
-            ))}
+            {navGroups.map((group) =>
+              collapsed ? (
+                // The icon rail shows every icon, the groups set apart by the gap.
+                <div key={group.label} className="flex flex-col gap-1">
+                  {group.items.map((item) => link(item, isOnRoute(pathname, item.href)))}
+                </div>
+              ) : (
+                <NavGroupSection
+                  key={group.label}
+                  group={group}
+                  disclosure={navGroups.length > 1}
+                  open={navGroups.length === 1 || open === group.label}
+                  onToggle={() => toggle(group.label)}
+                >
+                  {group.items.map((item) => link(item, isOnRoute(pathname, item.href)))}
+                </NavGroupSection>
+              ),
+            )}
           </div>
           <div className="flex shrink-0 flex-col gap-1 border-t border-sidebar-border px-3 pt-3">
             {BOTTOM_ITEMS.map((item) => link(item, pathname === item.href))}

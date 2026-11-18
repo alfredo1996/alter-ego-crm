@@ -14,7 +14,7 @@ import { Menu, LogOut } from "lucide-react"
 import { usePathname } from "next/navigation"
 import { useState } from "react"
 
-import { NAV_GROUP_LABEL, NavLink, getInitials, useNavGroups } from "@/components/app-sidebar"
+import { NavGroupSection, NavLink, getInitials, useNavGroups, useOpenGroup } from "@/components/app-sidebar"
 import { useAuth } from "@/hooks/use-auth"
 import { BOTTOM_ITEMS, isOnRoute } from "@/lib/nav"
 
@@ -23,6 +23,7 @@ export function MobileNav() {
   const pathname = usePathname()
   const { user, loading, signOut } = useAuth()
   const navGroups = useNavGroups()
+  const { open: openGroup, toggle } = useOpenGroup(navGroups)
   const close = () => setOpen(false)
 
   return (
@@ -46,12 +47,17 @@ export function MobileNav() {
           <nav aria-label="Main" className="flex min-h-0 flex-1 flex-col">
             <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-3 pb-3">
               {navGroups.map((group) => (
-                <div key={group.label} className="flex flex-col gap-1">
-                  <p className={NAV_GROUP_LABEL}>{group.label}</p>
+                <NavGroupSection
+                  key={group.label}
+                  group={group}
+                  disclosure={navGroups.length > 1}
+                  open={navGroups.length === 1 || openGroup === group.label}
+                  onToggle={() => toggle(group.label)}
+                >
                   {group.items.map((item) => (
                     <NavLink key={item.href} item={item} active={isOnRoute(pathname, item.href)} onClick={close} />
                   ))}
-                </div>
+                </NavGroupSection>
               ))}
             </div>
             {/* Settings is pinned, same as the sidebar: without it the page has no route in from a phone. */}

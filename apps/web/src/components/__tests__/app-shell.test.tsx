@@ -3,7 +3,12 @@ import { afterEach, describe, expect, it, vi } from "vitest"
 
 import { visibleNavGroups } from "@/lib/nav"
 
-const route = vi.hoisted(() => ({ path: "/settings" }))
+const route = vi.hoisted(() => ({ path: "/settings", oneGroup: false }))
+// groupOf reads the real table; only what the components render is cut to one group.
+vi.mock("@/lib/nav", async (importOriginal) => {
+  const nav = await importOriginal<typeof Nav>()
+  return { ...nav, visibleNavGroups: () => (route.oneGroup ? nav.visibleNavGroups().slice(0, 1) : nav.visibleNavGroups()) }
+})
 vi.mock("next/navigation", () => ({ usePathname: () => route.path }))
 vi.mock("@/hooks/use-auth", () => ({
   useAuth: () => ({
@@ -16,13 +21,19 @@ vi.mock("@/hooks/use-auth", () => ({
 import { AppSidebar } from "../app-sidebar"
 import { MobileNav } from "../mobile-nav"
 
+import type * as Nav from "@/lib/nav"
+
 // Whatever the deployment shows first (Pipeline unless a module is switched off).
 const first = visibleNavGroups()[0].items[0]
 const scroller = (el: HTMLElement) => el.closest(".overflow-y-auto")
 
 afterEach(() => {
   route.path = "/settings"
+  route.oneGroup = false
 })
+
+const heading = (name: string) => screen.getByRole("button", { name })
+const has = (name: string) => screen.queryByRole("link", { name }) !== null
 
 describe("the sidebar", () => {
   it("pins Settings and the user below the links that scroll", () => {
@@ -62,6 +73,96 @@ describe("the sidebar", () => {
     render(<AppSidebar />)
     fireEvent.click(screen.getByRole("button", { name: "Collapse sidebar" }))
     expect(scroller(screen.getByRole("link", { name: first.label }))).toHaveClass("pt-0.5")
+  })
+})
+
+describe.each([
+  ["the sidebar", () => <AppSidebar />, () => {}],
+  [
+    "the phone's nav sheet",
+    () => <MobileNav />,
+    () => fireEvent.click(screen.getByRole("button", { name: "Open navigation" })),
+  ],
+])("the groups of %s", (_name, ui, open) => {
+  const show = () => {
+    const view = render(ui())
+    open()
+    return view
+  }
+
+  it("opens only the group of the current page, the other one a closed heading", () => {
+    route.path = "/clients/abc"
+    show()
+    expect(heading("Consulting")).toHaveAttribute("aria-expanded", "true")
+    expect(heading("Accounting")).toHaveAttribute("aria-expanded", "false")
+    expect([has("Clients"), has("Plan"), has("Invoices"), has("Month End")]).toEqual([true, true, false, false])
+  })
+
+  it("opens a heading in place and closes the group that was open", () => {
+    route.path = "/pipeline"
+    show()
+    fireEvent.click(heading("Accounting"))
+    expect(heading("Accounting")).toHaveAttribute("aria-expanded", "true")
+    expect(heading("Consulting")).toHaveAttribute("aria-expanded", "false")
+    expect([has("Invoices"), has("Month End"), has("Pipeline")]).toEqual([true, true, false])
+  })
+
+  it("closes the open group when its own heading is pressed", () => {
+    route.path = "/pipeline"
+    show()
+    fireEvent.click(heading("Consulting"))
+    expect([heading("Consulting"), heading("Accounting")].map((b) => b.getAttribute("aria-expanded"))).toEqual(["false", "false"])
+  })
+
+  it("goes back to the page's group when the page changes", () => {
+    route.path = "/pipeline"
+    const { rerender } = show()
+    fireEvent.click(heading("Accounting"))
+    route.path = "/clients"
+    rerender(ui())
+    expect(heading("Consulting")).toHaveAttribute("aria-expanded", "true")
+    route.path = "/invoices"
+    rerender(ui())
+    expect(heading("Accounting")).toHaveAttribute("aria-expanded", "true")
+  })
+
+  it("keeps the group you came from open on Settings, and the first one on a fresh load", () => {
+    route.path = "/invoices"
+    const { rerender, unmount } = show()
+    route.path = "/settings"
+    rerender(ui())
+    expect(heading("Accounting")).toHaveAttribute("aria-expanded", "true")
+    unmount()
+    show()
+    expect(heading("Consulting")).toHaveAttribute("aria-expanded", "true")
+  })
+
+  it("leaves the plain label and no button when one group is left", () => {
+    route.oneGroup = true
+    show()
+    expect(screen.getByText("Consulting")).toBeInTheDocument()
+    expect(screen.queryByRole("button", { name: "Consulting" })).toBeNull()
+    expect(has("Pipeline")).toBe(true)
+  })
+})
+
+describe("the group headings by device", () => {
+  it("show every link, with no heading, when the sidebar is collapsed to icons", () => {
+    route.path = "/pipeline"
+    render(<AppSidebar />)
+    fireEvent.click(screen.getByRole("button", { name: "Collapse sidebar" }))
+    expect([has("Pipeline"), has("Invoices")]).toEqual([true, true])
+    expect(screen.queryByRole("button", { name: "Accounting" })).toBeNull()
+  })
+
+  it("keep the phone sheet open on a heading and close it on a link", () => {
+    route.path = "/pipeline"
+    render(<MobileNav />)
+    fireEvent.click(screen.getByRole("button", { name: "Open navigation" }))
+    fireEvent.click(heading("Accounting"))
+    expect(screen.getByRole("dialog", { name: "Alter Ego" })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole("link", { name: "Invoices" }))
+    expect(screen.queryByRole("dialog")).toBeNull()
   })
 })
 

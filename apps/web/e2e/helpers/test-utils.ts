@@ -1,3 +1,5 @@
+import { revealLink } from "./demo"
+
 import type { Page } from "@playwright/test"
 
 let counter = 0
@@ -20,22 +22,25 @@ export async function signIn(page: Page, next = "/settings") {
 
 export async function navigateTo(page: Page, linkName: string, url: string) {
   // The sidebar's link: a page may link the same name too (a client page's "Invoices" section, "All Invoices").
-  const sidebarLink = page.locator("aside").getByRole("link", { name: linkName })
+  const sidebar = page.locator("aside")
+  const sidebarLink = sidebar.getByRole("link", { name: linkName })
+  const sidebarHeading = sidebar.getByRole("navigation", { name: "Main" }).getByRole("button", { expanded: false })
   const mobileMenuButton = page.getByRole("button", { name: /open navigation/i })
 
   // Wait for either sidebar or mobile nav button to be visible
   await Promise.race([
-    sidebarLink.waitFor({ state: "visible", timeout: 5000 }).catch(() => {}),
+    // A closed group hides its links: the sidebar is there once a link or a heading shows.
+    sidebarLink.or(sidebarHeading.first()).first().waitFor({ state: "visible", timeout: 5000 }).catch(() => {}),
     mobileMenuButton.waitFor({ state: "visible", timeout: 5000 }).catch(() => {}),
   ])
 
-  const isSidebarVisible = await sidebarLink.isVisible().catch(() => false)
+  const isSidebarVisible = await sidebar.isVisible().catch(() => false)
 
   if (isSidebarVisible) {
-    await sidebarLink.click()
+    await (await revealLink(sidebar, linkName)).click()
   } else {
     await mobileMenuButton.click()
-    await page.getByRole("link", { name: linkName }).click()
+    await (await revealLink(page.getByRole("dialog"), linkName)).click()
   }
   await page.waitForURL(url)
 }
