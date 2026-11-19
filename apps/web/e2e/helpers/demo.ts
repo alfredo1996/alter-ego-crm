@@ -1,5 +1,5 @@
 import type { BackendAdapter } from "@/lib/backend"
-import type { Page } from "@playwright/test"
+import type { Locator, Page } from "@playwright/test"
 
 // No runtime imports: scripts/shots.mjs loads this file in plain Node, which
 // strips the types but resolves no "@/" alias and no extensionless path.
@@ -27,6 +27,10 @@ export const DEMO_PAGES: DemoPage[] = [
   { path: "/collaborators", nav: "Collaborators" },
   { path: "/solutions", nav: "Solutions" },
   { path: "/solutions/[id]", nav: "Solutions", open: "Product Knowledge Graph" },
+  { path: "/tasks", nav: "Tasks" },
+  { path: "/plan", nav: "Plan" },
+  { path: "/deadlines", nav: "Deadlines" },
+  { path: "/deadlines?tab=calendar", nav: "Deadlines", tab: "Calendar" },
   { path: "/invoices", nav: "Invoices" },
   { path: "/cash-book", nav: "Cash Book" },
   { path: "/cash-book?tab=summary", nav: "Cash Book", tab: "Summary" },
@@ -36,12 +40,8 @@ export const DEMO_PAGES: DemoPage[] = [
   { path: "/rent", nav: "Rent" },
   { path: "/rent?dialog=new-tenant", nav: "Rent", click: "New Tenant", dialog: "New Tenant" },
   { path: "/rent?dialog=edit-lease", nav: "Rent", click: "Edit lease of Nora Bianchi", dialog: "Edit Lease" },
-  { path: "/month-end", nav: "Month End" },
-  { path: "/tasks", nav: "Tasks" },
-  { path: "/plan", nav: "Plan" },
-  { path: "/deadlines", nav: "Deadlines" },
-  { path: "/deadlines?tab=calendar", nav: "Deadlines", tab: "Calendar" },
   { path: "/costs", nav: "Costs" },
+  { path: "/month-end", nav: "Month End" },
   { path: "/settings", nav: "Settings" },
 ]
 
@@ -55,7 +55,7 @@ export async function openDemoPage(page: Page, { path, nav, open, tab, click, di
   // The page before may have left a dialog open for its shot.
   if (await page.getByRole("dialog").count()) await page.keyboard.press("Escape")
   if (phone) await page.getByRole("button", { name: /open navigation/i }).click()
-  await (phone ? page.getByRole("dialog") : page.locator("aside")).getByRole("link", { name: nav, exact: true }).click()
+  await (await revealLink(phone ? page.getByRole("dialog") : page.locator("aside"), nav, true)).click()
   // The route alone: in a URL glob `?` is a wildcard, and a tab is clicked, not navigated to.
   const route = path.split("?")[0]
   await page.waitForURL(route.replace("/[id]", ""))
@@ -74,6 +74,22 @@ export async function openDemoPage(page: Page, { path, nav, open, tab, click, di
     await page.getByRole("main").getByRole("button", { name: click, exact: true }).click()
     await page.getByRole("dialog", { name: dialog }).waitFor()
   }
+}
+
+/**
+ * The nav link of that name inside the sidebar or the phone's sheet, its group opened first:
+ * only the current page's group is open, every other is a heading button. Opens no page.
+ */
+export async function revealLink(scope: Locator, name: string, exact = false): Promise<Locator> {
+  const link = scope.getByRole("link", { name, exact })
+  if (await link.isVisible()) return link
+  // Opening one group closes the other, so work from the headings' names, not their positions.
+  const headings = scope.getByRole("navigation", { name: "Main" }).getByRole("button", { expanded: false })
+  for (const heading of await headings.allInnerTexts()) {
+    await scope.getByRole("button", { name: heading, expanded: false }).click()
+    if (await link.isVisible()) break
+  }
+  return link
 }
 
 /**

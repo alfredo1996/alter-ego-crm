@@ -1,5 +1,6 @@
 import { test, expect } from "@playwright/test"
 
+import { revealLink } from "./helpers/demo"
 import { signIn, navigateTo } from "./helpers/test-utils"
 
 test.describe("Navigation", () => {
@@ -19,9 +20,33 @@ test.describe("Navigation", () => {
     ]
 
     for (const link of links) {
-      await page.getByRole("link", { name: link.name }).click()
+      await (await revealLink(page.locator("aside"), link.name, true)).click()
       await expect(page).toHaveURL(link.url)
     }
+  })
+
+  test("only the current page's group is open, and a heading opens the other in place", async ({ page, isMobile }) => {
+    test.skip(!!isMobile, "The sheet's headings are covered in mobile.spec.ts")
+
+    const nav = page.getByRole("navigation", { name: "Main" })
+    await navigateTo(page, "Clients", "/clients")
+    await expect(nav.getByRole("button", { name: "Consulting" })).toHaveAttribute("aria-expanded", "true")
+    await expect(nav.getByRole("link", { name: "Invoices", exact: true })).toHaveCount(0)
+
+    await nav.getByRole("button", { name: "Accounting" }).click()
+    await expect(page).toHaveURL("/clients")
+    await expect(nav.getByRole("link", { name: "Invoices", exact: true })).toBeVisible()
+    await expect(nav.getByRole("link", { name: "Clients", exact: true })).toHaveCount(0)
+
+    await nav.getByRole("link", { name: "Invoices", exact: true }).click()
+    await expect(page).toHaveURL("/invoices")
+    await expect(nav.getByRole("button", { name: "Accounting" })).toHaveAttribute("aria-expanded", "true")
+
+    // Back to the page where a heading was pressed: its own group, not the picked one.
+    await page.goBack()
+    await expect(page).toHaveURL("/clients")
+    await expect(nav.getByRole("button", { name: "Consulting" })).toHaveAttribute("aria-expanded", "true")
+    await expect(nav.getByRole("link", { name: "Clients", exact: true })).toBeVisible()
   })
 
   // next/font's variables must sit on <html>: on <body> the preflight's html font-family found

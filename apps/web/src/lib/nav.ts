@@ -44,21 +44,26 @@ export interface NavGroup {
 
 const NAV_GROUPS: NavGroup[] = [
   {
-    label: "Company",
+    label: "Consulting",
     items: [
       { label: "Pipeline", href: "/pipeline", icon: Target, module: "crm" },
       { label: "Clients", href: "/clients", icon: Users, module: "crm" },
       { label: "Contracts", href: "/contracts", icon: FileSignature, module: "crm" },
       { label: "Collaborators", href: "/collaborators", icon: UserRound, module: "crm" },
       { label: "Solutions", href: "/solutions", icon: Library, module: "solutions" },
-      { label: "Invoices", href: "/invoices", icon: FileText, module: "invoicing" },
-      { label: "Cash Book", href: "/cash-book", icon: BookOpen, module: "books" },
-      { label: "Rent", href: "/rent", icon: House, module: "rent" },
-      { label: "Month End", href: "/month-end", icon: CalendarCheck, module: "books" },
       { label: "Tasks", href: "/tasks", icon: SquareKanban, module: "crm" },
       { label: "Plan", href: "/plan", icon: CalendarRange, module: "crm" },
       { label: "Deadlines", href: "/deadlines", icon: CalendarClock, module: "crm" },
+    ],
+  },
+  {
+    label: "Accounting",
+    items: [
+      { label: "Invoices", href: "/invoices", icon: FileText, module: "invoicing" },
+      { label: "Cash Book", href: "/cash-book", icon: BookOpen, module: "books" },
+      { label: "Rent", href: "/rent", icon: House, module: "rent" },
       { label: "Costs", href: "/costs", icon: Receipt, module: "books" },
+      { label: "Month End", href: "/month-end", icon: CalendarCheck, module: "books" },
     ],
   },
 ]
@@ -84,6 +89,11 @@ export function visibleNavGroups(): NavGroup[] {
   return NAV_GROUPS.map((group) => ({ ...group, items: group.items.filter(isItemEnabled) })).filter(
     (group) => group.items.length > 0,
   )
+}
+
+/** The label of the visible group that holds this page, or null (Settings, an unknown route). */
+export function groupOf(pathname: string): string | null {
+  return visibleNavGroups().find((g) => g.items.some((i) => isOnRoute(pathname, i.href)))?.label ?? null
 }
 
 /**

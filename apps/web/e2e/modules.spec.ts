@@ -1,5 +1,6 @@
 import { test, expect } from "@playwright/test"
 
+import { revealLink } from "./helpers/demo"
 import { signIn, navigateTo } from "./helpers/test-utils"
 
 /**
@@ -15,14 +16,19 @@ test.describe("a deployment without invoicing and solutions", () => {
     await signIn(page)
   })
 
-  test("leaves their links out of the sidebar and keeps the rest of Company", async ({ page }) => {
+  test("leaves their links out of the sidebar and keeps the rest of each group", async ({ page }) => {
     const sidebar = page.getByRole("navigation", { name: "Main" })
-    for (const name of ["Pipeline", "Clients", "Cash Book", "Month End", "Plan"]) {
+    const aside = page.locator("aside")
+    // Consulting is open on Settings (the first group); Accounting is its heading until pressed.
+    for (const name of ["Pipeline", "Clients", "Plan"]) {
       await expect(sidebar.getByRole("link", { name, exact: true })).toBeVisible()
     }
-    for (const name of ["Invoices", "Solutions"]) {
-      await expect(sidebar.getByRole("link", { name, exact: true })).toHaveCount(0)
+    await expect(sidebar.getByRole("link", { name: "Solutions", exact: true })).toHaveCount(0)
+    await sidebar.getByRole("button", { name: "Accounting" }).click()
+    for (const name of ["Cash Book", "Rent", "Costs", "Month End"]) {
+      await expect((await revealLink(aside, name, true))).toBeVisible()
     }
+    await expect(sidebar.getByRole("link", { name: "Invoices", exact: true })).toHaveCount(0)
   })
 
   for (const path of ["/invoices", "/solutions"]) {
