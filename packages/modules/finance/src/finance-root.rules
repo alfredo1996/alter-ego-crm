@@ -1,0 +1,6 @@
+    // ── System categories — read-only for authenticated users ─────────────────
+
+    match /categories/{categoryId} {
+      allow read: if isSignedIn();
+      allow write: if false;
+    }

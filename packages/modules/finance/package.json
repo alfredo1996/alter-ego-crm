@@ -1,0 +1,62 @@
+{
+  "name": "@alter-ego/finance",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Personal finance: accounts, transactions, budgets, goals, recurring, reports and the dashboard. Also holds its adapters (mock, Firestore, Admin SDK), MCP tools, nav, settings and overlays; the Firebase SDKs are peers whose instances the app passes in. Imports only the kernel, the UI kit and its own dependencies; the app hands it the database and the signed-in user through provideFinanceHost.",
+  "exports": {
+    "./host": "./src/host.ts",
+    "./adapter": "./src/adapter.ts",
+    "./adapter-mock": "./src/adapter-mock.ts",
+    "./adapter-firebase": "./src/adapter-firebase.ts",
+    "./adapter-admin": "./src/adapter-admin.ts",
+    "./mcp": "./src/mcp/index.ts",
+    "./nav": "./src/nav.ts",
+    "./settings": "./src/settings.tsx",
+    "./overlays": "./src/overlays.tsx",
+    "./contract": "./src/__tests__/contract.ts",
+    "./types": "./src/types.ts",
+    "./schemas": "./src/schemas.ts",
+    "./pages/*": "./src/pages/*.tsx",
+    "./components/*": "./src/components/*.tsx",
+    "./hooks/*": "./src/hooks/*.ts",
+    "./lib/*": "./src/lib/*.ts",
+    "./stores/*": "./src/stores/*.ts"
+  },
+  "dependencies": {
+    "@alter-ego/kernel": "workspace:*",
+    "@alter-ego/ui": "workspace:*",
+    "@hookform/resolvers": "^5.2.2",
+    "cmdk": "^1.1.1",
+    "date-fns": "^4.1.0",
+    "lucide-react": "^0.575.0",
+    "react-day-picker": "^9.14.0",
+    "zod": "^4.6.7",
+    "zustand": "^5.0.11"
+  },
+  "peerDependencies": {
+    "@modelcontextprotocol/server": "^2.4.0",
+    "@tanstack/react-query": "^5.90.21",
+    "firebase": "^12.10.0",
+    "firebase-admin": "13.6.1",
+    "next": "16.4.6",
+    "react": "19.2.3",
+    "react-dom": "19.2.3",
+    "react-hook-form": "^7.71.2"
+  },
+  "devDependencies": {
+    "@modelcontextprotocol/server": "^2.4.0",
+    "@tanstack/react-query": "^5.90.21",
+    "@testing-library/react": "^16.3.2",
+    "@types/node": "^24.12.4",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "firebase": "^12.10.0",
+    "firebase-admin": "13.6.1",
+    "next": "16.4.6",
+    "react": "19.2.3",
+    "react-dom": "19.2.3",
+    "react-hook-form": "^7.71.2",
+    "typescript": "^5",
+    "vitest": "^4.0.18"
+  }
+}

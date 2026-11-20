@@ -1,0 +1,72 @@
+---
+title: Transazioni
+description: Registra, importa, filtra ed esporta le tue transazioni.
+---
+
+Ogni volta che si muove del denaro registri una transazione: un acquisto, uno stipendio, un trasferimento tra i tuoi conti.
+
+## Tipi di Transazione
+
+- **Expense** — denaro in uscita.
+- **Income** — denaro in entrata.
+- **Transfer** — denaro che si sposta tra due tuoi conti.
+
+## Creare una Transazione
+
+1. Seleziona **New Transaction** nell'intestazione di Dashboard, Accounts o Transactions, oppure il **+** nella barra superiore su telefono.
+2. Scegli il tipo.
+3. Compila importo, data, descrizione, conto e categoria. Un trasferimento ha **From Account** e **To Account** al posto della categoria. **Notes** è facoltativo.
+4. Salva.
+
+**Split** accanto alla categoria permette di dividere una transazione tra più categorie; **Single category** torna indietro.
+
+### Categorie Suggerite
+
+Mentre scrivi una descrizione, il form può proporre **Suggested:** seguito dal nome di una categoria. Viene dalle tue regole di auto-categorizzazione nelle Impostazioni: la prima regola attiva il cui schema è contenuto nella descrizione (senza distinguere maiuscole). Seleziona il suggerimento per applicarlo; nulla viene compilato al posto tuo.
+
+## Modificare ed Eliminare
+
+Seleziona una transazione per modificarla o eliminarla. Eliminare una transazione aggiusta il saldo del conto.
+
+## Gesti di Scorrimento
+
+Su telefono puoi scorrere una riga: a sinistra per eliminare, a destra per modificare.
+
+## Filtri
+
+La pagina Transactions ha una casella di ricerca, le schede **All**, **Income**, **Expenses** e **Transfers**, e questi filtri:
+
+- **Dates** — un intervallo di date.
+- **Account** e **Category**. L'elenco delle categorie inizia con **Uncategorized**.
+- **Tags**.
+- **More Filters** — **Status** (Pending, Cleared o Reconciled), **Min amount**, **Max amount** e **Has note**.
+
+I filtri sono conservati nell'indirizzo, quindi una vista filtrata si può salvare nei preferiti.
+
+## Selezionare Più Transazioni
+
+Seleziona delle righe per agire su di esse insieme. La barra che appare può eliminare la selezione, oppure cambiarne conto o data.
+
+## Importare
+
+Il menu **More** nell'intestazione ha i due importatori.
+
+### Import CSV
+
+1. **Import Transactions** — scegli un conto e carica un file CSV.
+2. **Map CSV Columns** — associa le colonne del file ai campi della transazione. L'importatore propone un'associazione dove può.
+3. **Review & Import** — controlla le righe lette, poi importa. Le righe già importate vengono saltate.
+
+### Money Manager
+
+**Money Manager** importa un export CSV dell'app Money Manager, in quattro passi: Upload, Reconcile, Preview e Import. Reconcile elenca i conti e le categorie trovati nel file. Importare due volte lo stesso file è sicuro: i duplicati vengono rilevati e saltati.
+
+## Esportare
+
+**Export…** nel menu **More** apre **Export Transactions**. Scegli un intervallo di date e scarica un CSV. **Expand splits into separate rows** produce una riga per ogni suddivisione, con la sua categoria e il suo importo. Per un backup di tutto usa **Export All Data (JSON)** nelle Impostazioni.
+
+## Suggerimenti
+
+- **Usa il pulsante +** su telefono per registrare un acquisto nel momento in cui lo fai.
+- **Categorizza tutto** — dashboard, budget e report ne dipendono.
+- **Usa i tag per il contesto** — i tag attraversano le categorie, per esempio un viaggio.
