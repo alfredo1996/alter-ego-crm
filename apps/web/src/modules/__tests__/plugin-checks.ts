@@ -120,7 +120,7 @@ export function collectFacts(): Facts {
     builtRules: readFileSync(repo("firestore.rules"), "utf8"),
     // A module package keeps its own indexes in a src/*.indexes.json file (finance's is src/firestore.indexes.json), same shape as the root file.
     indexFiles: globSync(repo("packages", "modules", "*", "src", "*.indexes.json")).map((file) => ({
-      name: path.basename(file),
+      name: path.relative(repo(), file),
       indexes: JSON.parse(readFileSync(file, "utf8")).indexes ?? [],
     })),
     rootIndexes: JSON.parse(readFileSync(repo("firestore.indexes.json"), "utf8")).indexes,

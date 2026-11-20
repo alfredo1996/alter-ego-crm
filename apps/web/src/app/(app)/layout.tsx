@@ -30,7 +30,11 @@ export default function AppLayout({
           </main>
         </div>
         {/* What Personal Finance floats over every page: its New Transaction button and import progress. */}
-        {isModuleOn("finance") && <FinanceOverlays />}
+        {isModuleOn("finance") && (
+          <HideWhenPresenting>
+            <FinanceOverlays />
+          </HideWhenPresenting>
+        )}
       </div>
     </AuthGuard>
   )

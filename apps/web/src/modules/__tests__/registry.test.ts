@@ -275,7 +275,7 @@ describe("a plugin is wired end to end", () => {
   })
 
   it("reads every package's index file, finance's included", () => {
-    expect(collectFacts().indexFiles.map((f) => f.name).sort()).toEqual(["firestore.indexes.json"])
+    expect(collectFacts().indexFiles.map((f) => f.name).sort()).toEqual(["packages/modules/finance/src/firestore.indexes.json"])
   })
 
   it("holds for the real plugins", () => {

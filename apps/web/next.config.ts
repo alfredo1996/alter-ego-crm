@@ -17,7 +17,7 @@ const nextConfig: NextConfig = {
   agentRules: false,
   poweredByHeader: false,
   // The workspace packages ship TypeScript source.
-  transpilePackages: ["@alter-ego/kernel", "@alter-ego/ui", "@alter-ego/rent"],
+  transpilePackages: ["@alter-ego/kernel", "@alter-ego/ui", "@alter-ego/rent", "@alter-ego/finance"],
   turbopack: {
     root: join(__dirname, "../.."),
   },
