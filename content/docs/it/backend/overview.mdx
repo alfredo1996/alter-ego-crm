@@ -22,7 +22,7 @@ L'adapter ha tre sotto-interfacce:
 ```typescript
 interface BackendAdapter {
   auth: AuthAdapter       // Accesso, disconnessione, onAuthStateChanged
-  db: DatabaseAdapter     // Il lato aziendale, gli affitti e le chiavi API
+  db: DatabaseAdapter     // Il lato aziendale, gli affitti, Personal Finance e le chiavi API
   files: FilesAdapter     // File delle fatture (Storage)
 }
 ```
@@ -39,6 +39,7 @@ Le operazioni sono raggruppate per dominio:
 - **Scadenze** — le scadenze
 - **Soluzioni, Journal** — il catalogo delle soluzioni e il diario di lavoro di ciascuna
 - **Inquilini, Contratti di affitto** — il modulo Affitti (`packages/modules/rent`)
+- **Conti, Transazioni, Categorie, Budget, Obiettivi di risparmio, Ricorrenze** — Personal Finance (`packages/modules/finance`); le sue parti sono composte negli adapter mock, client SDK, Admin e server in `apps/web/src/lib/backend`
 - **Chiavi API** — creazione, elenco e revoca
 
 ### Superfici solo server

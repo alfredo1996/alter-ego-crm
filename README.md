@@ -97,9 +97,9 @@ Copy `apps/web/.env.example` to `apps/web/.env.local` and set these:
 | `NEXT_PUBLIC_USE_EMULATOR`                 | Point the SDK at the emulator | No              | `false` |
 
 `NEXT_PUBLIC_PLUGINS` is a comma-separated list of the plugins a deployment
-runs: `consulting`, `accounting`, `rent`. `accounting` needs `consulting`, and
+runs: `finance` (Personal Finance), `consulting`, `accounting`, `rent`. `finance` needs no other plugin. `accounting` needs `consulting`, and
 `rent` needs `accounting`: an unknown id, or a plugin whose requirement is not
-listed, stops the build. When it is unset, `consulting`, `accounting` and `rent` run; a plugin added later is never on until it is listed. A plugin that is not
+listed, stops the build. When it is unset, `consulting`, `accounting` and `rent` run; `finance`, like a plugin added later, is never on until it is listed. A plugin that is not
 listed disappears from the sidebar, its pages and the connector, and its data is
 not touched.
 
@@ -183,9 +183,10 @@ Test files live in `__tests__/` directories next to the code they test. Coverage
 focuses on `apps/web/src/lib/**` (utilities, business logic, backend adapters).
 `firestore-rules-build.test.ts` fails when `firestore.rules` no longer matches its
 sources: the file is **generated** by `pnpm rules:build` from `firestore/base.rules`,
-`firestore/crm.rules` and the modules' rules (`packages/modules/rent/src/rent.rules`),
+`firestore/crm.rules` and the modules' rules (`packages/modules/rent/src/rent.rules`,
+`packages/modules/finance/src/finance.rules` and `packages/modules/finance/src/finance-root.rules`),
 so edit those, never the output. The registry tests prove a deployment can switch
-Accounting and Rent out, and that each plugin is wired end to end; `plugin-boundary.test.ts`
+Personal Finance, Accounting and Rent out, and that each plugin is wired end to end; `plugin-boundary.test.ts`
 keeps new imports between plugins out (a ratchet over `known-edges.ts`: a new import across plugins fails).
 
 ### E2E Tests (Playwright) — 31 specs run, 10 parked

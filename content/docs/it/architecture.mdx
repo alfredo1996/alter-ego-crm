@@ -45,7 +45,7 @@ Vedi la [Panoramica Backend](/it/docs/backend/overview) per i dettagli.
 
 ## Plugin
 
-Ogni area dell'app è un plugin: `consulting`, `accounting` e `rent`. Un'installazione elenca quelli che esegue in `NEXT_PUBLIC_PLUGINS` (consulting, accounting e rent se non è impostata; un plugin aggiunto dopo non è mai attivo finché non è elencato): gli altri non hanno pagine, link né strumenti MCP, e un plugin che ne richiede un altro, o un id sconosciuto, fa fallire la build. Il registro è in `apps/web/src/modules`.
+Ogni area dell'app è un plugin: `finance` (Personal Finance), `consulting`, `accounting` e `rent`. Un'installazione elenca quelli che esegue in `NEXT_PUBLIC_PLUGINS` (consulting, accounting e rent se non è impostata; `finance` e ogni plugin aggiunto dopo non sono mai attivi finché non sono elencati): gli altri non hanno pagine, link né strumenti MCP, e un plugin che ne richiede un altro, o un id sconosciuto, fa fallire la build. Il registro è in `apps/web/src/modules`.
 
 ## Gestione dello Stato
 
