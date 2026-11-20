@@ -141,7 +141,7 @@ test.describe("Reports", () => {
     const iso = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`
     await expect(page).toHaveURL(new RegExp(`/transactions\\?dateFrom=${iso(new Date(t.getFullYear(), t.getMonth(), 1))}&dateTo=${iso(new Date(t.getFullYear(), t.getMonth() + 1, 0))}$`))
     await expect(page.getByRole("button", { name: /^Remove filter: Dates / })).toBeVisible()
-    await expect(page.locator("button:visible", { hasText: "Rent" })).toHaveCount(1)
+    await expect(page.getByRole("main").locator("button:visible", { hasText: "Rent" })).toHaveCount(1)
     await expect(page.getByText("Groceries")).toHaveCount(0)
   })
 })

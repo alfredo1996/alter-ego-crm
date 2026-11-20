@@ -3,7 +3,7 @@ import { test, expect } from "@playwright/test"
 import { signIn, navigateTo } from "./helpers/test-utils"
 
 /**
- * A deployment built with NEXT_PUBLIC_PLUGINS=consulting: Accounting and Rent are off. It needs
+ * A deployment built with NEXT_PUBLIC_PLUGINS=consulting: Personal Finance, Accounting and Rent are off. It needs
  * its own build, so it runs only under playwright.modules.config.ts (`pnpm test:e2e:modules`).
  *
  * A page load wipes the mock backend and signs out, so a page.goto to /invoices would land on
@@ -29,6 +29,30 @@ test.describe("a deployment that lists only Consulting", () => {
     }
   })
 
+  // Personal Finance is opt-in: a deployment that does not list it has no group, no link and no page of it.
+  test("has no Personal Finance group or link", async ({ page }) => {
+    const sidebar = page.getByRole("navigation", { name: "Main" })
+    await expect(sidebar.getByText("Personal Finance")).toHaveCount(0)
+    for (const name of ["Dashboard", "Accounts", "Transactions", "Categories", "Budgets", "Goals", "Recurring", "Reports"]) {
+      await expect(sidebar.getByRole("link", { name, exact: true })).toHaveCount(0)
+    }
+  })
+
+  for (const path of ["/dashboard", "/accounts", "/accounts/a1", "/transactions", "/categories", "/budgets", "/goals", "/recurring", "/reports"]) {
+    test(`sends Personal Finance's ${path} to the first page`, async ({ page }) => {
+      await page.evaluate((p) => window.history.pushState({}, "", p), path)
+      await expect(page).toHaveURL(/\/pipeline$/)
+    })
+  }
+
+  test("Settings has none of Personal Finance's sections", async ({ page }) => {
+    await navigateTo(page, "Settings", "/settings")
+    for (const name of ["Categories & Tags", "Danger Zone"]) {
+      await expect(page.getByRole("heading", { level: 2, name })).toHaveCount(0)
+    }
+    await expect(page.getByRole("button", { name: /delete all accounts/i })).toHaveCount(0)
+  })
+
   for (const path of ["/invoices", "/cash-book", "/costs", "/month-end", "/rent"]) {
     test(`sends ${path} to the first page`, async ({ page }) => {
       await page.evaluate((p) => window.history.pushState({}, "", p), path)
@@ -49,16 +73,16 @@ test.describe("a deployment that lists only Consulting", () => {
     await expect(page.getByRole("group", { name: "Invoiced against plan" })).toHaveCount(0)
   })
 
-  test("Settings lists Consulting as On, Accounting and Rent as Off, and the variable's value", async ({ page }) => {
+  test("Settings lists Consulting as On, Personal Finance, Accounting and Rent as Off, and the variable's value", async ({ page }) => {
     await navigateTo(page, "Settings", "/settings")
     const plugins = page.getByRole("region", { name: "Plugins" })
     await expect(plugins.getByText("NEXT_PUBLIC_PLUGINS")).toBeVisible()
     await expect(plugins.getByText("consulting", { exact: true })).toBeVisible()
-    for (const name of ["Consulting", "Accounting", "Rent"]) {
+    for (const name of ["Personal Finance", "Consulting", "Accounting", "Rent"]) {
       await expect(plugins.getByText(new RegExp(`^${name}(Needs (Consulting|Accounting))?$`))).toBeVisible()
     }
     // A row has no role to name it by; which pill belongs to which plugin is modules-section.test.tsx's.
-    await expect(plugins.getByText("Off", { exact: true })).toHaveCount(2)
+    await expect(plugins.getByText("Off", { exact: true })).toHaveCount(3)
     await expect(plugins.getByText("On", { exact: true })).toHaveCount(1)
   })
 })

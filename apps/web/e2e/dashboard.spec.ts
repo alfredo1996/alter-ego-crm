@@ -5,7 +5,8 @@ import { signIn, navigateTo, uniqueName } from "./helpers/test-utils"
 
 test.describe("Dashboard", () => {
   test.beforeEach(async ({ page }) => {
-    await signIn(page)
+    // The default lands on Settings; these specs start on the Dashboard.
+    await signIn(page, "/dashboard")
   })
 
   test("should show dashboard heading", async ({ page }) => {

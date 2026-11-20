@@ -28,18 +28,6 @@ export default defineConfig({
         "auth.spec.ts",
         "mobile.spec.ts",
         "modules.spec.ts",
-        // Parked: Personal Finance's specs came with its package (issue 30) and cannot pass until its pages
-        // exist. Issue 31 wires them and deletes this list.
-        "account-detail.spec.ts",
-        "accounts.spec.ts",
-        "budgets.spec.ts",
-        "categories.spec.ts",
-        "dashboard.spec.ts",
-        "mm-import.spec.ts",
-        "recurring.spec.ts",
-        "reports.spec.ts",
-        "savings-goals.spec.ts",
-        "transactions.spec.ts",
       ],
       use: { ...devices["Desktop Chrome"] },
     },
@@ -69,7 +57,10 @@ export default defineConfig({
     // and anything set after this command runs is too late. Without it the
     // build picks up .env.local and every test dies signing in against real
     // Firebase. Variables set here reach both the build and the server.
-    env: { NEXT_PUBLIC_BACKEND: "mock" },
+    // Every plugin is listed, so one build runs every spec: Personal Finance is opt-in, and its specs
+    // (and the first page after sign-in, its Dashboard) exist only when it is listed. The build that lists
+    // only Consulting is playwright.modules.config.ts.
+    env: { NEXT_PUBLIC_BACKEND: "mock", NEXT_PUBLIC_PLUGINS: "finance,consulting,accounting,rent" },
     url: "http://localhost:3001",
     // A cold production build on CI's 2-vCPU runner.
     timeout: 300_000,

@@ -1,6 +1,6 @@
 import { test, expect } from "@playwright/test"
 
-import { signIn, navigateTo } from "./helpers/test-utils"
+import { signIn, navigateTo, uniqueName } from "./helpers/test-utils"
 
 test.describe("Settings", () => {
   test.beforeEach(async ({ page }) => {
@@ -47,11 +47,14 @@ test.describe("Settings", () => {
     await expect(lightButton).toHaveAttribute("aria-pressed", "true")
   })
 
-  test("should list the sections in an index and keep Data last", async ({ page }) => {
+  // Personal Finance is listed in this build: its Categories & Tags, Data and Danger Zone sections join the page (the
+  // Consulting-only build's list, with no Danger Zone, is in modules.spec.ts).
+  test("should list the sections in an index and keep Danger Zone last", async ({ page }) => {
     const index = page.getByRole("navigation", { name: "On this page" })
-    await expect(index.getByRole("link")).toHaveText(["Profile", "Preferences", "Plugins", "Data"])
-    await index.getByRole("link", { name: "Data" }).click()
-    await expect(page.getByRole("heading", { level: 2, name: "Data" })).toBeInViewport()
+    await expect(index.getByRole("link")).toHaveText(["Profile", "Preferences", "Plugins", "Categories & Tags", "Data", "Danger Zone"])
+    await index.getByRole("link", { name: "Danger Zone" }).click()
+    await expect(page.getByRole("heading", { level: 2, name: "Danger Zone" })).toBeInViewport()
+    await expect(page.getByText("Nothing to reset")).toBeVisible()
   })
 
   test("should ask before disconnecting all connectors", async ({ page }) => {
@@ -71,5 +74,48 @@ test.describe("Settings", () => {
     await page.getByRole("alertdialog").getByRole("button", { name: "Revoke", exact: true }).click()
     await expect(page.getByText("API key revoked").first()).toBeVisible()
     await expect(revoke).toHaveCount(0)
+  })
+
+  // ── Personal Finance ─────────────────────────────────────────────────────────
+
+  test("should change currency with the segmented choice", async ({ page }) => {
+    const group = page.getByRole("group", { name: "Currency" })
+    await group.getByRole("button", { name: "EUR" }).click()
+    await expect(group.getByRole("button", { name: "EUR" })).toHaveAttribute("aria-pressed", "true")
+    await expect(group.getByRole("button", { name: "USD" })).toHaveAttribute("aria-pressed", "false")
+    // Other opens the rest of the list and shows the pick.
+    await group.getByRole("combobox", { name: "Other currency" }).click()
+    await page.getByRole("option", { name: "CHF" }).click()
+    await expect(group.getByRole("combobox", { name: "Other currency" })).toHaveText("CHF")
+    await expect(group.getByRole("button", { name: "EUR" })).toHaveAttribute("aria-pressed", "false")
+  })
+
+  test("should show export button", async ({ page }) => {
+    await expect(page.getByRole("button", { name: /export/i })).toBeVisible()
+  })
+
+  test("should show tags section", async ({ page }) => {
+    await expect(page.getByText(/tags/i).first()).toBeVisible()
+  })
+
+  test("should show auto-categorization rules section", async ({ page }) => {
+    await expect(page.getByText(/auto-categorization/i)).toBeVisible()
+  })
+
+  test("should delete all accounts and transactions", async ({ page }) => {
+    const name = uniqueName("Doomed Account")
+    await navigateTo(page, "Accounts", "/accounts")
+    await page.getByRole("button", { name: /new account/i }).click()
+    await page.getByLabel("Name").fill(name)
+    await page.getByRole("button", { name: /create account/i }).click()
+    await expect(page.getByText(name)).toBeVisible()
+
+    await navigateTo(page, "Settings", "/settings")
+    await page.getByRole("button", { name: /delete all accounts/i }).click()
+    await page.getByRole("button", { name: /delete everything/i }).click()
+    await expect(page.getByText("All accounts and transactions deleted").first()).toBeVisible()
+
+    await navigateTo(page, "Accounts", "/accounts")
+    await expect(page.getByText(/no accounts yet/i)).toBeVisible()
   })
 })

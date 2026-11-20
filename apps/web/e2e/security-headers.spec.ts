@@ -20,6 +20,20 @@ test("/login and /settings raise no eval CSP violation", async ({ page }) => {
   expect(await seen()).toEqual([])
 })
 
+// Personal Finance's own zod (packages/modules/finance/src/lib/zod.ts) runs jitless too.
+test("/dashboard raises no eval CSP violation", async ({ page }) => {
+  await page.addInitScript(() => {
+    const w = window as unknown as { __cspEval: string[] }
+    w.__cspEval = []
+    document.addEventListener("securitypolicyviolation", (e) => {
+      if (e.blockedURI === "eval") w.__cspEval.push(e.sourceFile)
+    })
+  })
+  await signIn(page, "/dashboard")
+  await page.getByRole("heading", { name: "Dashboard", level: 1 }).waitFor()
+  expect(await page.evaluate(() => (window as unknown as { __cspEval: string[] }).__cspEval)).toEqual([])
+})
+
 // #347: every page carries the report-only policy and no X-Powered-By.
 // page.request, not page.goto: a full load would wipe the mock backend.
 for (const path of ["/login", "/register"]) {
