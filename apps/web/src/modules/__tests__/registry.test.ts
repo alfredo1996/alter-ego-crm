@@ -204,6 +204,8 @@ describe("a plugin is wired end to end", () => {
     builtRules: "rules { match /alpha/{id} }",
     indexFiles: [{ name: "alpha.indexes.json", indexes: [{ collectionGroup: "alpha", fields: ["x"] }] }],
     rootIndexes: [{ collectionGroup: "alpha", fields: ["x"] }, { collectionGroup: "other", fields: ["y"] }],
+    modulePackages: ["alpha", "beta"],
+    globalsCss: '@source "../../../../packages/modules/alpha/src";\n@source "../../../../packages/modules/beta/src";',
   })
   const broken = (change: (f: Facts) => void): string[] => {
     const f = good()
@@ -257,6 +259,11 @@ describe("a plugin is wired end to end", () => {
       "an index not in the root file",
       (f: Facts) => f.indexFiles[0].indexes.push({ collectionGroup: "beta", fields: ["z"] }),
       'Index file alpha.indexes.json holds an index that firestore.indexes.json does not: {"collectionGroup":"beta","fields":["z"]}. Add it to the root file.',
+    ],
+    [
+      "a package Tailwind never scans",
+      (f: Facts) => f.modulePackages.push("gamma"),
+      "Package packages/modules/gamma is not a Tailwind @source in app/globals.css, so the classes only it uses are never generated. Add the @source line.",
     ],
   ])("fails, naming the missing step, for %s", (_name, change, message) => {
     expect(broken(change)).toEqual([message])

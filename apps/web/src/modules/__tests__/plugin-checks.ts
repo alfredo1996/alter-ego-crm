@@ -2,7 +2,7 @@
  * The steps that make a plugin whole, as one pure check over plain facts (registry.test.ts). The real
  * facts come from collectFacts(); the tests feed the check a fake plugin that skips one step at a time.
  */
-import { existsSync, globSync, readFileSync } from "node:fs"
+import { existsSync, globSync, readdirSync, readFileSync } from "node:fs"
 import path from "node:path"
 
 import { PLUGIN_REGISTERS, REGISTERS, WRITE_TOOL_NAMES } from "@/lib/mcp/plugins"
@@ -22,6 +22,9 @@ export interface Facts {
   builtRules: string
   indexFiles: { name: string; indexes: unknown[] }[]
   rootIndexes: unknown[]
+  /** The directories under packages/modules, and app/globals.css: Tailwind generates only the classes of the sources it scans. */
+  modulePackages: string[]
+  globalsCss: string
 }
 
 const canon = (v: unknown): string =>
@@ -81,6 +84,11 @@ export function problems(f: Facts): string[] {
       if (!root.has(canon(index))) out.push(`Index file ${file.name} holds an index that firestore.indexes.json does not: ${JSON.stringify(index)}. Add it to the root file.`)
     }
   }
+  for (const pkg of f.modulePackages) {
+    if (!f.globalsCss.includes(`packages/modules/${pkg}/src"`)) {
+      out.push(`Package packages/modules/${pkg} is not a Tailwind @source in app/globals.css, so the classes only it uses are never generated. Add the @source line.`)
+    }
+  }
   return out
 }
 
@@ -116,5 +124,7 @@ export function collectFacts(): Facts {
       indexes: JSON.parse(readFileSync(file, "utf8")).indexes ?? [],
     })),
     rootIndexes: JSON.parse(readFileSync(repo("firestore.indexes.json"), "utf8")).indexes,
+    modulePackages: readdirSync(repo("packages", "modules"), { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => d.name),
+    globalsCss: readFileSync(path.join("src", "app", "globals.css"), "utf8"),
   }
 }
