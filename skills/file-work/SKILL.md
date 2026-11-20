@@ -21,7 +21,7 @@ Tools below are the connector's own, called by their plain names. Every check li
 
 ## Flow
 
-1. **Find the solution.** Without the solution tools (`list_solutions`, `get_solution`, `log_work`: Solutions is switched off), skip the journal entry: find the contract with `get_client`, file the hours alone (steps 4 to 6.2) and say so.
+1. **Find the solution.** Without the solution tools (`list_solutions`, `get_solution`, `log_work`), skip the journal entry: find the contract with `get_client`, file the hours alone (steps 4 to 6.2) and say so.
 
    Read the `## Gemini CRM` block of `.claude/CLAUDE.md` (the repository root's `CLAUDE.md` too). Without one, ask once which solution this repository belongs to (`list_solutions` gives the names), file under that answer, and offer the block to add; write it only after a yes.
 

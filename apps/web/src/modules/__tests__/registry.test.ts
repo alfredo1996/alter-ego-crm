@@ -1,12 +1,12 @@
 import { readFileSync } from "node:fs"
 
-import { describe, expect, it } from "vitest"
+import { afterEach, describe, expect, it, vi } from "vitest"
 
 import { registerCrmReadTools } from "@/lib/mcp/tools/crm-read"
 import { registerCrmWriteTools } from "@/lib/mcp/tools/crm-write"
 import { registerRentTools } from "@/lib/mcp/tools/rent"
 
-import { allToolNames, enabledToolNames, gateTools, isModuleOn, resolveModules } from "../index"
+import { DEFAULT_PLUGINS, allToolNames, enabledToolNames, gateTools, resolveModules } from "../index"
 
 import type { ModuleId } from "../index"
 import type { McpServer } from "@modelcontextprotocol/server"
@@ -56,8 +56,26 @@ describe("requirements", () => {
 })
 
 describe("isModuleOn", () => {
-  it("answers per id from the deployment's selection (all three on by default)", () => {
-    expect(["consulting", "accounting", "rent"].map((id) => isModuleOn(id as ModuleId))).toEqual([true, true, true])
+  afterEach(() => {
+    vi.unstubAllEnvs()
+    vi.resetModules()
+  })
+
+  it.each([
+    ["consulting", [true, false, false]],
+    ["consulting,accounting", [true, true, false]],
+    ["consulting,accounting,rent", [true, true, true]],
+  ] as const)("answers per id from the selection %j", async (plugins, expected) => {
+    vi.stubEnv("NEXT_PUBLIC_PLUGINS", plugins)
+    vi.resetModules()
+    const { isModuleOn } = await import("../index")
+    expect((["consulting", "accounting", "rent"] as ModuleId[]).map((id) => isModuleOn(id))).toEqual(expected)
+  })
+})
+
+describe("the default", () => {
+  it("is the three plugins that exist today, so a plugin added later stays off until it is listed", () => {
+    expect(DEFAULT_PLUGINS).toEqual(["consulting", "accounting", "rent"])
   })
 })
 

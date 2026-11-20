@@ -1,6 +1,6 @@
 /**
  * The registry: which plugins this deployment runs, resolved once at load from
- * NEXT_PUBLIC_PLUGINS (every plugin when unset).
+ * NEXT_PUBLIC_PLUGINS (consulting,accounting,rent when unset; a plugin added later is never on until listed).
  *
  * A bad list throws here, and next.config.ts calls the same resolver, so `next build` fails before it
  * compiles a page.
@@ -11,7 +11,7 @@ import { MODULES, resolveModules } from "./resolve"
 
 import type { ModuleId } from "@alter-ego/kernel/module"
 
-export { MODULES, resolveModules } from "./resolve"
+export { DEFAULT_PLUGINS, MODULES, resolveModules } from "./resolve"
 export type { ModuleId, ModuleManifest } from "@alter-ego/kernel/module"
 
 const resolved = resolveModules(env.NEXT_PUBLIC_PLUGINS, env.NEXT_PUBLIC_DISABLED_MODULES)

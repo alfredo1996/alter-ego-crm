@@ -48,9 +48,17 @@ async function loadNav(plugins?: string): Promise<typeof NavModule> {
 }
 
 afterEach(() => {
+  delete process.env.NEXT_PUBLIC_DISABLED_MODULES
   if (ORIGINAL_PLUGINS === undefined) delete process.env.NEXT_PUBLIC_PLUGINS
   else process.env.NEXT_PUBLIC_PLUGINS = ORIGINAL_PLUGINS
   vi.resetModules()
+})
+
+describe("the retired variable", () => {
+  it("stops the app from loading when it is defined, even empty", async () => {
+    process.env.NEXT_PUBLIC_DISABLED_MODULES = ""
+    await expect(loadNav("consulting")).rejects.toThrow("NEXT_PUBLIC_DISABLED_MODULES is no longer read")
+  })
 })
 
 describe("nav with every plugin on", () => {

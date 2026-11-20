@@ -1,6 +1,6 @@
 ---
 title: Architettura
-description: Struttura del progetto, pattern adapter, moduli e convenzioni principali
+description: Struttura del progetto, pattern adapter, plugin e convenzioni principali
 ---
 
 ## Struttura del Progetto
@@ -43,9 +43,9 @@ L'adapter viene scelto in fase di build dalla variabile d'ambiente `NEXT_PUBLIC_
 
 Vedi la [Panoramica Backend](/it/docs/backend/overview) per i dettagli.
 
-## Moduli
+## Plugin
 
-Ogni area dell'app è un plugin: `consulting`, `accounting` e `rent`. Un'installazione elenca quelli che esegue in `NEXT_PUBLIC_PLUGINS` (tutti se non è impostata): gli altri non hanno pagine, link né strumenti MCP, e un plugin che ne richiede un altro, o un id sconosciuto, fa fallire la build. Il registro è in `apps/web/src/modules`.
+Ogni area dell'app è un plugin: `consulting`, `accounting` e `rent`. Un'installazione elenca quelli che esegue in `NEXT_PUBLIC_PLUGINS` (consulting, accounting e rent se non è impostata; un plugin aggiunto dopo non è mai attivo finché non è elencato): gli altri non hanno pagine, link né strumenti MCP, e un plugin che ne richiede un altro, o un id sconosciuto, fa fallire la build. Il registro è in `apps/web/src/modules`.
 
 ## Gestione dello Stato
 

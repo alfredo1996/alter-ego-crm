@@ -72,6 +72,9 @@ describe("the Collaborators page", () => {
     await show()
     expect(calls.map(([m]) => m)).not.toContain("getCompanyExpenses")
     expect(names()).toEqual(["Studio Verdi", "Marco Bianchi", "Giulia Neri", "Lab Nove Srl"])
+    // The costs were not read, so no card may claim its invoices are missing.
+    expect(screen.queryAllByRole("group", { name: "Invoiced against plan" })).toHaveLength(0)
+    expect(screen.queryByText(/not invoiced yet/)).not.toBeInTheDocument()
   })
 
   it("heads the list with the active count, the fees a month and this quarter's total", async () => {

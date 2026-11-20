@@ -93,7 +93,7 @@ fails on a forbidden import. Type-check everything with `pnpm typecheck`.
 
 The areas of the app are plugins (`consulting`, `accounting`, `rent`; the code says module), declared as data in
 `apps/web/src/modules`, and each sidebar group is one plugin. `NEXT_PUBLIC_PLUGINS` (comma-separated ids, opt-in,
-every plugin when unset) lists the ones a deployment runs: the others' nav group, routes and MCP tools go, their
+consulting,accounting,rent when unset; a plugin added later is never on until listed) lists the ones a deployment runs: the others' nav group, routes and MCP tools go, their
 data is not touched. An unknown id, a plugin whose requirement is not listed (accounting needs consulting, rent
 needs accounting) and the retired variable that this one replaced fail the build, the retired one even when defined empty: `resolveModules`
 (`modules/resolve.ts`, called by `next.config.ts` and by the registry) is the one place that decides;

@@ -99,7 +99,7 @@ Copy `apps/web/.env.example` to `apps/web/.env.local` and set these:
 `NEXT_PUBLIC_PLUGINS` is a comma-separated list of the plugins a deployment
 runs: `consulting`, `accounting`, `rent`. `accounting` needs `consulting`, and
 `rent` needs `accounting`: an unknown id, or a plugin whose requirement is not
-listed, stops the build. Every plugin runs when it is unset. A plugin that is not
+listed, stops the build. When it is unset, `consulting`, `accounting` and `rent` run; a plugin added later is never on until it is listed. A plugin that is not
 listed disappears from the sidebar, its pages and the connector, and its data is
 not touched.
 
@@ -110,8 +110,8 @@ server, which uses the Admin SDK and bypasses Firestore rules:
 
 ## MCP server
 
-- 68 tools over the company data, for Claude or any MCP client; a module
-  that is switched off serves none of its tools
+- 68 tools over the company data, for Claude or any MCP client; a plugin
+  that is left out serves none of its tools
 - Remote over HTTP at `/api/mcp` with OAuth 2.1 + PKCE (scopes `data:read` and
   `data:write`) or an API key, or local over stdio with no auth at all
 - `/file-work`: a Claude Code skill in [skills/file-work/](skills/file-work/SKILL.md) that
@@ -183,7 +183,7 @@ focuses on `apps/web/src/lib/**` (utilities, business logic, backend adapters).
 sources: the file is **generated** by `pnpm rules:build` from `firestore/base.rules`,
 `firestore/crm.rules` and the modules' rules (`packages/modules/rent/src/rent.rules`),
 so edit those, never the output. The registry tests prove a deployment can switch
-`rent` and `solutions` off.
+Accounting and Rent out.
 
 ### E2E Tests (Playwright) — 30 specs
 

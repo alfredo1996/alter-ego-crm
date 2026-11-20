@@ -13,7 +13,7 @@ interface ModulesSectionProps {
 export function ModulesSection({ isOn = isModuleOn, selection = deploymentSelection }: ModulesSectionProps) {
   return (
     <SettingsSection
-      id="plugins"
+      id="modules"
       title="Plugins"
       description="What this deployment runs. A plugin that is off leaves the sidebar, its pages and the connector; its data stays."
     >

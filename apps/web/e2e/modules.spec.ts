@@ -43,6 +43,10 @@ test.describe("a deployment that lists only Consulting", () => {
     await expect(page.getByRole("heading", { name: "Plan", level: 1 })).toBeVisible()
     await expect(page.getByText("Runway", { exact: true })).toHaveCount(0)
     await expect(page.getByRole("link", { name: "Quarters" })).toHaveCount(0)
+    await navigateTo(page, "Collaborators", "/collaborators")
+    await expect(page.getByRole("heading", { name: "Collaborators", level: 1 })).toBeVisible()
+    await expect(page.getByText(/not invoiced yet/)).toHaveCount(0)
+    await expect(page.getByRole("group", { name: "Invoiced against plan" })).toHaveCount(0)
   })
 
   test("Settings lists Consulting as On, Accounting and Rent as Off, and the variable's value", async ({ page }) => {

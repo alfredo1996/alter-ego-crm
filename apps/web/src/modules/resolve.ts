@@ -11,6 +11,12 @@ import type { ModuleId, ModuleManifest } from "@alter-ego/kernel/module"
 
 export const MODULES: ModuleManifest[] = [consulting, accounting, rent]
 
+/**
+ * What an unset NEXT_PUBLIC_PLUGINS runs. A literal on purpose, not MODULES: a plugin added later
+ * must stay off until a deployment lists it, so an upgrade never changes what it shows.
+ */
+export const DEFAULT_PLUGINS: ModuleId[] = ["consulting", "accounting", "rent"]
+
 const byId = new Map(MODULES.map((m) => [m.id, m]))
 
 export interface ResolvedModules {
@@ -20,7 +26,7 @@ export interface ResolvedModules {
 }
 
 /**
- * `plugins` is NEXT_PUBLIC_PLUGINS: an opt-in list, every plugin when unset or blank. `retired` is
+ * `plugins` is NEXT_PUBLIC_PLUGINS: an opt-in list; unset or blank means consulting,accounting,rent. `retired` is
  * NEXT_PUBLIC_DISABLED_MODULES, which is no longer read: defined at all, even empty, it throws, so a
  * deployment that kept it fails loudly instead of silently running something else.
  */
@@ -36,7 +42,7 @@ export function resolveModules(plugins?: string, retired?: string): ResolvedModu
       throw new Error(`Unknown plugin "${id}" in NEXT_PUBLIC_PLUGINS. The plugins are: ${MODULES.map((m) => m.id).join(", ")}.`)
     }
   }
-  const on = new Set<string>(listed.length ? listed : MODULES.map((m) => m.id))
+  const on = new Set<string>(listed.length ? listed : DEFAULT_PLUGINS)
   const enabled = new Set(MODULES.filter((m) => on.has(m.id)).map((m) => m.id))
   for (const m of MODULES) {
     for (const need of m.requires) {

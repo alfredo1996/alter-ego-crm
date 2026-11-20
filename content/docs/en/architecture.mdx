@@ -1,6 +1,6 @@
 ---
 title: Architecture
-description: Project structure, adapter pattern, modules and key conventions
+description: Project structure, adapter pattern, plugins and key conventions
 ---
 
 ## Project Structure
@@ -43,9 +43,9 @@ The adapter is selected at build time by the `NEXT_PUBLIC_BACKEND` environment v
 
 See the [Backend Overview](/en/docs/backend/overview) for implementation details.
 
-## Modules
+## Plugins
 
-Each area of the app is a plugin: `consulting`, `accounting` and `rent`. A deployment lists the ones it runs in `NEXT_PUBLIC_PLUGINS` (every plugin when unset); the others have no pages, links or MCP tools, and a plugin that needs another one, or an unknown id, fails the build. The registry is `apps/web/src/modules`.
+Each area of the app is a plugin: `consulting`, `accounting` and `rent`. A deployment lists the ones it runs in `NEXT_PUBLIC_PLUGINS` (consulting, accounting and rent when unset; a plugin added later is never on until listed); the others have no pages, links or MCP tools, and a plugin that needs another one, or an unknown id, fails the build. The registry is `apps/web/src/modules`.
 
 ## State Management
 

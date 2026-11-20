@@ -2,7 +2,7 @@ import { z } from "@/lib/zod"
 
 const envSchema = z.object({
   NEXT_PUBLIC_BACKEND: z.enum(["mock", "firebase"]).default("mock"),
-  /** Comma-separated plugin ids this deployment runs (see src/modules). Every plugin when unset. */
+  /** Comma-separated plugin ids this deployment runs (see src/modules). consulting,accounting,rent when unset; a plugin added later is never on until listed. */
   NEXT_PUBLIC_PLUGINS: z.string().optional(),
   /** Retired: src/modules/resolve.ts fails when it is defined at all. */
   NEXT_PUBLIC_DISABLED_MODULES: z.string().optional(),

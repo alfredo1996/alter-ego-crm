@@ -132,8 +132,9 @@ export function CollaboratorsShell() {
     return { thisQuarter: of(thisQuarter), nextQuarter: of(nextQuarter) }
   }
 
-  const invoiced = new Map(collaborators.map((c) => [c.id, lastQuarterBlock(c, { assignments, timecards, expenses, today })]))
-  const earlier = new Map(collaborators.map((c) => [c.id, earlierGapBlock(c, { assignments, timecards, expenses, today })]))
+  // Without Accounting the costs are not read, so "nothing invoiced" would be false: no blocks at all.
+  const invoiced = new Map(hasAccounting ? collaborators.map((c) => [c.id, lastQuarterBlock(c, { assignments, timecards, expenses, today })]) : [])
+  const earlier = new Map(hasAccounting ? collaborators.map((c) => [c.id, earlierGapBlock(c, { assignments, timecards, expenses, today })]) : [])
   const notInvoiced = [...invoiced.values(), ...earlier.values()].reduce((s, b) => s + (b?.gap ?? 0), 0)
 
   const open = (c: Collaborator | null, from: HTMLElement | null) => {
