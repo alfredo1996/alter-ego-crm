@@ -1,23 +1,23 @@
 import { StatusPill, TagChip } from "@alter-ego/ui/page/status-pill"
 
 import { SettingsRow, SettingsSection } from "@/components/settings/settings-section"
-import { isModuleOn, leftOut as deploymentLeftOut, MODULES, type ModuleId } from "@/modules"
+import { isModuleOn, selection as deploymentSelection, MODULES, type ModuleId } from "@/modules"
 
 interface ModulesSectionProps {
   /** Defaults to this deployment's registry; a test passes its own. */
   isOn?: (id: ModuleId) => boolean
-  leftOut?: { variable: string; value: string }
+  selection?: { variable: string; value: string }
 }
 
-/** Read-only: the deployment chooses its modules, not the user (NEXT_PUBLIC_DISABLED_MODULES). */
-export function ModulesSection({ isOn = isModuleOn, leftOut = deploymentLeftOut }: ModulesSectionProps) {
+/** Read-only: the deployment chooses its plugins, not the user (NEXT_PUBLIC_PLUGINS). */
+export function ModulesSection({ isOn = isModuleOn, selection = deploymentSelection }: ModulesSectionProps) {
   return (
     <SettingsSection
       id="modules"
-      title="Modules"
-      description="What this deployment runs. A module switched off leaves the sidebar, its pages and the connector; its data stays."
+      title="Plugins"
+      description="What this deployment runs. A plugin that is off leaves the sidebar, its pages and the connector; its data stays."
     >
-      {MODULES.filter((m) => m.listed).map((m) => (
+      {MODULES.map((m) => (
         <SettingsRow
           key={m.id}
           label={
@@ -36,14 +36,14 @@ export function ModulesSection({ isOn = isModuleOn, leftOut = deploymentLeftOut 
         </SettingsRow>
       ))}
       <SettingsRow
-        label="Left Out"
+        label="Plugins Listed"
         hint={
           <>
-            Set by <TagChip>{leftOut.variable}</TagChip> where the app is deployed. A change applies on the next deploy.
+            Set by <TagChip>{selection.variable}</TagChip> where the app is deployed. A change applies on the next deploy.
           </>
         }
       >
-        <TagChip>{leftOut.value}</TagChip>
+        <TagChip>{selection.value}</TagChip>
       </SettingsRow>
     </SettingsSection>
   )

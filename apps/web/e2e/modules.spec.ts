@@ -1,59 +1,64 @@
 import { test, expect } from "@playwright/test"
 
-import { revealLink } from "./helpers/demo"
 import { signIn, navigateTo } from "./helpers/test-utils"
 
 /**
- * A deployment built with NEXT_PUBLIC_DISABLED_MODULES=invoicing,solutions. It needs
+ * A deployment built with NEXT_PUBLIC_PLUGINS=consulting: Accounting and Rent are off. It needs
  * its own build, so it runs only under playwright.modules.config.ts (`pnpm test:e2e:modules`).
  *
  * A page load wipes the mock backend and signs out, so a page.goto to /invoices would land on
  * the sign-in page and prove nothing about the guard. The blocked URLs are opened the way a link
  * would: through the app's own history.
  */
-test.describe("a deployment without invoicing and solutions", () => {
+test.describe("a deployment that lists only Consulting", () => {
   test.beforeEach(async ({ page }) => {
     await signIn(page)
   })
 
-  test("leaves their links out of the sidebar and keeps the rest of each group", async ({ page }) => {
+  test("shows the Consulting group alone: always open, with no group heading to press", async ({ page }) => {
     const sidebar = page.getByRole("navigation", { name: "Main" })
-    const aside = page.locator("aside")
-    // Consulting is open on Settings (the first group); Accounting is its heading until pressed.
-    for (const name of ["Pipeline", "Clients", "Plan"]) {
+    await expect(sidebar.getByRole("button")).toHaveCount(0)
+    for (const name of ["Pipeline", "Clients", "Solutions", "Plan"]) {
       await expect(sidebar.getByRole("link", { name, exact: true })).toBeVisible()
     }
-    await expect(sidebar.getByRole("link", { name: "Solutions", exact: true })).toHaveCount(0)
-    await sidebar.getByRole("button", { name: "Accounting" }).click()
-    for (const name of ["Cash Book", "Rent", "Costs", "Month End"]) {
-      await expect((await revealLink(aside, name, true))).toBeVisible()
+    for (const name of ["Accounting", "Rent"]) {
+      await expect(sidebar.getByRole("button", { name, exact: true })).toHaveCount(0)
     }
-    await expect(sidebar.getByRole("link", { name: "Invoices", exact: true })).toHaveCount(0)
+    for (const name of ["Invoices", "Cash Book", "Costs", "Month End", "Rent"]) {
+      await expect(sidebar.getByRole("link", { name, exact: true })).toHaveCount(0)
+    }
   })
 
-  for (const path of ["/invoices", "/solutions"]) {
+  for (const path of ["/invoices", "/cash-book", "/costs", "/month-end", "/rent"]) {
     test(`sends ${path} to the first page`, async ({ page }) => {
       await page.evaluate((p) => window.history.pushState({}, "", p), path)
       await expect(page).toHaveURL(/\/pipeline$/)
     })
   }
 
-  test("Month End has no Invoices or Invoice Files step", async ({ page }) => {
-    await navigateTo(page, "Month End", "/month-end")
-    await expect(page.getByRole("heading", { name: "Month End", level: 1 })).toBeVisible()
-    await expect(page.getByRole("heading", { name: "Invoice Files", level: 2 })).toHaveCount(0)
-    await expect(page.getByRole("heading", { name: "Invoices", level: 2, exact: true })).toHaveCount(0)
+  test("Consulting's money views are hidden: no owed line on Clients, no Runway or Quarters on the Plan", async ({ page }) => {
+    await navigateTo(page, "Clients", "/clients")
+    await expect(page.getByText("Who you work for and what is signed.", { exact: true })).toBeVisible()
+    await navigateTo(page, "Plan", "/plan")
+    await expect(page.getByRole("heading", { name: "Plan", level: 1 })).toBeVisible()
+    await expect(page.getByText("Runway", { exact: true })).toHaveCount(0)
+    await expect(page.getByRole("link", { name: "Quarters" })).toHaveCount(0)
+    await navigateTo(page, "Collaborators", "/collaborators")
+    await expect(page.getByRole("heading", { name: "Collaborators", level: 1 })).toBeVisible()
+    await expect(page.getByText(/not invoiced yet/)).toHaveCount(0)
+    await expect(page.getByRole("group", { name: "Invoiced against plan" })).toHaveCount(0)
   })
 
-  test("Settings lists Invoicing and Solutions as Off and Books and Rent as On", async ({ page }) => {
+  test("Settings lists Consulting as On, Accounting and Rent as Off, and the variable's value", async ({ page }) => {
     await navigateTo(page, "Settings", "/settings")
-    const modules = page.getByRole("region", { name: "Modules" })
-    await expect(modules.getByText("invoicing,solutions")).toBeVisible()
-    for (const name of ["CRM", "Invoicing", "Books", "Solutions", "Rent"]) {
-      await expect(modules.getByText(new RegExp(`^${name}(Needs (CRM|Books))?$`))).toBeVisible()
+    const plugins = page.getByRole("region", { name: "Plugins" })
+    await expect(plugins.getByText("NEXT_PUBLIC_PLUGINS")).toBeVisible()
+    await expect(plugins.getByText("consulting", { exact: true })).toBeVisible()
+    for (const name of ["Consulting", "Accounting", "Rent"]) {
+      await expect(plugins.getByText(new RegExp(`^${name}(Needs (Consulting|Accounting))?$`))).toBeVisible()
     }
-    // A row has no role to name it by; which pill belongs to which module is modules-section.test.tsx's.
-    await expect(modules.getByText("Off", { exact: true })).toHaveCount(2)
-    await expect(modules.getByText("On", { exact: true })).toHaveCount(3)
+    // A row has no role to name it by; which pill belongs to which plugin is modules-section.test.tsx's.
+    await expect(plugins.getByText("Off", { exact: true })).toHaveCount(2)
+    await expect(plugins.getByText("On", { exact: true })).toHaveCount(1)
   })
 })

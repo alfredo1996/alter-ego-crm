@@ -94,8 +94,8 @@ it("a click on another bar swaps the detail to it, with its quarter rows and fig
   expect(rows.at(-1)).toHaveTextContent("Total25" + "0" + "€0" + "0%")
 })
 
-it("with invoicing off there is no Invoiced column and no invoice is read", async () => {
-  off.add("invoicing")
+it("with accounting off there is no Invoiced column and no invoice is read", async () => {
+  off.add("accounting")
   const t = timeline(await show())
   fireEvent.click(t.getByRole("button", { name: /^Guest MVP/ }))
   const detail = within(screen.getByRole("region", { name: "Contract detail" }))
@@ -104,22 +104,12 @@ it("with invoicing off there is no Invoiced column and no invoice is read", asyn
   expect(calls).not.toContain("getInvoices")
 })
 
-it("names the solution and links to it; with solutions off, neither, and none is read", async () => {
+it("names the solution and links to it", async () => {
   const t = timeline(await show())
   fireEvent.click(t.getByRole("button", { name: /^Guest MVP/ }))
-  let detail = within(screen.getByRole("region", { name: "Contract detail" }))
+  const detail = within(screen.getByRole("region", { name: "Contract detail" }))
   expect(detail.getByText("Solution")).toBeInTheDocument()
   expect(detail.getByRole("link", { name: "Open Solution" })).toHaveAttribute("href", "/solutions/s1")
-  cleanup()
-  calls.length = 0
-  off.add("solutions")
-  const t2 = timeline(await show())
-  fireEvent.click(t2.getByRole("button", { name: /^Guest MVP/ }))
-  detail = within(screen.getByRole("region", { name: "Contract detail" }))
-  expect(detail.queryByText("Solution")).toBeNull()
-  expect(detail.queryByRole("link", { name: "Open Solution" })).toBeNull()
-  expect(calls).not.toContain("getSolutions")
-  expect(calls).toContain("getInvoices")
 })
 
 it("a new user with nothing is not told to page Earlier or Later", async () => {

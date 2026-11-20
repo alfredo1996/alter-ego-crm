@@ -38,7 +38,7 @@ Run `pnpm install --frozen-lockfile`, then `pnpm --filter @alter-ego/web exec fu
 | `content/docs/` or `docs-site/`                                                                          | `pnpm -C docs-site build`                                                                                                                                                                |
 | `.claude/` only                                                                                          | no code gate: `pnpm lint` ignores `.claude/**` and Vitest only reads `apps/web/src/` and `packages/`. `bash .claude/hooks/__tests__/check-branch.test.sh` when `check-branch.sh` changed |
 
-**Unit gate: one run.** `NEXT_PUBLIC_DISABLED_MODULES` is read at load; the registry and nav tests re-import with a module list of their own.
+**Unit gate: one run.** `NEXT_PUBLIC_PLUGINS` is read at load; the registry and nav tests re-import with a plugin list of their own.
 
 ```bash
 pnpm test --run 2>&1 | tail -15

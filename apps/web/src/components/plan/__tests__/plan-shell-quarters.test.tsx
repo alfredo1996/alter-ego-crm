@@ -26,10 +26,11 @@ const DATA: Record<string, unknown> = {
 vi.mock("@/hooks/use-auth", () => ({ useAuth: () => ({ user: { id: "u1" } }) }))
 vi.mock("@/lib/backend", () => ({
   getBackend: () => ({
-    db: new Proxy({}, { get: (_db, method) => () => (DATA[String(method)] instanceof Error ? Promise.reject(DATA[String(method)]) : Promise.resolve(DATA[String(method)] ?? (String(method).endsWith("Settings") ? null : []))) }),
+    db: new Proxy({}, { get: (_db, method) => () => (reads.push(String(method)), DATA[String(method)] instanceof Error ? Promise.reject(DATA[String(method)]) : Promise.resolve(DATA[String(method)] ?? (String(method).endsWith("Settings") ? null : []))) }),
   }),
 }))
 const off = vi.hoisted(() => new Set<string>())
+const reads = vi.hoisted(() => [] as string[])
 vi.mock("@/modules", async (actual) => ({
   ...(await actual<Record<string, unknown>>()),
   isModuleOn: (id: string) => !off.has(id),
@@ -40,7 +41,10 @@ vi.mock("next/navigation", () => ({
   usePathname: () => "/",
 }))
 
-afterEach(() => off.clear())
+afterEach(() => {
+  off.clear()
+  reads.length = 0
+})
 
 // The Quarters read the timeline the Projection shows, so the switch moves both (the approved mockup).
 it("the planned months of the Quarters follow the Projection's scenario switch", async () => {
@@ -112,21 +116,22 @@ const renderPlan = () =>
     </QueryClientProvider>,
   )
 
-// Ended quarters are read off invoices and costs: without either they would all say €0, so the section is not shown.
-it.each([["books"], ["invoicing"]])("without %s the Plan has no Quarters section or chip, and keeps the Projection", async (module) => {
-  off.add(module)
+// Quarters read ended months off invoices and costs, and the Runway starts from the accounts: all three are Accounting's.
+it("without accounting the Plan has no Quarters, no Runway and no read of costs or invoices, and keeps the Projection", async () => {
+  off.add("accounting")
   renderPlan()
   await screen.findByRole("region", { name: /^Next \d+ months/ })
   expect(screen.queryByRole("region", { name: /^Quarters of/ })).toBeNull()
   expect(screen.queryByText("Loading quarters…")).toBeNull()
   expect(screen.queryByRole("link", { name: "Quarters" })).toBeNull()
-})
-
-it("without books the Plan has no Runway section, chip or loading line, and keeps the rest", async () => {
-  off.add("books")
-  renderPlan()
-  await screen.findByRole("region", { name: /^Next \d+ months/ })
   expect(screen.queryByText("Runway")).toBeNull()
   expect(screen.queryByRole("link", { name: "Add one in the Cash Book" })).toBeNull()
   expect(screen.queryByText("Loading runway…")).toBeNull()
+  expect(reads.filter((r) => ["getCompanyExpenses", "getInvoices", "getCompanyAccounts"].includes(r))).toEqual([])
+})
+
+it("with accounting the Plan reads costs and invoices", async () => {
+  renderPlan()
+  await screen.findByRole("region", { name: /^Next \d+ months/ })
+  expect(new Set(reads.filter((r) => ["getCompanyExpenses", "getInvoices"].includes(r)))).toEqual(new Set(["getCompanyExpenses", "getInvoices"]))
 })

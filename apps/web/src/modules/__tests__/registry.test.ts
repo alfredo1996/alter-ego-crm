@@ -1,51 +1,81 @@
 import { readFileSync } from "node:fs"
 
-import { describe, expect, it } from "vitest"
+import { afterEach, describe, expect, it, vi } from "vitest"
 
 import { registerCrmReadTools } from "@/lib/mcp/tools/crm-read"
 import { registerCrmWriteTools } from "@/lib/mcp/tools/crm-write"
 import { registerRentTools } from "@/lib/mcp/tools/rent"
 
-import { allToolNames, enabledToolNames, gateTools, resolveModules } from "../index"
+import { DEFAULT_PLUGINS, allToolNames, enabledToolNames, gateTools, resolveModules } from "../index"
 
+import type { ModuleId } from "../index"
 import type { McpServer } from "@modelcontextprotocol/server"
 
-const on = (disabled = "") => [...resolveModules(disabled).enabled].sort()
+const on = (plugins?: string) => [...resolveModules(plugins).enabled].sort()
 
-describe("presets", () => {
+describe("selection", () => {
   it.each([
-    ["", ["books", "crm", "invoicing", "rent", "solutions"]],
-    ["invoicing,solutions", ["books", "crm", "rent"]],
-    [" Invoicing , rent ", ["books", "crm", "solutions"]],
-    ["books,rent", ["crm", "invoicing", "solutions"]],
-    ["rent", ["books", "crm", "invoicing", "solutions"]],
-  ] as const)("disabling %j runs %j", (disabled, expected) => {
-    expect(on(disabled)).toEqual(expected)
+    [undefined, ["accounting", "consulting", "rent"]],
+    ["", ["accounting", "consulting", "rent"]],
+    ["consulting", ["consulting"]],
+    ["consulting,accounting", ["accounting", "consulting"]],
+    [" Consulting , ACCOUNTING , rent ", ["accounting", "consulting", "rent"]],
+    ["rent,accounting,consulting,rent", ["accounting", "consulting", "rent"]],
+  ] as const)("listing %j runs %j", (plugins, expected) => {
+    expect(on(plugins)).toEqual(expected)
   })
 
-  it("names what a deployment left out, for Settings", () => {
-    expect(resolveModules("").leftOut).toEqual({ variable: "NEXT_PUBLIC_DISABLED_MODULES", value: "none" })
-    expect(resolveModules(" Rent,solutions ").leftOut).toEqual({ variable: "NEXT_PUBLIC_DISABLED_MODULES", value: "rent,solutions" })
-  })
-})
-
-describe("dependencies", () => {
-  it("names the missing module and the way out", () => {
-    expect(() => resolveModules("crm")).toThrow(
-      "Invoicing needs CRM, but NEXT_PUBLIC_DISABLED_MODULES leaves CRM out. Turn CRM back on, or leave Invoicing out too.",
-    )
-  })
-
-  it("lets a module go with its dependency", () => {
-    expect(on("crm,invoicing,solutions")).toEqual(["books", "rent"])
-  })
-
-  it("checks rent against books", () => {
-    expect(() => resolveModules("books")).toThrow("Rent needs Books, but NEXT_PUBLIC_DISABLED_MODULES leaves Books out.")
+  it("names what the deployment runs, for Settings, in the registry's order", () => {
+    expect(resolveModules(undefined).selection).toEqual({ variable: "NEXT_PUBLIC_PLUGINS", value: "consulting,accounting,rent" })
+    expect(resolveModules(" Accounting,consulting ").selection).toEqual({ variable: "NEXT_PUBLIC_PLUGINS", value: "consulting,accounting" })
   })
 
   it("rejects an id it does not know", () => {
-    expect(() => resolveModules("billing")).toThrow('Unknown module "billing" in NEXT_PUBLIC_DISABLED_MODULES.')
+    expect(() => resolveModules("consulting,billing")).toThrow(
+      'Unknown plugin "billing" in NEXT_PUBLIC_PLUGINS. The plugins are: consulting, accounting, rent.',
+    )
+  })
+
+  it.each(["", "crm", "consulting,accounting"])("fails when the old variable is defined at all: %j", (old) => {
+    expect(() => resolveModules("consulting", old)).toThrow(
+      "NEXT_PUBLIC_DISABLED_MODULES is no longer read. Remove it and list the plugins to run in NEXT_PUBLIC_PLUGINS, for example NEXT_PUBLIC_PLUGINS=consulting,accounting,rent.",
+    )
+  })
+})
+
+describe("requirements", () => {
+  it("names the missing plugin and the way out", () => {
+    expect(() => resolveModules("accounting")).toThrow(
+      "Accounting needs Consulting, but NEXT_PUBLIC_PLUGINS does not list Consulting. List Consulting, or leave Accounting out too.",
+    )
+  })
+
+  it("checks rent against accounting", () => {
+    expect(() => resolveModules("consulting,rent")).toThrow("Rent needs Accounting, but NEXT_PUBLIC_PLUGINS does not list Accounting.")
+  })
+})
+
+describe("isModuleOn", () => {
+  afterEach(() => {
+    vi.unstubAllEnvs()
+    vi.resetModules()
+  })
+
+  it.each([
+    ["consulting", [true, false, false]],
+    ["consulting,accounting", [true, true, false]],
+    ["consulting,accounting,rent", [true, true, true]],
+  ] as const)("answers per id from the selection %j", async (plugins, expected) => {
+    vi.stubEnv("NEXT_PUBLIC_PLUGINS", plugins)
+    vi.resetModules()
+    const { isModuleOn } = await import("../index")
+    expect((["consulting", "accounting", "rent"] as ModuleId[]).map((id) => isModuleOn(id))).toEqual(expected)
+  })
+})
+
+describe("the default", () => {
+  it("is the three plugins that exist today, so a plugin added later stays off until it is listed", () => {
+    expect(DEFAULT_PLUGINS).toEqual(["consulting", "accounting", "rent"])
   })
 })
 
@@ -63,10 +93,12 @@ describe("tools", () => {
   })
 
   it("serves only the enabled modules' tools", () => {
-    const names = enabledToolNames(resolveModules("invoicing,solutions").enabled)
-    expect(names.has("get_cash_book")).toBe(true)
+    const names = enabledToolNames(resolveModules("consulting").enabled)
     expect(names.has("create_client")).toBe(true)
-    expect(["list_invoices", "create_invoice", "list_solutions", "update_solution", "log_work"].filter((t) => names.has(t))).toEqual([])
+    expect(names.has("list_solutions")).toBe(true)
+    expect(
+      ["list_invoices", "create_invoice", "get_cash_book", "add_expense", "get_quarters", "get_rent", "create_lease"].filter((t) => names.has(t)),
+    ).toEqual([])
   })
 
   it("gateTools drops a tool outside the allowed set and passes the rest through", () => {
@@ -86,11 +118,15 @@ describe("module manifests are plain data", () => {
     expect(specs).toEqual(["@alter-ego/kernel/module"])
   })
 
-  it.each(["index", "crm/manifest", "invoicing/manifest", "books/manifest", "solutions/manifest"])(
+  const externals: Record<string, string[]> = {
+    index: ["@/lib/env", "@alter-ego/kernel/module"],
+    resolve: ["@alter-ego/kernel/module", "@alter-ego/rent/manifest"],
+  }
+  it.each(["index", "resolve", "consulting/manifest", "accounting/manifest"])(
     "%s imports only other module files",
     (file) => {
       const specs = [...readFileSync(`src/modules/${file}.ts`, "utf8").matchAll(/from\s+"([^"]+)"/g)].map((m) => m[1])
-      expect([...new Set(specs.filter((s) => !s.startsWith(".")))].sort()).toEqual(file === "index" ? ["@/lib/env", "@alter-ego/kernel/module", "@alter-ego/rent/manifest"] : ["@alter-ego/kernel/module"])
+      expect([...new Set(specs.filter((s) => !s.startsWith(".")))].sort()).toEqual(externals[file] ?? ["@alter-ego/kernel/module"])
     },
   )
 })

@@ -380,21 +380,14 @@ describe("describeClientDeletion", () => {
   })
 })
 
-describe("the Clients page with modules left out", () => {
-  it("without invoicing has no owed line, no See Invoices link and no Unpaid figure on a card", async () => {
-    off.add("invoicing")
+describe("the Clients page with Accounting left out", () => {
+  it("without accounting has no owed line, no See Invoices link and no Unpaid figure on a card", async () => {
+    off.add("accounting")
     await show()
     expect(screen.queryByRole("link", { name: "See Invoices" })).toBeNull()
     expect(screen.queryByText(/unpaid|Nothing owed/i)).toBeNull()
     expect(card("Nordwind Retail S.p.A.")).toHaveTextContent("Next step")
     expect(card("Nordwind Retail S.p.A.")).not.toHaveTextContent(/Unpaid|invoiced/)
     expect(within(card("Nordwind Retail S.p.A.")).queryByRole("link", { name: /^Invoices:/ })).toBeNull()
-  })
-
-  it("without solutions has no solutions line or link on a card", async () => {
-    off.add("solutions")
-    await show()
-    expect(card("Nordwind Retail S.p.A.")).toHaveTextContent("2 open tasks · Open deal: Store Analytics Phase 2, 70%")
-    expect(screen.queryByText(/solution/i)).toBeNull()
   })
 })

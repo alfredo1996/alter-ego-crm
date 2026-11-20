@@ -1,7 +1,7 @@
 import { defineConfig, devices } from "@playwright/test";
 
 /**
- * The module-registry E2E: a production build with Invoicing and Solutions left out.
+ * The plugin-registry E2E: a production build that lists only Consulting, so Accounting and Rent are off.
  * NEXT_PUBLIC_* is inlined at build time, so it needs a build of its own and the default
  * `pnpm test:e2e` does not run it. `pnpm test:e2e:modules` does (set MODULES_E2E_PORT for another port).
  */
@@ -17,7 +17,7 @@ export default defineConfig({
   projects: [{ name: "modules", use: { ...devices["Desktop Chrome"] } }],
   webServer: {
     command: `pnpm build && pnpm start --port ${port}`,
-    env: { NEXT_PUBLIC_BACKEND: "mock", NEXT_PUBLIC_DISABLED_MODULES: "invoicing,solutions" },
+    env: { NEXT_PUBLIC_BACKEND: "mock", NEXT_PUBLIC_PLUGINS: "consulting" },
     url: `http://localhost:${port}`,
     timeout: 300_000,
     reuseExistingServer: false,

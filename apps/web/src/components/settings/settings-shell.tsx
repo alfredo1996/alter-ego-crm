@@ -78,7 +78,7 @@ export function SettingsShell() {
   const sections = [
     { id: "profile", label: "Profile" },
     { id: "preferences", label: "Preferences" },
-    { id: "modules", label: "Modules" },
+    { id: "modules", label: "Plugins" },
     { id: "data", label: "Data" },
   ]
 

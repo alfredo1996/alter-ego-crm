@@ -20,6 +20,6 @@ Build the app, as the gate does.
 
 ## Notes
 
-- A module switched off can break a build that works with everything on: build with `NEXT_PUBLIC_DISABLED_MODULES=invoicing,solutions` too (the `test:e2e:modules` config does).
+- A plugin left out can break a build that works with everything on: build with `NEXT_PUBLIC_PLUGINS=consulting` too (the `test:e2e:modules` config does).
 - TypeScript errors surface during `next build`.
 - Builds write `.next/`; do not run two in parallel.

@@ -102,7 +102,7 @@ vi.mock("@/lib/export", async (actual) => ({
   downloadCsv: (...a: unknown[]) => downloadCsv(...a),
 }))
 
-// Which modules the deployment runs: all, unless a test leaves some out.
+// Which plugins the deployment runs: all, unless a test leaves some out.
 const off = vi.hoisted(() => new Set<string>())
 vi.mock("@/modules", async (actual) => ({
   ...(await actual<Record<string, unknown>>()),
@@ -133,15 +133,14 @@ const verdict = () => screen.getByRole("region", { name: "Verdict" })
 const stepCard = (name: string) => within(screen.getByRole("region", { name }))
 
 describe("MonthEndShell", () => {
-  it("has no Invoices, Waiting or Invoice Files step, and no verdict on them, without invoicing", async () => {
-    off.add("invoicing")
+  it("has no Hours or Deadlines step, and no verdict on them, without consulting", async () => {
+    off.add("consulting")
     await show()
     expect(within(screen.getByRole("list", { name: "Month-end steps" })).getAllByRole("heading", { level: 2 }).map((h) => h.textContent)).toEqual([
-      "Hours", "Supplier Invoices Owed", "Recurring Costs", "Bank", "To Chase", "Deadlines",
+      "Invoices", "Waiting for Payment", "Supplier Invoices Owed", "Recurring Costs", "Invoice Files", "Bank", "To Chase",
     ])
-    expect(verdict()).toHaveTextContent("September 2026: 1 step to do (Hours)")
-    expect(verdict()).toHaveTextContent("3 of 4 required steps done")
-    expect(within(verdict()).queryByText(/waiting for payment|invoice file/)).not.toBeInTheDocument()
+    expect(verdict()).toHaveTextContent("September 2026: 1 step to do (Invoices)")
+    expect(verdict()).toHaveTextContent("2 of 3 required steps done")
   })
 
   it("opens on last month with the verdict, the older month still open, the amber line and the steps in order", async () => {

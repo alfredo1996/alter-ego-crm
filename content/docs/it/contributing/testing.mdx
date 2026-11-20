@@ -64,7 +64,7 @@ Playwright serve la build sulla porta 3001. Per iterare in fretta, avvia prima u
 
 Il mock risponde a ogni lettura subito, quindi uno stato di caricamento sparisce prima che un test possa vederlo. Per rallentarlo, una spec imposta `window.__MOCK_LATENCY_MS__` (con `page.evaluate` o `page.addInitScript`) e ogni chiamata db del mock attende quel tempo. Lo usa `e2e/loading-states.spec.ts`.
 
-Un'installazione senza Fatturazione e Soluzioni è una build a sé: `pnpm test:e2e:modules` esegue `modules.spec.ts` contro di essa.
+Un'installazione che elenca solo Consulting in `NEXT_PUBLIC_PLUGINS` è una build a sé: `pnpm test:e2e:modules` esegue `modules.spec.ts` contro di essa.
 
 ### Spec dei Test
 
@@ -76,7 +76,7 @@ e2e/
   ├── billing.spec.ts, invoice-files.spec.ts                   # Fatture e relativi file
   ├── cash-book*.spec.ts, month-end*.spec.ts, rent.spec.ts     # Prima nota e Affitti
   ├── plan-*.spec.ts, hours.spec.ts                            # Il Piano, runway e trimestri
-  └── mobile.spec.ts, loading-states.spec.ts, modules.spec.ts  # Correzioni telefono, stati di caricamento, un modulo escluso
+  └── mobile.spec.ts, loading-states.spec.ts, modules.spec.ts  # Correzioni telefono, stati di caricamento, plugin esclusi
 ```
 
 ### Pattern

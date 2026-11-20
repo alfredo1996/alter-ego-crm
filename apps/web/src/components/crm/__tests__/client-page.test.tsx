@@ -201,6 +201,7 @@ push(
 push("getSolutions", ...SIX.map((n) => solution({ id: `qs${n}`, clientId: "c15", name: `Solution ${n}` })))
 
 const writes = vi.hoisted(() => ({ createInvoice: vi.fn(), updateTask: vi.fn() }))
+const reads = vi.hoisted(() => [] as string[])
 
 vi.mock("@/hooks/use-auth", () => ({ useAuth: () => ({ user: { id: "u1" } }) }))
 vi.mock("@/lib/backend", () => ({
@@ -211,7 +212,7 @@ vi.mock("@/lib/backend", () => ({
         get: (_db, method) =>
           method in writes
             ? writes[method as keyof typeof writes]
-            : () => Promise.resolve(DATA[String(method)] ?? (String(method).endsWith("Settings") ? null : [])),
+            : () => (reads.push(String(method)), Promise.resolve(DATA[String(method)] ?? (String(method).endsWith("Settings") ? null : []))),
       },
     ),
   }),
@@ -704,19 +705,13 @@ describe("ClientPage margin with the collaborators out of the simple case", () =
   })
 })
 
-describe("ClientPage with modules left out", () => {
-  it("without solutions has no Solutions section, index link or New Solution button", async () => {
-    off.add("solutions")
+describe("ClientPage with Accounting left out", () => {
+  it("without accounting has no Billing or Invoices section, no link to /invoices, no money-owed figures", async () => {
+    off.add("accounting")
+    reads.length = 0
     await renderPage("c4", "Delta")
-    expect(document.getElementById("solutions")).toBeNull()
-    expect(screen.queryByRole("button", { name: /New Solution/ })).toBeNull()
-    expect(within(screen.getByRole("navigation", { name: "Sections" })).queryByRole("link", { name: "Solutions" })).toBeNull()
-    expect(document.getElementById("contracts")).not.toBeNull()
-  })
-
-  it("without invoicing has no Billing or Invoices section, no link to /invoices, no money-owed figures", async () => {
-    off.add("invoicing")
-    await renderPage("c4", "Delta")
+    expect(reads).not.toContain("getInvoices")
+    expect(reads).toContain("getSolutions")
     expect(document.getElementById("billing")).toBeNull()
     expect(document.getElementById("invoices")).toBeNull()
     expect(screen.queryByRole("link", { name: /Invoices/ })).toBeNull()

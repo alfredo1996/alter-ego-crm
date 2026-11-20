@@ -80,7 +80,7 @@ jobs:
       - name: Run E2E tests
         run: pnpm --filter @alter-ego/web exec playwright test
 
-      # NEXT_PUBLIC_* is inlined at build time: a deployment without Invoicing and Solutions
+      # NEXT_PUBLIC_* is inlined at build time: a deployment that lists only Consulting (NEXT_PUBLIC_PLUGINS=consulting)
       # is a build of its own (about one extra build per run).
       - name: Run modules E2E tests
         run: pnpm test:e2e:modules

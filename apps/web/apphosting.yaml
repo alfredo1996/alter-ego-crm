@@ -14,12 +14,12 @@ env:
   - variable: NEXT_PUBLIC_BACKEND
     value: firebase
 
-  # ─── Modules ───────────────────────────────────────────────────────────────
-  # Modules this deployment leaves out, comma-separated (crm, invoicing, books,
-  # solutions, rent). Inlined at build time, so each backend builds its own bundle:
-  # this is not a runtime toggle. Empty: every module is on.
-  - variable: NEXT_PUBLIC_DISABLED_MODULES
-    value: ""
+  # ─── Plugins ───────────────────────────────────────────────────────────────
+  # The plugins this deployment runs, comma-separated (consulting, accounting,
+  # rent). Inlined at build time, so each backend builds its own bundle: this is
+  # not a runtime toggle. A plugin needs the one before it in that list.
+  - variable: NEXT_PUBLIC_PLUGINS
+    value: consulting,accounting,rent
 
   # ─── Firebase config (non-sensitive) ───────────────────────────────────────
   # The canonical public origin of this backend. RFC 9728 requires the PRM

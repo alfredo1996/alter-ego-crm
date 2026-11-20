@@ -1156,7 +1156,7 @@ const EDIT_TOOL = { movement: "update_movement", expense: "update_expense", loan
  * ponytail: those rules are restated here; read the item's own fields once
  * month-end.ts carries them (Month End PR 3).
  */
-export function monthEndNext(checklist: MonthEnd, data: MonthEndData, today: string, invoicing = true): Map<MonthEndItem, MonthEndNext[]> {
+export function monthEndNext(checklist: MonthEnd, data: MonthEndData, today: string): Map<MonthEndItem, MonthEndNext[]> {
   const { month, end, steps } = checklist
   const { engagements, invoices, expenses, accounts } = data
   const out = new Map<MonthEndItem, MonthEndNext[]>()
@@ -1329,7 +1329,7 @@ export function monthEndNext(checklist: MonthEnd, data: MonthEndData, today: str
   }
 
   // To Chase: the same list, filtered as month-end.ts filters it, in its order.
-  const chase = toChase({ accounts, rows, invoices, expenses, invoicing }).filter((c) => chaseDay(c) <= end)
+  const chase = toChase({ accounts, rows, invoices, expenses }).filter((c) => chaseDay(c) <= end)
   steps.chase.items.forEach((i, k) => {
     const c = chase[k]
     if (c) out.set(i, chaseNext(c, accountName))

@@ -97,44 +97,36 @@ describe("tool descriptions keep the owner's rules", () => {
 
 // tools/list per module set: the registry's gate over the real registrations.
 describe("tools served per module set", () => {
-  const served = (disabled: string): string[] => {
+  const served = (plugins?: string): string[] => {
     const names: string[] = []
-    const gated = gateTools({ registerTool: (name: string) => void names.push(name) }, enabledToolNames(resolveModules(disabled).enabled))
+    const gated = gateTools({ registerTool: (name: string) => void names.push(name) }, enabledToolNames(resolveModules(plugins).enabled))
     for (const register of [registerCrmReadTools, registerCrmWriteTools, registerRentTools]) {
       register(gated as unknown as McpServer)
     }
     return names.sort()
   }
 
-  it("serves every tool when nothing is switched off", () => {
-    expect(served("")).toEqual([...crmRead, ...crmWrite, ...rentTools].sort())
+  it("serves every tool when every plugin is listed, or none is", () => {
+    expect(served()).toEqual([...crmRead, ...crmWrite, ...rentTools].sort())
+    expect(served("consulting,accounting,rent")).toEqual(served())
   })
 
-  it("leaves out the invoice tools, get_quarters and the solution tools without invoicing and solutions", () => {
-    const names = new Set(served("invoicing,solutions"))
-    expect(["list_invoices", "get_unbilled", "create_invoice", "mark_invoice_paid", "update_invoice", "delete_invoice", "attach_file", "remove_file", "get_file", "list_solutions", "get_solution", "create_solution", "update_solution", "log_work"].filter((t) => names.has(t))).toEqual([])
-    expect(names.size).toBe(crmRead.length + crmWrite.length + rentTools.length - 15)
-  })
-
-  // Quarters reads ended months off invoices and costs: without either every quarter would say €0.
-  it.each([["invoicing"], ["books,rent"], ["invoicing,books,rent"]])("leaves out get_quarters when %s is off", (disabled) => {
-    expect(served(disabled)).not.toContain("get_quarters")
-  })
-
-  it("serves get_quarters when invoicing and books are both on", () => {
-    expect(served("solutions")).toContain("get_quarters")
-  })
-
-  it("leaves out the cash tools without books", () => {
-    const names = new Set(served("books,rent"))
-    expect(["get_cash_book", "get_month_end", "add_movement", "add_expense", "record_loan", "check_balance"].filter((t) => names.has(t))).toEqual([])
-    expect(names.has("list_invoices")).toBe(true)
-  })
-
-  it("leaves out the rent tools when rent is off, and keeps the other company tools", () => {
-    const names = new Set(served("rent"))
+  it("serves only Consulting's tools when it is the only plugin: no invoice, cash, Quarters or rent tool", () => {
+    const names = new Set(served("consulting"))
+    const accounting = [
+      "list_invoices", "get_unbilled", "create_invoice", "mark_invoice_paid", "update_invoice", "delete_invoice", "attach_file", "remove_file", "get_file",
+      "get_cash_book", "get_month_end", "add_movement", "add_expense", "record_loan", "check_balance", "get_quarters",
+    ]
+    expect(accounting.filter((t) => names.has(t))).toEqual([])
     expect(rentTools.filter((t) => names.has(t))).toEqual([])
-    expect(names.has("add_movement")).toBe(true)
+    expect(["create_client", "list_solutions", "log_work"].filter((t) => names.has(t))).toEqual(["create_client", "list_solutions", "log_work"])
+    expect(names.size).toBe(crmRead.length + crmWrite.length + rentTools.length - 21 - 1 - rentTools.length)
+  })
+
+  it("leaves out the rent tools when Rent is not listed, and keeps Accounting's", () => {
+    const names = new Set(served("consulting,accounting"))
+    expect(rentTools.filter((t) => names.has(t))).toEqual([])
+    expect(["add_movement", "list_invoices", "get_quarters"].filter((t) => names.has(t))).toEqual(["add_movement", "list_invoices", "get_quarters"])
   })
 
   it("keeps the rent descriptions to names and at most three owner phrasings; only get_tenant speaks of a tax ID", () => {

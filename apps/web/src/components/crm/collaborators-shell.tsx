@@ -37,6 +37,7 @@ import { rateAt, toRevenueSources } from "@/lib/engagement-burndown"
 import { engagementLabel } from "@/lib/engagements"
 import { buildProjection } from "@/lib/projection"
 import { planCells } from "@/lib/timecards"
+import { isModuleOn } from "@/modules"
 
 import type { Assignment, Collaborator, CollaboratorFee } from "@/types"
 
@@ -57,7 +58,8 @@ export function CollaboratorsShell() {
   const engagementsQuery = useEngagements(user?.id)
   const opportunitiesQuery = useOpportunities(user?.id)
   const allocationsQuery = useAllocations(user?.id)
-  const expensesQuery = useCompanyExpenses(user?.id)
+  const hasAccounting = isModuleOn("accounting")
+  const expensesQuery = useCompanyExpenses(hasAccounting ? user?.id : undefined)
   const assignmentsQuery = useAssignments(user?.id)
   const timecardsQuery = useTimecards(user?.id)
   const { data: collaborators = [] } = collaboratorsQuery
@@ -84,7 +86,7 @@ export function CollaboratorsShell() {
     opener.current.focus()
   }
 
-  const gate = pageState([collaboratorsQuery, clientsQuery, engagementsQuery, opportunitiesQuery, allocationsQuery, expensesQuery, assignmentsQuery, timecardsQuery])
+  const gate = pageState([collaboratorsQuery, clientsQuery, engagementsQuery, opportunitiesQuery, allocationsQuery, ...(hasAccounting ? [expensesQuery] : []), assignmentsQuery, timecardsQuery])
   if (gate) return gate
 
   const now = new Date()
@@ -130,8 +132,9 @@ export function CollaboratorsShell() {
     return { thisQuarter: of(thisQuarter), nextQuarter: of(nextQuarter) }
   }
 
-  const invoiced = new Map(collaborators.map((c) => [c.id, lastQuarterBlock(c, { assignments, timecards, expenses, today })]))
-  const earlier = new Map(collaborators.map((c) => [c.id, earlierGapBlock(c, { assignments, timecards, expenses, today })]))
+  // Without Accounting the costs are not read, so "nothing invoiced" would be false: no blocks at all.
+  const invoiced = new Map(hasAccounting ? collaborators.map((c) => [c.id, lastQuarterBlock(c, { assignments, timecards, expenses, today })]) : [])
+  const earlier = new Map(hasAccounting ? collaborators.map((c) => [c.id, earlierGapBlock(c, { assignments, timecards, expenses, today })]) : [])
   const notInvoiced = [...invoiced.values(), ...earlier.values()].reduce((s, b) => s + (b?.gap ?? 0), 0)
 
   const open = (c: Collaborator | null, from: HTMLElement | null) => {

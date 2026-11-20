@@ -2,7 +2,7 @@
  * The nav table drives both the sidebar and route access, so these assertions are
  * the contract that a module switched off actually closes the URL and not just the link.
  *
- * NEXT_PUBLIC_DISABLED_MODULES is read by env.ts at module load, so switching it
+ * NEXT_PUBLIC_PLUGINS is read by env.ts at module load, so switching it
  * means resetting the module registry and re-importing rather than mocking.
  */
 
@@ -38,21 +38,30 @@ vi.mock("lucide-react", () => {
   )
 })
 
-const ORIGINAL_DISABLED = process.env.NEXT_PUBLIC_DISABLED_MODULES
+const ORIGINAL_PLUGINS = process.env.NEXT_PUBLIC_PLUGINS
 
-async function loadNav(disabled = ""): Promise<typeof NavModule> {
+async function loadNav(plugins?: string): Promise<typeof NavModule> {
   vi.resetModules()
-  process.env.NEXT_PUBLIC_DISABLED_MODULES = disabled
+  if (plugins === undefined) delete process.env.NEXT_PUBLIC_PLUGINS
+  else process.env.NEXT_PUBLIC_PLUGINS = plugins
   return import("../nav")
 }
 
 afterEach(() => {
-  if (ORIGINAL_DISABLED === undefined) delete process.env.NEXT_PUBLIC_DISABLED_MODULES
-  else process.env.NEXT_PUBLIC_DISABLED_MODULES = ORIGINAL_DISABLED
+  delete process.env.NEXT_PUBLIC_DISABLED_MODULES
+  if (ORIGINAL_PLUGINS === undefined) delete process.env.NEXT_PUBLIC_PLUGINS
+  else process.env.NEXT_PUBLIC_PLUGINS = ORIGINAL_PLUGINS
   vi.resetModules()
 })
 
-describe("nav with every module on", () => {
+describe("the retired variable", () => {
+  it("stops the app from loading when it is defined, even empty", async () => {
+    process.env.NEXT_PUBLIC_DISABLED_MODULES = ""
+    await expect(loadNav("consulting")).rejects.toThrow("NEXT_PUBLIC_DISABLED_MODULES is no longer read")
+  })
+})
+
+describe("nav with every plugin on", () => {
   it.each([
     ["/pipeline", true],
     ["/clients", true],
@@ -79,9 +88,9 @@ describe("nav with every module on", () => {
     expect(nav.isRouteEnabled(pathname)).toBe(expected)
   })
 
-  it("shows Consulting, then Accounting", async () => {
+  it("shows one group per plugin, in order: Consulting, Accounting, Rent", async () => {
     const nav = await loadNav()
-    expect(nav.visibleNavGroups().map((g) => g.label)).toEqual(["Consulting", "Accounting"])
+    expect(nav.visibleNavGroups().map((g) => g.label)).toEqual(["Consulting", "Accounting", "Rent"])
   })
 
   it("sends blocked routes to the first consulting page", async () => {
@@ -93,7 +102,8 @@ describe("nav with every module on", () => {
     const nav = await loadNav()
     expect(nav.visibleNavGroups().map((g) => g.items.map((i) => i.href))).toEqual([
       ["/pipeline", "/clients", "/contracts", "/collaborators", "/solutions", "/tasks", "/plan", "/deadlines"],
-      ["/invoices", "/cash-book", "/rent", "/costs", "/month-end"],
+      ["/invoices", "/cash-book", "/costs", "/month-end"],
+      ["/rent"],
     ])
   })
 
@@ -102,7 +112,7 @@ describe("nav with every module on", () => {
     ["/clients/abc", "Consulting"],
     ["/deadlines", "Consulting"],
     ["/invoices", "Accounting"],
-    ["/rent", "Accounting"],
+    ["/rent", "Rent"],
     ["/month-end", "Accounting"],
     ["/settings", null],
     ["/does-not-exist", null],
@@ -113,58 +123,46 @@ describe("nav with every module on", () => {
   })
 })
 
-describe("nav with modules left out", () => {
-  it("drops the sidebar entries of a disabled module and keeps the rest of each group", async () => {
-    const nav = await loadNav("invoicing,solutions")
+describe("nav with plugins left out", () => {
+  it("a plugin that is off has no group, and the others keep theirs", async () => {
+    const nav = await loadNav("consulting,accounting")
     expect(nav.visibleNavGroups().map((g) => [g.label, g.items.map((i) => i.label)])).toEqual([
-      ["Consulting", ["Pipeline", "Clients", "Contracts", "Collaborators", "Tasks", "Plan", "Deadlines"]],
-      ["Accounting", ["Cash Book", "Rent", "Costs", "Month End"]],
+      ["Consulting", ["Pipeline", "Clients", "Contracts", "Collaborators", "Solutions", "Tasks", "Plan", "Deadlines"]],
+      ["Accounting", ["Invoices", "Cash Book", "Costs", "Month End"]],
     ])
   })
 
-  it("drops a group left empty, and groupOf does not name it", async () => {
-    const nav = await loadNav("crm,invoicing,solutions")
-    expect(nav.visibleNavGroups().map((g) => [g.label, g.items.map((i) => i.href)])).toEqual([
-      ["Accounting", ["/cash-book", "/rent", "/costs", "/month-end"]],
-    ])
-    const only = await loadNav("invoicing,books,rent")
-    expect(only.visibleNavGroups().map((g) => g.label)).toEqual(["Consulting"])
-    expect(only.groupOf("/cash-book")).toBeNull()
+  it("Consulting alone leaves one group, and groupOf does not name the others", async () => {
+    const nav = await loadNav("consulting")
+    expect(nav.visibleNavGroups().map((g) => g.label)).toEqual(["Consulting"])
+    expect(nav.groupOf("/cash-book")).toBeNull()
+    expect(nav.groupOf("/rent")).toBeNull()
   })
 
-  it.each(["/invoices", "/invoices/i1", "/solutions"])("closes %s", async (path) => {
-    const nav = await loadNav("invoicing,solutions")
-    expect(nav.isRouteEnabled(path)).toBe(false)
+  it.each(["/invoices", "/invoices/i1", "/cash-book", "/costs", "/costs/c1/file", "/month-end", "/rent"])(
+    "closes %s when only consulting is listed",
+    async (path) => {
+      const nav = await loadNav("consulting")
+      expect(nav.isRouteEnabled(path)).toBe(false)
+    },
+  )
+
+  it("keeps the pages of the plugins that are listed open", async () => {
+    const nav = await loadNav("consulting")
+    expect(["/clients", "/solutions", "/plan", "/contracts"].map((p) => nav.isRouteEnabled(p))).toEqual([true, true, true, true])
   })
 
-  it("sends a blocked route to the first page that is left", async () => {
-    const nav = await loadNav("crm,invoicing,solutions")
-    expect(nav.homeRoute()).toBe("/cash-book")
+  it("closes only Rent when Accounting is listed without it", async () => {
+    const nav = await loadNav("consulting,accounting")
+    expect(["/rent", "/invoices", "/cash-book"].map((p) => nav.isRouteEnabled(p))).toEqual([false, true, true])
   })
 
-  it("leaves the other company routes open", async () => {
-    const nav = await loadNav("invoicing,solutions")
-    expect(["/clients", "/cash-book", "/plan"].map((p) => nav.isRouteEnabled(p))).toEqual([true, true, true])
+  it("sends a blocked route to the first page of the first group", async () => {
+    const nav = await loadNav("consulting")
+    expect(nav.homeRoute()).toBe("/pipeline")
   })
 
-  it("leaving the crm module out takes the Contracts entry and its route", async () => {
-    const nav = await loadNav("crm,invoicing,solutions")
-    expect(nav.visibleNavGroups().flatMap((g) => g.items.map((i) => i.href))).not.toContain("/contracts")
-    expect(nav.isRouteEnabled("/contracts")).toBe(false)
-  })
-
-  it("leaving Books out takes the cash book, costs and Month End with it", async () => {
-    const nav = await loadNav("books,rent")
-    expect(["/cash-book", "/costs", "/month-end", "/costs/c1/file"].map((p) => nav.isRouteEnabled(p))).toEqual([false, false, false, false])
-  })
-
-  it("falls back to Settings when every page is left out", async () => {
-    const nav = await loadNav("crm,invoicing,solutions,books,rent")
-    expect(nav.visibleNavGroups()).toEqual([])
-    expect(nav.homeRoute()).toBe("/settings")
-  })
-
-  it("fails to load when a module needs one that is left out", async () => {
-    await expect(loadNav("crm")).rejects.toThrow("Invoicing needs CRM, but NEXT_PUBLIC_DISABLED_MODULES leaves CRM out.")
+  it("fails to load when a plugin needs one that is not listed", async () => {
+    await expect(loadNav("accounting")).rejects.toThrow("Accounting needs Consulting, but NEXT_PUBLIC_PLUGINS does not list Consulting.")
   })
 })

@@ -24,15 +24,15 @@ describe("SettingsShell", () => {
     expect(screen.queryByText("Language and Format")).toBeNull()
   })
 
-  it("gives every section its own heading and an index link to it, Modules after Preferences", () => {
+  it("gives every section its own heading and an index link to it, Plugins after Preferences", () => {
     render(<SettingsShell />)
     const index = screen.getByRole("navigation", { name: "On this page" })
-    const names = ["Profile", "Preferences", "Modules", "Data"]
+    const names = ["Profile", "Preferences", "Plugins", "Data"]
     expect(screen.getAllByRole("heading", { level: 2 }).map((h) => h.textContent)).toEqual(names)
     for (const name of names) {
       expect(within(index).getByRole("link", { name })).toBeInTheDocument()
     }
-    expect(within(index).getByRole("link", { name: "Modules" })).toHaveAttribute("href", "#modules")
+    expect(within(index).getByRole("link", { name: "Plugins" })).toHaveAttribute("href", "#modules")
   })
 
   it("has no company switch: the company side is the only product", () => {

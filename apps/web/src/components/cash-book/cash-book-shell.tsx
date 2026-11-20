@@ -72,7 +72,6 @@ import {
 } from "@/lib/cash-book"
 import { eurCents, invoiceClientId } from "@/lib/invoices"
 import { importedRecords } from "@/lib/prima-nota"
-import { isModuleOn } from "@/modules"
 
 import type { CashRow, ChaseItem, StatementCheck } from "@/lib/cash-book"
 import type { CompanyAccount, CompanyExpense, CompanyLoan, CompanyMovement, Invoice } from "@/types"
@@ -188,7 +187,7 @@ export function CashBookShell() {
     openDialog({ kind: "movement", movement: movements.find((m) => m.id === row.sourceId) ?? null })
   }
   const costCentres = costCentresOf(movements, expenses)
-  const chase = toChase({ accounts, rows, invoices, expenses, invoicing: isModuleOn("invoicing") }).filter(
+  const chase = toChase({ accounts, rows, invoices, expenses }).filter(
     (c) => scope === null || ("row" in c ? c.row.accountId === scope : "accountId" in c ? c.accountId === scope : true),
   )
 

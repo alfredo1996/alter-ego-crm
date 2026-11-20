@@ -5,7 +5,7 @@ description: Configura e avvia Alter Ego CRM in locale
 
 ## Panoramica
 
-Alter Ego CRM è l'app gestionale di una piccola SRL italiana, costruita con Next.js 16, TypeScript e Tailwind CSS v4: la pipeline commerciale, clienti e contratti, ore e piano, fatture e relativi file, la prima nota, la chiusura mensile, le soluzioni e gli affitti. Ogni area è un modulo che un'installazione può disattivare. Usa un pattern adapter per il backend che permette di passare tra il backend Mock in memoria e Firebase senza modificare il codice delle funzionalità, ed espone un connettore MCP per gli assistenti AI. L'AI è sempre opzionale.
+Alter Ego CRM è l'app gestionale di una piccola SRL italiana, costruita con Next.js 16, TypeScript e Tailwind CSS v4: la pipeline commerciale, clienti e contratti, ore e piano, fatture e relativi file, la prima nota, la chiusura mensile, le soluzioni e gli affitti. Ogni area è un plugin; un'installazione elenca quelli che esegue in `NEXT_PUBLIC_PLUGINS`. Usa un pattern adapter per il backend che permette di passare tra il backend Mock in memoria e Firebase senza modificare il codice delle funzionalità, ed espone un connettore MCP per gli assistenti AI. L'AI è sempre opzionale.
 
 ## Prerequisiti
 
@@ -37,8 +37,8 @@ Crea un file `apps/web/.env.local`:
 # Backend: "mock" | "firebase"
 NEXT_PUBLIC_BACKEND=mock
 
-# Moduli che questa installazione lascia fuori (crm, invoicing, books, solutions, rent)
-NEXT_PUBLIC_DISABLED_MODULES=
+# Plugin che questa installazione esegue (consulting, accounting, rent); questi tre se non è impostata, un plugin aggiunto dopo non è mai attivo finché non è elencato
+# NEXT_PUBLIC_PLUGINS=consulting,accounting,rent
 
 # Firebase (necessario solo con NEXT_PUBLIC_BACKEND=firebase)
 NEXT_PUBLIC_FIREBASE_API_KEY=

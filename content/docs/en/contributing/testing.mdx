@@ -64,7 +64,7 @@ Playwright serves the build on port 3001. For quick iteration, start a dev serve
 
 The mock answers every read at once, so a loading state is gone before a test can see it. To slow it down, a spec sets `window.__MOCK_LATENCY_MS__` (with `page.evaluate` or `page.addInitScript`) and every mock db call then waits that long. `e2e/loading-states.spec.ts` uses it.
 
-A deployment with Invoicing and Solutions switched off is a build of its own: `pnpm test:e2e:modules` runs `modules.spec.ts` against it.
+A deployment that lists only Consulting in `NEXT_PUBLIC_PLUGINS` is a build of its own: `pnpm test:e2e:modules` runs `modules.spec.ts` against it.
 
 ### Test Specs
 
@@ -76,7 +76,7 @@ e2e/
   ├── billing.spec.ts, invoice-files.spec.ts                   # Invoices and their files
   ├── cash-book*.spec.ts, month-end*.spec.ts, rent.spec.ts     # Books and Rent
   ├── plan-*.spec.ts, hours.spec.ts                            # The Plan, runway and quarters
-  └── mobile.spec.ts, loading-states.spec.ts, modules.spec.ts  # Phone fixes, loading states, a module left out
+  └── mobile.spec.ts, loading-states.spec.ts, modules.spec.ts  # Phone fixes, loading states, plugins left out
 ```
 
 ### Patterns

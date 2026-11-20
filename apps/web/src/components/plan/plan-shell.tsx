@@ -88,18 +88,19 @@ export function PlanShell() {
   const engagementsQuery = useEngagements(user?.id)
   const opportunitiesQuery = useOpportunities(user?.id)
   const allocationsQuery = useAllocations(user?.id)
-  const companyExpensesQuery = useCompanyExpenses(user?.id)
+  // Costs and invoices belong to Accounting: without it neither is read.
+  const hasAccounting = isModuleOn("accounting")
+  const companyExpensesQuery = useCompanyExpenses(hasAccounting ? user?.id : undefined)
   const collaboratorsQuery = useCollaborators(user?.id)
   const assignmentsQuery = useAssignments(user?.id)
   const setAssignmentDays = useSetAssignmentMonthDays(user?.id)
   const timecardsQuery = useTimecards(user?.id)
-  const invoicesQuery = useInvoices(isModuleOn("invoicing") ? user?.id : undefined)
+  const invoicesQuery = useInvoices(hasAccounting ? user?.id : undefined)
   // The Runway's cash side loads on its own, like the Quarters' invoices: the rest of the page does not wait for it.
-  // Without the books module there are no accounts to start from: no Runway, and its reads stay off.
-  const hasBooks = isModuleOn("books")
-  // Quarters read ended months off invoices and costs: either one off, every quarter would say €0.
-  const hasQuarters = hasBooks && isModuleOn("invoicing")
-  const cashUser = hasBooks ? user?.id : undefined
+  // Without Accounting there are no accounts to start from: no Runway and no Quarters (they read ended
+  // months off invoices and costs), and its reads stay off.
+  const hasQuarters = hasAccounting
+  const cashUser = hasAccounting ? user?.id : undefined
   const accountsQuery = useCompanyAccounts(cashUser)
   const movementsQuery = useCompanyMovements(cashUser)
   const loansQuery = useCompanyLoans(cashUser)
@@ -251,7 +252,7 @@ export function PlanShell() {
     engagementsQuery,
     opportunitiesQuery,
     allocationsQuery,
-    companyExpensesQuery,
+    ...(hasAccounting ? [companyExpensesQuery] : []),
     collaboratorsQuery,
     assignmentsQuery,
     timecardsQuery,
@@ -280,7 +281,7 @@ export function PlanShell() {
           subtitle="Log hours by the week and plan days by the month. The projection follows the days."
         />
         <nav aria-label="On this page" className="flex flex-wrap gap-2">
-          {CHIPS.filter(([id]) => (id !== "runway" || hasBooks) && (id !== "quarters" || hasQuarters)).map(([id, label]) => (
+          {CHIPS.filter(([id]) => (id !== "runway" || hasAccounting) && (id !== "quarters" || hasQuarters)).map(([id, label]) => (
             <a
               key={id}
               href={`#${id}`}
@@ -507,7 +508,7 @@ export function PlanShell() {
         </p>
       </section>
 
-      {hasBooks && <div>
+      {hasAccounting && <div>
         {cashQueries.some((q) => q.isError) ? (
           <p role="alert" className="text-sm text-danger">Could not load the cash data for the Runway.</p>
         ) : cashQueries.some((q) => q.isLoading) ? (

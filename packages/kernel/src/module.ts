@@ -2,7 +2,7 @@
  * A module is one switchable slice of the app. Manifests are plain data and import
  * nothing.
  */
-export type ModuleId = "crm" | "invoicing" | "books" | "solutions" | "rent"
+export type ModuleId = "consulting" | "accounting" | "rent"
 
 export interface ModuleManifest {
   id: ModuleId
@@ -13,8 +13,6 @@ export interface ModuleManifest {
   requires: ModuleId[]
   /** The connector tools it serves (`ping` belongs to no module). */
   tools: string[]
-  /** Shown in Settings; false until the module ships (rent). */
-  listed: boolean
 }
 
 export function defineModule(manifest: ModuleManifest): ModuleManifest {

@@ -56,7 +56,7 @@ A test that still passes with the change reverted doesn't count; ask of every as
 - Backend adapter pattern: all data access through `getBackend()` from `@/lib/backend`; never import Firebase in feature code. Server-only adapters (`mcp_audit`, `capacity`) go through `getServerDb()`.
 - AI is optional: never gate functionality behind it.
 - The app never computes taxes (cash flow only).
-- The modules (`NEXT_PUBLIC_DISABLED_MODULES`): a module switched off leaves the rest building and running.
+- The plugins (`NEXT_PUBLIC_PLUGINS`): a plugin left out leaves the rest building and running.
 - The whole app is English: Title Case for buttons, dialog titles and headings, sentence case for body text, hints, toasts and errors.
 - TypeScript strict. Any `any` gets a comment explaining why, because lint runs with `--max-warnings 0`.
 - kebab-case file names, named exports (pages excepted), `@/*` imports, zod at every external boundary, `cn()` for conditional classes, forwardRef and displayName on UI components.
