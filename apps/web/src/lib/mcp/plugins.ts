@@ -12,8 +12,8 @@
 import { registerCrmReadTools } from "@/lib/mcp/tools/crm-read"
 import { registerCrmWriteTools, WRITE_TOOLS } from "@/lib/mcp/tools/crm-write"
 import { RENT_WRITE_TOOLS, registerRentTools } from "@/lib/mcp/tools/rent"
+import { enabledToolNames, gateTools, type ModuleId } from "@/modules"
 
-import type { ModuleId } from "@/modules"
 import type { McpServer } from "@modelcontextprotocol/server"
 
 export type RegisterTools = (server: McpServer) => void
@@ -30,6 +30,11 @@ export const REGISTERS: RegisterTools[] = [...new Set(Object.values(PLUGIN_REGIS
 /** The tools the HTTP scope gate holds write access for, from every plugin. */
 export const WRITE_TOOL_NAMES: ReadonlySet<string> = new Set([...WRITE_TOOLS, ...RENT_WRITE_TOOLS])
 
-export function registerAllTools(server: McpServer): void {
-  for (const register of REGISTERS) register(server)
+/**
+ * Registers every plugin's tools behind the module gate, so no caller can skip it: only the enabled
+ * plugins' tools exist. `allowed` defaults to what NEXT_PUBLIC_PLUGINS enables.
+ */
+export function registerAllTools(server: McpServer, allowed: Set<string> = enabledToolNames()): void {
+  const gated = gateTools(server, allowed)
+  for (const register of REGISTERS) register(gated)
 }

@@ -184,7 +184,7 @@ sources: the file is **generated** by `pnpm rules:build` from `firestore/base.ru
 `firestore/crm.rules` and the modules' rules (`packages/modules/rent/src/rent.rules`),
 so edit those, never the output. The registry tests prove a deployment can switch
 Accounting and Rent out, and that each plugin is wired end to end; `plugin-boundary.test.ts`
-keeps the plugins from importing each other (a ratchet: a new import across plugins fails).
+keeps new imports between plugins out (a ratchet over `known-edges.ts`: a new import across plugins fails).
 
 ### E2E Tests (Playwright) — 30 specs
 

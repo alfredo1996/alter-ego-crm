@@ -21,6 +21,9 @@ const PATH_MAP: [RegExp, Plugin][] = [
   [/^app\/\(app\)\/(pipeline|clients|contracts|collaborators|solutions|tasks|plan|deadlines)\//, "consulting"],
   [/^app\/\(app\)\/(invoices|cash-book|costs|month-end)\//, "accounting"],
   [/^app\/\(app\)\/rent\//, "rent"],
+  // The Costs and Invoices file viewers, and the MCP tool module for invoice files.
+  [/^app\/\(viewer\)\/(costs|invoices)\//, "accounting"],
+  [/^lib\/mcp\/tools\/invoice-files\.ts$/, "accounting"],
   // The invoice screens that sit in the Consulting folder today.
   [/^components\/crm\/(billing-shell|invoice-sheet|invoice-table)\.tsx$/, "accounting"],
   [/^components\/(crm|plan|deadlines)\//, "consulting"],
@@ -57,23 +60,22 @@ export function pluginOf(rel: string): Plugin {
 }
 
 const FROM = String.raw`from\s*["']([^"']+)["']`
+// A statement starts at a line start or after a `;`, so `a(); import x from "y"` is read too.
+const START = String.raw`(?:^|;)[ \t]*`
 const FORMS = [
   // import a from "x" · import type { A } from "x" · import * as a from "x" · import a, { b } from "x"
-  new RegExp(String.raw`^[ \t]*import\b(?:[ \t]+type\b)?[^"'` + "`" + String.raw`;]*?\b${FROM}`, "gm"),
+  new RegExp(String.raw`${START}import\b(?:[ \t]+type\b)?[^"'` + "`" + String.raw`;]*?\b${FROM}`, "gm"),
   // export * from "x" · export * as a from "x" · export { a } from "x" · export type { A } from "x"
-  new RegExp(String.raw`^[ \t]*export\s+(?:type\s+)?(?:\*(?:\s+as\s+[\w$]+)?|\{[^}]*\})\s*${FROM}`, "gm"),
+  new RegExp(String.raw`${START}export\s+(?:type\s+)?(?:\*(?:\s+as\s+[\w$]+)?|\{[^}]*\})\s*${FROM}`, "gm"),
   // import "x"
-  /^[ \t]*import\s*["']([^"']+)["']/gm,
-  // import("x"), anywhere
-  /\bimport\(\s*["']([^"']+)["']\s*\)/g,
+  new RegExp(String.raw`${START}import\s*["']([^"']+)["']`, "gm"),
+  // import("x"), import ("x"), a plain template literal, anywhere; import a = require("x"); require("x")
+  /\b(?:import|require)\s*\(\s*["'`]([^"'`$]+)["'`]\s*\)/g,
 ]
 
-/** Every module specifier a source file imports, in any form; comment lines are ignored. */
+/** Every module specifier a source file imports, in any form; comments are ignored. */
 export function specifiers(source: string): string[] {
-  const code = source
-    .split("\n")
-    .filter((l) => !/^\s*(\/\/|\/?\*)/.test(l))
-    .join("\n")
+  const code = source.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/(^|[^:"'`\w])\/\/.*$/gm, "$1")
   return [...new Set(FORMS.flatMap((re) => [...code.matchAll(re)].map((m) => m[1])))]
 }
 

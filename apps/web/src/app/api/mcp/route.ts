@@ -5,7 +5,7 @@ import { MCP_VERSION } from "@/lib/mcp/config"
 import { WRITE_TOOL_NAMES, registerAllTools } from "@/lib/mcp/plugins"
 import { hasScopes, SCOPE_WRITE } from "@/lib/oauth/tokens"
 import { z } from "@/lib/zod"
-import { enabledToolNames, gateTools } from "@/modules"
+import { enabledToolNames } from "@/modules"
 
 export const runtime = "nodejs"
 
@@ -49,8 +49,7 @@ const handler = createMcpHandler(
     // The module registry decides which tools exist: a disabled module's tools are
     // never registered. `ping` stays in every build — it is how a client checks
     // reachability before it knows what else is there.
-    const gated = gateTools(server)
-    registerAllTools(gated)
+    registerAllTools(server)
   },
   handlerOptions
 )

@@ -94,11 +94,12 @@ fails on a forbidden import. Type-check everything with `pnpm typecheck`.
 
 **One tool list, one import ratchet.** `apps/web/src/lib/mcp/plugins.ts` lists each plugin's register functions;
 the MCP route, `scripts/mcp-stdio.ts` and the tests read it, so a new tool module is added there and nowhere
-else (the tool names are in the manifests, and `registry.test.ts` fails when the two disagree). Plugins do not
-import each other: `plugin-boundary.test.ts` maps every file under `apps/web/src` to a plugin or to the host
+else (the tool names are in the manifests, and `registry.test.ts` fails when the two disagree). No plugin gains a
+new import of another: `plugin-boundary.test.ts` maps every file under `apps/web/src` to a plugin or to the host
 (`modules/__tests__/plugin-graph.ts`) and compares each import across plugins with `known-edges.ts`, seeded once
 from the source. A new edge fails, and so does a listed edge that is gone: delete it from the list, which only
-shrinks. Test files are not scanned. A file that serves two plugins (`crm-read.ts`, `crm-write.ts`) is host until
+shrinks. A new file is host, and so unchecked, until a rule in `PATH_MAP` (`plugin-graph.ts`) places it: place
+it when you add it. Test files are not scanned. A file that serves two plugins (`crm-read.ts`, `crm-write.ts`) is host until
 it splits. A module package keeps its indexes in `src/<name>.indexes.json`; the registry test checks they are in
 the root `firestore.indexes.json`.
 

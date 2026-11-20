@@ -19,6 +19,9 @@ describe("which plugin a file belongs to", () => {
     ["lib/invoices.ts", "accounting"],
     ["lib/quarters.ts", "consulting"],
     ["lib/mcp/tools/rent.ts", "rent"],
+    ["lib/mcp/tools/invoice-files.ts", "accounting"],
+    ["app/(viewer)/costs/[id]/file/page.tsx", "accounting"],
+    ["app/(viewer)/invoices/[id]/file/page.tsx", "accounting"],
     ["lib/mcp/tools/crm-write.ts", "host"],
     ["lib/backend/types.ts", "host"],
     ["types/crm.ts", "host"],
@@ -60,8 +63,23 @@ export const notAnImport = 1
     )
   })
 
-  it("does not read a vi.mock specifier as an import", () => {
-    expect(specifiers(`vi.mock("@/lib/invoices", () => ({}))\nawait vi.importActual("@/lib/quarters")`)).toEqual([])
+  // Each line is one form that once slipped past: a comment with a quote or `;` in a multi-line import,
+  // a space before the paren, two statements on a line, a comment in a dynamic import, a leading block comment.
+  it.each([
+    ["a multi-line import with an apostrophe in a comment", "import {\n  a, // the client's name\n  b, // x; y\n} from \"./t\""],
+    ["a space before the paren", 'const l = import ("./t")'],
+    ["a second import after a semicolon", 'import a from "./other"; import b from "./t"'],
+    ["a comment inside a dynamic import", 'import(/* webpackChunkName: "x" */ "./t")'],
+    ["a block comment before an import", '/* eslint-disable */ import a from "./t"'],
+    ["a template literal", "const l = import(`./t`)"],
+    ["require", 'const t = require("./t")'],
+    ["import = require", 'import t = require("./t")'],
+  ])("finds the specifier in %s", (_name, code) => {
+    expect(specifiers(code)).toContain("./t")
+  })
+
+  it("finds nothing in a commented-out import", () => {
+    expect(specifiers('/* import a from "./t" */\n// import("./t")')).toEqual([])
   })
 })
 

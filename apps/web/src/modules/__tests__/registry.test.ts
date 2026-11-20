@@ -1,8 +1,11 @@
 import { readFileSync } from "node:fs"
 
+import { RENT_WRITE_TOOL_NAMES } from "@alter-ego/rent/tools"
 import { afterEach, describe, expect, it, vi } from "vitest"
 
-import { PLUGIN_REGISTERS, REGISTERS, WRITE_TOOL_NAMES, registerAllTools } from "@/lib/mcp/plugins"
+
+import { PLUGIN_REGISTERS, WRITE_TOOL_NAMES, registerAllTools } from "@/lib/mcp/plugins"
+import { registerCrmWriteTools } from "@/lib/mcp/tools/crm-write"
 
 import { collectFacts, problems, type Facts } from "./plugin-checks"
 import { DEFAULT_PLUGINS, MODULES, allToolNames, enabledToolNames, gateTools, resolveModules } from "../index"
@@ -91,14 +94,12 @@ describe("one tool list", () => {
     expect(Object.keys(PLUGIN_REGISTERS).sort()).toEqual(MODULES.map((m) => m.id).sort())
   })
 
-  it("lists each register function once even when two plugins share it", () => {
-    expect(REGISTERS.length).toBe(new Set(REGISTERS).size)
-    expect(REGISTERS.length).toBe(new Set(Object.values(PLUGIN_REGISTERS).flat()).size)
-  })
-
-  it("holds every write tool, each owned by a manifest", () => {
-    const owned = new Set(allToolNames())
-    expect([...WRITE_TOOL_NAMES].filter((t) => !owned.has(t))).toEqual([])
+  // The scope gate reads WRITE_TOOL_NAMES alone: a write tool missing from it would answer a read-only token.
+  // Checked against the write tools each side declares itself, not against the union plugins.ts builds.
+  it("holds every write tool a plugin registers", () => {
+    const names: string[] = []
+    registerCrmWriteTools({ registerTool: (name: string) => void names.push(name) } as unknown as McpServer)
+    expect([...names, ...RENT_WRITE_TOOL_NAMES].filter((t) => !WRITE_TOOL_NAMES.has(t))).toEqual([])
   })
 
   // The route and the stdio server once each wrote the register calls out by hand.
@@ -106,6 +107,8 @@ describe("one tool list", () => {
     const source = readFileSync(file, "utf8")
     expect(source.match(/register[A-Z]\w*Tools/g)?.filter((n) => n !== "registerAllTools") ?? []).toEqual([])
     expect(source).toContain("@/lib/mcp/plugins")
+    // The module gate lives inside registerAllTools, so a caller cannot skip it.
+    expect(source).not.toContain("gateTools")
   })
 })
 
