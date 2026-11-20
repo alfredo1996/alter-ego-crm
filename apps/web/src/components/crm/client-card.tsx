@@ -120,8 +120,7 @@ export function ClientCard({
   const main = active[0]
   const last = meetings[0]
   // A left-out module's figures and links are not on the card: its routes redirect.
-  const hasInvoicing = isModuleOn("invoicing")
-  const hasSolutions = isModuleOn("solutions")
+  const hasInvoicing = isModuleOn("accounting")
   const owed = outstanding(invoices)
   const overdue = invoices.filter((i) => isInvoiceOverdue(i)).sort((a, b) => a.dueDate!.getTime() - b.dueDate!.getTime())
   const due = invoices
@@ -275,21 +274,17 @@ export function ClientCard({
             </StatusPill>
           </>
         )}
-        {hasSolutions && (
-          <>
-            {" · "}
-            {solutions > 0 ? (
-              // Edited on /solutions, filtered to this client.
-              <Link
-                href={`/solutions?client=${client.id}`}
-                className={cn(ABOVE, LINK, "text-subtle-foreground underline underline-offset-4 hover:text-foreground pointer-coarse:-my-3 pointer-coarse:py-3")}
-              >
-                {count(solutions, "solution")}
-              </Link>
-            ) : (
-              "No solutions"
-            )}
-          </>
+        {" · "}
+        {solutions > 0 ? (
+          // Edited on /solutions, filtered to this client.
+          <Link
+            href={`/solutions?client=${client.id}`}
+            className={cn(ABOVE, LINK, "text-subtle-foreground underline underline-offset-4 hover:text-foreground pointer-coarse:-my-3 pointer-coarse:py-3")}
+          >
+            {count(solutions, "solution")}
+          </Link>
+        ) : (
+          "No solutions"
         )}
         {main ? top && ` · Open deal: ${top.title}, ${top.probability}%` : hasInvoicing && invoices.length === 0 && " · Nothing invoiced yet"}
       </p>

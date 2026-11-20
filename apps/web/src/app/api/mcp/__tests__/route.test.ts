@@ -93,8 +93,8 @@ describe("tools/list", () => {
   })
 })
 
-// The registry is read once at load, so a deployment that leaves a module out is a fresh import of the route.
-describe("a deployment that leaves Invoicing out", () => {
+// The registry is read once at load, so a deployment that leaves a plugin out is a fresh import of the route.
+describe("a deployment that does not list Accounting", () => {
   const call = (route: { POST: typeof POST }, body: unknown) =>
     route.POST(
       new Request("http://localhost/api/mcp", {
@@ -103,8 +103,8 @@ describe("a deployment that leaves Invoicing out", () => {
         body: JSON.stringify(body),
       })
     )
-  const load = async (disabled: string) => {
-    vi.stubEnv("NEXT_PUBLIC_DISABLED_MODULES", disabled)
+  const load = async (plugins: string) => {
+    vi.stubEnv("NEXT_PUBLIC_PLUGINS", plugins)
     vi.resetModules()
     return import("../route")
   }
@@ -121,21 +121,21 @@ describe("a deployment that leaves Invoicing out", () => {
     vi.resetModules()
   })
 
-  it("lists the invoice tools with Invoicing on, and gates create_invoice behind the write scope", async () => {
+  it("lists the invoice tools with Accounting listed, and gates create_invoice behind the write scope", async () => {
     const route = await load("")
     const names = await toolNames(route)
     expect(["list_invoices", "create_invoice", "get_quarters"].filter((t) => !names.includes(t))).toEqual([])
     expect((await call(route, createInvoice)).status).toBe(403)
   })
 
-  it("lists no invoice tool, and no get_quarters, with Invoicing off", async () => {
-    const names = await toolNames(await load("invoicing"))
-    expect(["list_invoices", "get_unbilled", "create_invoice", "mark_invoice_paid", "update_invoice", "delete_invoice", "get_quarters"].filter((t) => names.includes(t))).toEqual([])
+  it("lists no invoice tool, and no get_quarters, with only Consulting listed", async () => {
+    const names = await toolNames(await load("consulting"))
+    expect(["list_invoices", "get_unbilled", "create_invoice", "mark_invoice_paid", "update_invoice", "delete_invoice", "get_quarters", "get_cash_book", "get_rent"].filter((t) => names.includes(t))).toEqual([])
     expect(names).toContain("list_clients")
   })
 
   it("leaves create_invoice out of the write-scope set: it is not served, so it is not a write", async () => {
-    const route = await load("invoicing")
+    const route = await load("consulting")
     expect((await call(route, createInvoice)).status).toBe(200)
   })
 })

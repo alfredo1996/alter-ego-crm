@@ -679,44 +679,23 @@ describe("monthEndFloor", () => {
   })
 })
 
-describe("Month End per module set", () => {
+describe("Month End per plugin set", () => {
   const without = (...off: string[]) => (id: string) => !off.includes(id)
 
   it.each([
     [[], ["hours", "invoices", "waiting", "suppliers", "recurring", "files", "bank", "chase", "deadlines"], ["hours", "invoices", "bank", "chase", "deadlines"]],
-    [["invoicing"], ["hours", "suppliers", "recurring", "bank", "chase", "deadlines"], ["hours", "bank", "chase", "deadlines"]],
-    [["crm", "invoicing"], ["suppliers", "recurring", "bank", "chase"], ["bank", "chase"]],
-    [["books"], ["hours", "invoices", "waiting", "files", "deadlines"], ["hours", "invoices", "deadlines"]],
+    [["accounting"], ["hours", "deadlines"], ["hours", "deadlines"]],
+    [["consulting"], ["invoices", "waiting", "suppliers", "recurring", "files", "bank", "chase"], ["invoices", "bank", "chase"]],
   ] as const)("without %j the steps are %j", (off, order, blocking) => {
     expect(stepsOn(without(...off))).toEqual({ order, blocking })
   })
 
-  // A paid invoice with no account is an Invoicing fix (its Open Invoice action): without the module it must not hold the month open.
-  it("drops the paid-with-no-account item from To Chase when invoicing is off", () => {
-    const noAccount = invoice({ number: "20/2026", yearMonth: "2026-08", amount: 100, vat: 0, paidDate: d("2026-09-10") })
-    const data = base({ accounts: [MAIN], invoices: [...paidInvoices(), noAccount] })
-    expect(monthEndChecklist(data, "2026-09", TODAY).steps.chase.items.map((i) => i.text)).toEqual(["Invoice 20/2026 paid on 10/09/2026, no account"])
-    expect(monthEndChecklist(data, "2026-09", TODAY).todo).toContain("chase")
-    const m = monthEndChecklist(data, "2026-09", TODAY, without("invoicing"))
-    expect(m.steps.chase.items).toEqual([])
-    expect(m.todo).not.toContain("chase")
-  })
-
-  it("names no unpaid invoice on a Missing IN when invoicing is off", () => {
-    const nordica = invoice({ clientId: "c9", number: "12/2026", yearMonth: "2026-08", amount: 1500, vat: 330 })
-    const data = base({ accounts: [{ ...MAIN, statementBalance: 11820, statementDate: d("2026-09-30") }], invoices: [...paidInvoices(), nordica] })
-    expect(monthEndChecklist(data, "2026-09", TODAY).steps.bank.items[0].suspects).toBeDefined()
-    const item = monthEndChecklist(data, "2026-09", TODAY, without("invoicing")).steps.bank.items[0]
-    expect(item.suspects).toBeUndefined()
-    expect(item.detail).not.toContain("12/2026")
-  })
-
-  it("closes a month whose only open step belongs to a module that is off", () => {
+  it("closes a month whose only open step belongs to a plugin that is off", () => {
     const missing = base({ timecards: [...hoursIn("e1", "2026-07", 10), ...hoursIn("e1", "2026-08", 10)] })
     expect(monthEndChecklist(missing, "2026-09", TODAY).todo).toEqual(["hours"])
-    const m = monthEndChecklist(missing, "2026-09", TODAY, without("crm", "invoicing"))
+    const m = monthEndChecklist(missing, "2026-09", TODAY, without("consulting"))
     expect(m.todo).toEqual([])
     expect(m.closed).toBe(true)
-    expect(openMonths(missing, TODAY, without("crm", "invoicing"))).toEqual([])
+    expect(openMonths(missing, TODAY, without("consulting"))).toEqual([])
   })
 })

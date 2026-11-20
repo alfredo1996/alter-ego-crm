@@ -807,10 +807,8 @@ export function toChase(input: {
   rows: CashRow[]
   invoices: Invoice[]
   expenses: CompanyExpense[]
-  /** false when the deployment leaves Invoicing out: an invoice with no account is then not for the owner to fix here. */
-  invoicing?: boolean
 }): ChaseItem[] {
-  const { accounts, rows, invoices, expenses, invoicing = true } = input
+  const { accounts, rows, invoices, expenses } = input
   const { counted, beforeOpening, unassigned } = splitRows(accounts, rows)
   const bookStart = accounts.map((a) => isoDate(a.openingDate)).sort()[0]
   // A transfer's two legs are one movement: listed once, by its out leg when both are in the list.
@@ -820,7 +818,7 @@ export function toChase(input: {
   return [
     ...negativeDays(accounts, counted).map((n) => ({ kind: "negative" as const, ...n })),
     ...invoices
-      .filter((i) => invoicing && i.paidDate && i.paidAccountId === null && bookStart && isoDate(i.paidDate) >= bookStart)
+      .filter((i) => i.paidDate && i.paidAccountId === null && bookStart && isoDate(i.paidDate) >= bookStart)
       .map((invoice) => ({ kind: "no_account" as const, invoice })),
     ...expenses
       .filter((e) => (e.accountId || e.paidByOwner) && !e.isRecurring && e.amount > 0 && !e.documentRef && e.category !== "bank_fees")

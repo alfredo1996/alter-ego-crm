@@ -2,9 +2,9 @@
  * The navigation table — the single source of truth for both what the sidebar
  * renders and which routes are reachable.
  *
- * Keeping these together is deliberate: a module switched off that only hides
+ * Keeping these together is deliberate: a plugin switched off that only hides
  * links leaves the route reachable by typing the URL. `isRouteEnabled` reads the
- * same table the nav does, so what a deployment switches off can never disagree
+ * same table the nav does, so what a deployment leaves out can never disagree
  * with what the guard enforces.
  */
 
@@ -33,39 +33,41 @@ export interface NavItem {
   label: string
   href: string
   icon: LucideIcon
-  /** The module whose page this is: switched off, the link and the route are gone. */
-  module?: ModuleId
 }
 
 export interface NavGroup {
   label: string
+  /** The plugin this group is: switched off, its links and routes are gone. */
+  module?: ModuleId
   items: NavItem[]
 }
 
 const NAV_GROUPS: NavGroup[] = [
   {
     label: "Consulting",
+    module: "consulting",
     items: [
-      { label: "Pipeline", href: "/pipeline", icon: Target, module: "crm" },
-      { label: "Clients", href: "/clients", icon: Users, module: "crm" },
-      { label: "Contracts", href: "/contracts", icon: FileSignature, module: "crm" },
-      { label: "Collaborators", href: "/collaborators", icon: UserRound, module: "crm" },
-      { label: "Solutions", href: "/solutions", icon: Library, module: "solutions" },
-      { label: "Tasks", href: "/tasks", icon: SquareKanban, module: "crm" },
-      { label: "Plan", href: "/plan", icon: CalendarRange, module: "crm" },
-      { label: "Deadlines", href: "/deadlines", icon: CalendarClock, module: "crm" },
+      { label: "Pipeline", href: "/pipeline", icon: Target },
+      { label: "Clients", href: "/clients", icon: Users },
+      { label: "Contracts", href: "/contracts", icon: FileSignature },
+      { label: "Collaborators", href: "/collaborators", icon: UserRound },
+      { label: "Solutions", href: "/solutions", icon: Library },
+      { label: "Tasks", href: "/tasks", icon: SquareKanban },
+      { label: "Plan", href: "/plan", icon: CalendarRange },
+      { label: "Deadlines", href: "/deadlines", icon: CalendarClock },
     ],
   },
   {
     label: "Accounting",
+    module: "accounting",
     items: [
-      { label: "Invoices", href: "/invoices", icon: FileText, module: "invoicing" },
-      { label: "Cash Book", href: "/cash-book", icon: BookOpen, module: "books" },
-      { label: "Rent", href: "/rent", icon: House, module: "rent" },
-      { label: "Costs", href: "/costs", icon: Receipt, module: "books" },
-      { label: "Month End", href: "/month-end", icon: CalendarCheck, module: "books" },
+      { label: "Invoices", href: "/invoices", icon: FileText },
+      { label: "Cash Book", href: "/cash-book", icon: BookOpen },
+      { label: "Costs", href: "/costs", icon: Receipt },
+      { label: "Month End", href: "/month-end", icon: CalendarCheck },
     ],
   },
+  { label: "Rent", module: "rent", items: [{ label: "Rent", href: "/rent", icon: House }] },
 ]
 
 /** The item's own page or one under it (a client's page lights Clients). */
@@ -73,8 +75,8 @@ export function isOnRoute(pathname: string, href: string): boolean {
   return pathname === href || pathname.startsWith(href + "/")
 }
 
-function isItemEnabled(item: NavItem): boolean {
-  return !item.module || isModuleOn(item.module)
+function isGroupEnabled(group: NavGroup): boolean {
+  return !group.module || isModuleOn(group.module)
 }
 
 /**
@@ -84,11 +86,9 @@ function isItemEnabled(item: NavItem): boolean {
  */
 export const BOTTOM_ITEMS: NavItem[] = [{ label: "Settings", href: "/settings", icon: Settings }]
 
-/** Nav groups to render, with the items of a module switched off and empty groups dropped. */
+/** Nav groups to render: the plugins that are on. */
 export function visibleNavGroups(): NavGroup[] {
-  return NAV_GROUPS.map((group) => ({ ...group, items: group.items.filter(isItemEnabled) })).filter(
-    (group) => group.items.length > 0,
-  )
+  return NAV_GROUPS.filter(isGroupEnabled)
 }
 
 /** The label of the visible group that holds this page, or null (Settings, an unknown route). */
@@ -102,10 +102,7 @@ export function groupOf(pathname: string): string | null {
  */
 export function isRouteEnabled(pathname: string): boolean {
   for (const group of NAV_GROUPS) {
-    for (const item of group.items) {
-      if (!isOnRoute(pathname, item.href)) continue
-      return isItemEnabled(item)
-    }
+    if (group.items.some((item) => isOnRoute(pathname, item.href))) return isGroupEnabled(group)
   }
 
   return true

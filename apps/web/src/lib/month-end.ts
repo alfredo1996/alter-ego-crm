@@ -66,15 +66,15 @@ export const BLOCKING: StepKey[] = ["hours", "invoices", "bank", "chase", "deadl
 
 /** The module each step belongs to: off, the step is not on the page and does not keep a month open. */
 const STEP_MODULE: Record<StepKey, ModuleId> = {
-  hours: "crm",
-  invoices: "invoicing",
-  waiting: "invoicing",
-  suppliers: "books",
-  recurring: "books",
-  files: "invoicing",
-  bank: "books",
-  chase: "books",
-  deadlines: "crm",
+  hours: "consulting",
+  invoices: "accounting",
+  waiting: "accounting",
+  suppliers: "accounting",
+  recurring: "accounting",
+  files: "accounting",
+  bank: "accounting",
+  chase: "accounting",
+  deadlines: "consulting",
 }
 
 /** Every module on, for callers (tests) that are not a deployment. */
@@ -238,13 +238,11 @@ export function monthEndFloor(data: Pick<MonthEndData, "timecards" | "accounts">
 }
 
 /** Everything that does not depend on the month: built once, read for each month. */
-function prepare(data: MonthEndData, today: string, isOn: (id: ModuleId) => boolean) {
+function prepare(data: MonthEndData, today: string) {
   const currentMonth = today.slice(0, 7)
   const { rows, counted } = bookRows(data)
-  const invoicing = isOn("invoicing")
   return {
     data,
-    invoicing,
     today,
     currentMonth,
     clientName: (id: string | null) => data.clients.find((c) => c.id === id)?.name ?? "Unknown client",
@@ -257,7 +255,7 @@ function prepare(data: MonthEndData, today: string, isOn: (id: ModuleId) => bool
       clientId,
       billing: clientBilling({ clientId, engagements: data.engagements, timecards: data.timecards, invoices: data.invoices, today }),
     })),
-    chase: toChase({ accounts: data.accounts, rows, invoices: data.invoices, expenses: data.expenses, invoicing }),
+    chase: toChase({ accounts: data.accounts, rows, invoices: data.invoices, expenses: data.expenses }),
   }
 }
 
@@ -531,7 +529,7 @@ function bankStep(ctx: Context, end: string): MonthEndStep {
       const since = rowsSinceCheck(a, ctx.counted, end)
       const paidOn = check.status === "not_checked" ? null : check.day <= end ? check.day : check.day.slice(0, 7) === next ? end : null
       const suspects =
-        check.status === "missing_in" && paidOn && ctx.invoicing
+        check.status === "missing_in" && paidOn
           ? ctx.data.invoices.filter((i) => {
               const gap = invoiceTotal(i) - check.difference
               return !i.paidDate && i.amount > 0 && gap >= 0 && gap <= MAX_BANK_FEE && `${periodMonths(i)[0]}-01` <= paidOn
@@ -614,7 +612,7 @@ export function monthNotEnded(month: string, today: string): string | null {
 export function monthEndChecklist(data: MonthEndData, month: string, today: string, isOn = ALL_ON): MonthEnd {
   const refused = monthNotEnded(month, today)
   if (refused) throw new Error(refused)
-  return checklist(prepare(data, today, isOn), month, isOn)
+  return checklist(prepare(data, today), month, isOn)
 }
 
 /** How far back openMonths looks. */
@@ -624,7 +622,7 @@ export const OPEN_MONTHS_BACK = 24
 export function openMonths(data: MonthEndData, today: string, isOn = ALL_ON): string[] {
   const floor = monthEndFloor(data)
   if (floor === null) return []
-  const ctx = prepare(data, today, isOn)
+  const ctx = prepare(data, today)
   const out: string[] = []
   let ym = shiftMonth(ctx.currentMonth, -1)
   for (let k = 0; k < OPEN_MONTHS_BACK && ym >= floor; k++, ym = shiftMonth(ym, -1)) {

@@ -180,7 +180,7 @@ function Fact({ label, children }: { label: string; children: React.ReactNode })
 }
 
 /** One bar's detail: the facts, then its quarters, or what an unsigned deal is. */
-function BarDetail({ bar, health, withInvoiced, withSolutions, sheet }: { bar: TimelineBar; health: Meeting | undefined; withInvoiced: boolean; withSolutions: boolean; sheet: boolean }) {
+function BarDetail({ bar, health, withInvoiced, sheet }: { bar: TimelineBar; health: Meeting | undefined; withInvoiced: boolean; sheet: boolean }) {
   const opportunity = bar.kind === "opportunity"
   const light = health?.health ? MEETING_HEALTH[health.health] : null
   const state = opportunity ? bar.stage : BAR[bar.state].word
@@ -200,17 +200,15 @@ function BarDetail({ bar, health, withInvoiced, withSolutions, sheet }: { bar: T
           </div>
         </div>
         <dl className="grid grid-cols-[88px_minmax(0,1fr)] gap-x-3 gap-y-2 text-sm">
-          {withSolutions && (
-            <Fact label="Solution">
-              {bar.solution ? (
-                <Link href={`/solutions/${bar.solution.id}`} className="font-medium underline-offset-4 hover:underline">
-                  {bar.solution.step ? `${bar.solution.name} · Step ${bar.solution.step.number}, ${bar.solution.step.title}` : bar.solution.name}
-                </Link>
-              ) : (
-                "None yet"
-              )}
-            </Fact>
-          )}
+          <Fact label="Solution">
+            {bar.solution ? (
+              <Link href={`/solutions/${bar.solution.id}`} className="font-medium underline-offset-4 hover:underline">
+                {bar.solution.step ? `${bar.solution.name} · Step ${bar.solution.step.number}, ${bar.solution.step.title}` : bar.solution.name}
+              </Link>
+            ) : (
+              "None yet"
+            )}
+          </Fact>
           <Fact label="Health">
             {opportunity ? (
               "No contract yet"
@@ -243,7 +241,7 @@ function BarDetail({ bar, health, withInvoiced, withSolutions, sheet }: { bar: T
           <Button asChild variant="outline" size="lg">
             <Link href={opportunity ? "/pipeline" : `/clients/${bar.clientId}`}>{opportunity ? "Open Opportunity" : "Open Contract"}</Link>
           </Button>
-          {withSolutions && bar.solution && (
+          {bar.solution && (
             <Button asChild variant="outline" size="lg">
               <Link href={`/solutions/${bar.solution.id}`}>Open Solution</Link>
             </Button>
@@ -256,7 +254,7 @@ function BarDetail({ bar, health, withInvoiced, withSolutions, sheet }: { bar: T
           <>
             <h3 className="text-xs font-semibold tracking-[0.04em] text-muted-foreground uppercase">Not Signed Yet</h3>
             <p className="text-sm leading-relaxed">
-              Expected {bar.start && bar.end ? `${format(new Date(`${bar.start}-01T00:00:00`), "MMM yyyy")} – ${format(new Date(`${bar.end}-01T00:00:00`), "MMM yyyy")}` : "soon"}, about {days(bar.estimate ?? 0)}. It has no days or money until it is won; then its contract takes this place on the timeline{withSolutions && bar.solution?.step ? ", and the roadmap step follows it" : ""}.
+              Expected {bar.start && bar.end ? `${format(new Date(`${bar.start}-01T00:00:00`), "MMM yyyy")} – ${format(new Date(`${bar.end}-01T00:00:00`), "MMM yyyy")}` : "soon"}, about {days(bar.estimate ?? 0)}. It has no days or money until it is won; then its contract takes this place on the timeline{bar.solution?.step ? ", and the roadmap step follows it" : ""}.
             </p>
             <Link href="/pipeline" className="text-sm font-medium underline-offset-4 hover:underline">
               Open in Pipeline
@@ -305,8 +303,7 @@ function BarDetail({ bar, health, withInvoiced, withSolutions, sheet }: { bar: T
  */
 export function ContractTimeline() {
   const { user } = useAuth()
-  const hasInvoices = isModuleOn("invoicing")
-  const hasSolutions = isModuleOn("solutions")
+  const hasInvoices = isModuleOn("accounting")
   const clientsQuery = useClients(user?.id)
   const engagementsQuery = useEngagements(user?.id)
   const opportunitiesQuery = useOpportunities(user?.id)
@@ -314,7 +311,7 @@ export function ContractTimeline() {
   const timecardsQuery = useTimecards(user?.id)
   const meetingsQuery = useMeetings(user?.id)
   const invoicesQuery = useInvoices(hasInvoices ? user?.id : undefined)
-  const solutionsQuery = useSolutions(hasSolutions ? user?.id : undefined)
+  const solutionsQuery = useSolutions(user?.id)
   const [shift, setShift] = useState(0)
   const [grouped, setGrouped] = useState(true)
   const [pipeline, setPipeline] = useState(true)
@@ -326,7 +323,7 @@ export function ContractTimeline() {
   const gate = pageState([
     clientsQuery, engagementsQuery, opportunitiesQuery, allocationsQuery, timecardsQuery, meetingsQuery,
     ...(hasInvoices ? [invoicesQuery] : []),
-    ...(hasSolutions ? [solutionsQuery] : []),
+    solutionsQuery,
   ])
   if (gate) return gate
 
@@ -342,7 +339,7 @@ export function ContractTimeline() {
     allocations: allocationsQuery.data ?? [],
     timecards: timecardsQuery.data ?? [],
     invoices: hasInvoices ? (invoicesQuery.data ?? []) : null,
-    solutions: hasSolutions ? (solutionsQuery.data ?? []) : [],
+    solutions: solutionsQuery.data ?? [],
   })
   const bars = pipeline ? all : all.filter((b) => b.kind === "contract")
   const health = healthByContract(meetingsQuery.data ?? [])
@@ -364,7 +361,6 @@ export function ContractTimeline() {
       bar={shown}
       health={health.get(shown.id)}
       withInvoiced={hasInvoices}
-      withSolutions={hasSolutions}
       sheet={phone}
     />
   )

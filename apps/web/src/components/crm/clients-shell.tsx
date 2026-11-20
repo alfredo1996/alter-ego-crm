@@ -203,7 +203,7 @@ export function ClientsShell() {
     <div className="flex flex-col gap-6 sm:gap-7">
       <PageHeader
         title="Clients"
-        subtitle={isModuleOn("invoicing") ? "Who you work for, what is signed and what is owed." : "Who you work for and what is signed."}
+        subtitle={isModuleOn("accounting") ? "Who you work for, what is signed and what is owed." : "Who you work for and what is signed."}
         actions={
           <>
             <Button size="lg" variant="outline" aria-haspopup="dialog" onClick={(ev) => contracts.newContract(ev.currentTarget)}>
@@ -242,7 +242,7 @@ export function ClientsShell() {
                   </>
                 )}
               </span>
-              {isModuleOn("invoicing") && (
+              {isModuleOn("accounting") && (
                 <StatusDot tone={overdue ? "danger" : owed ? "warning" : "success"}>
                   {owed === 0 && overdue === 0 ? (
                     "Nothing owed"

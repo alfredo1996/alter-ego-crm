@@ -477,15 +477,6 @@ describe("toChase", () => {
   })
 })
 
-describe("toChase without invoicing", () => {
-  it("lists no paid-with-no-account invoice, and still the rest", () => {
-    const invoices = [invoice({ id: "noacc", number: "5/2026", amount: 100, vat: 0, paidDate: d("2026-06-01") })]
-    const rows = rowsOf({ movements: [movement({ kind: "income", direction: "in", amount: 10, dateEstimated: true })] })
-    expect(toChase({ accounts: [MAIN], rows, invoices, expenses: [] }).map((c) => c.kind)).toEqual(["no_account", "estimated"])
-    expect(toChase({ accounts: [MAIN], rows, invoices, expenses: [], invoicing: false }).map((c) => c.kind)).toEqual(["estimated"])
-  })
-})
-
 describe("toChase, costs", () => {
   it("asks for the document of a cost paid from an account or by card, never of a bank fee", () => {
     const expenses = [

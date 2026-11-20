@@ -251,9 +251,9 @@ describe("the Deadlines list", () => {
   })
 })
 
-describe("the Deadlines list without invoicing", () => {
+describe("the Deadlines list without accounting", () => {
   it("has no invoice rows, no Mark Paid, no To collect figure and no Invoice source, and keeps the rest", async () => {
-    off.add("invoicing")
+    off.add("accounting")
     await show()
     expect(rowNames("Overdue")).toEqual(["Book forecasting intro call"])
     expect(screen.queryByText("Invoice 25/2026")).toBeNull()

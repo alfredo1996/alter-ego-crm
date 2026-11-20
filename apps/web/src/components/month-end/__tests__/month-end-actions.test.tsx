@@ -218,19 +218,6 @@ describe("Month End's fixes", () => {
     expect(within(card("Invoices")).getByText("Lumen Srl: covered by 16/2026 (Sep 2026)")).toBeVisible()
   })
 
-  it("offers no Mark Paid on a Missing IN, and names no invoice, when invoicing is off", async () => {
-    off.add("invoicing")
-    const nordica = (await db.createClient(U, { name: "Nordica Spa" })).id
-    await db.createCompanyAccount(U, { name: "Main Bank", openingBalance: 1000, openingDate: d("2026-07-01"), statementBalance: 2830, statementDate: d("2026-09-30") })
-    await db.createInvoice(U, { clientId: nordica, number: "12/2026", yearMonth: "2026-08", amount: 1500, vat: 330 })
-    await show()
-    const bank = within(card("Bank"))
-    expect(bank.getByText("Main Bank: Missing IN of €1,830.00 on 30/09/2026")).toBeInTheDocument()
-    expect(bank.getByRole("button", { name: "Check Balance" })).toBeInTheDocument()
-    expect(bank.queryByRole("button", { name: /^Mark .* Paid$/ })).toBeNull()
-    expect(card("Bank")).not.toHaveTextContent("12/2026")
-  })
-
   // The plan's example B.
   it("marks the invoice a Missing IN matches paid on the check's day, not today, and the bank then matches", async () => {
     const nordica = (await db.createClient(U, { name: "Nordica Spa" })).id

@@ -358,8 +358,8 @@ export function registerCrmReadTools(server: McpServer): void {
         const window = to !== from ? `${from}–${to}` : from
 
         if (basis !== "accrued") {
-          if (!isModuleOn("invoicing")) {
-            throw new ToolInputError(`Basis '${basis}' needs the Invoicing module, which this deployment leaves out. Ask for basis 'accrued'.`)
+          if (!isModuleOn("accounting")) {
+            throw new ToolInputError(`Basis '${basis}' needs the Accounting plugin, which this deployment does not run. Ask for basis 'accrued'.`)
           }
           // Erroring beats ignoring the flag: a weighted invoice is nonsense, and
           // a silently-dropped scenario would answer a question nobody asked.
@@ -1533,7 +1533,7 @@ export function registerCrmReadTools(server: McpServer): void {
         const owner = ownerLoanBalance(loans, expenses)
         const bills = supplierDocuments(expenses, movements)
         const centres = costCentreTotals({ invoices, expenses, loans, movements }, from, to, accountId)
-        const chase = toChase({ accounts, rows, invoices, expenses, invoicing: isModuleOn("invoicing") }).filter(
+        const chase = toChase({ accounts, rows, invoices, expenses }).filter(
           (c) => accountId === null || ("row" in c ? c.row.accountId === accountId : "accountId" in c ? c.accountId === accountId : true),
         )
         const chaseCount = (kind: (typeof chase)[number]["kind"]) => chase.filter((c) => c.kind === kind).length
@@ -1703,7 +1703,7 @@ export function registerCrmReadTools(server: McpServer): void {
         }
 
         const checklist = monthEndChecklist(data, month, today, isModuleOn)
-        const next = monthEndNext(checklist, data, today, isModuleOn("invoicing"))
+        const next = monthEndNext(checklist, data, today)
         const titles = (keys: StepKey[]) => keys.map((k) => STEP_INFO[k].title)
         // ponytail: one more checklist per earlier open month, for its steps; fine for a few, memoise if it slows.
         const alsoOpen = openMonths(data, today, isModuleOn)

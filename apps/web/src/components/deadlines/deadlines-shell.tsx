@@ -85,8 +85,8 @@ export function DeadlinesShell() {
   const { data: opportunities = [] } = opportunitiesQuery
   const { data: clients = [] } = clientsQuery
   const { data: allocations = [] } = allocationsQuery
-  // Invoicing left out: the invoices stay unread by the list, so no row, Mark Paid, sheet or figure of theirs exists.
-  const hasInvoicing = isModuleOn("invoicing")
+  // Accounting left out: the invoices stay unread by the list, so no row, Mark Paid, sheet or figure of theirs exists.
+  const hasInvoicing = isModuleOn("accounting")
   const invoices = useMemo(() => (hasInvoicing ? (invoicesQuery.data ?? []) : []), [hasInvoicing, invoicesQuery.data])
   const { data: tasks = [] } = tasksQuery
   const { data: timecards = [] } = timecardsQuery
@@ -462,7 +462,7 @@ function NextDaysStrip({
   overdue: CalendarItem[]
   onOverdue: () => void
 }) {
-  const hasInvoicing = isModuleOn("invoicing")
+  const hasInvoicing = isModuleOn("accounting")
   const short = (iso: string) => format(day(iso), "d MMM")
   const deadlines = (n: number) => (
     <>

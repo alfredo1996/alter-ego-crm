@@ -270,17 +270,6 @@ describe("CashBookShell", () => {
     expect(within(item).getByRole("button", { name: "Open Invoice" })).toBeInTheDocument()
   })
 
-  it("lists no paid-with-no-account invoice to chase, and so no Open Invoice, without invoicing", async () => {
-    off.add("invoicing")
-    await show()
-    expect(within(screen.getByRole("tablist", { name: "Cash book views" })).getAllByRole("tab").map((t) => t.textContent)).toEqual([
-      "Movements", "Summary", "Cost Centres", "Owed & Held", "To Chase",
-    ])
-    fireEvent.mouseDown(screen.getByRole("tab", { name: "To Chase" }))
-    expect(await screen.findByText("Nothing to chase")).toBeInTheDocument()
-    expect(screen.queryByRole("button", { name: "Open Invoice" })).toBeNull()
-  })
-
   it("adds a transfer, and Save & Add Another keeps the day and the account", async () => {
     await show()
     fireEvent.click(screen.getByRole("button", { name: "Add Movement" }))

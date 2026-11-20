@@ -39,40 +39,16 @@ beforeEach(() => {
   rows.getInvoices = []
 })
 
-describe("get_month_end without invoicing", () => {
-  it("names the missing invoice file with invoicing on", async () => {
-    expect((await call("get_month_end", { month: last })).summary).toContain("1 invoice file missing")
-  })
-
-  it("leaves the Invoice Files reminder out of the summary and the steps", async () => {
-    off.add("invoicing")
-    const res = await call("get_month_end", { month: last })
-    expect(res.summary).not.toContain("invoice file")
-    expect(res.summary).not.toContain("waiting for payment")
-    expect(res.steps.map((s: { step: string }) => s.step)).not.toContain("files")
-  })
-})
-
-describe("get_month_end without books", () => {
-  it("does not keep the month open for a Bank step the owner cannot see", async () => {
-    expect((await call("get_month_end", { month: last })).summary).toContain("2 steps to do (Bank, To Chase)")
-    off.add("books")
-    const res = await call("get_month_end", { month: last })
-    expect(res.closed).toBe(true)
-    expect(res.summary).toContain("is closed: every required step is done.")
-  })
-})
-
-describe("get_revenue without invoicing", () => {
-  it.each(["invoiced", "paid"])("refuses basis %s with a sentence naming the module", async (basis) => {
-    off.add("invoicing")
+describe("get_revenue without accounting", () => {
+  it.each(["invoiced", "paid"])("refuses basis %s with a sentence naming the plugin", async (basis) => {
+    off.add("accounting")
     const res = await call("get_revenue", { from: last, basis })
     expect(res.isError).toBe(true)
-    expect(res.error).toBe(`Basis '${basis}' needs the Invoicing module, which this deployment leaves out. Ask for basis 'accrued'.`)
+    expect(res.error).toBe(`Basis '${basis}' needs the Accounting plugin, which this deployment does not run. Ask for basis 'accrued'.`)
   })
 
   it("still answers the contract basis", async () => {
-    off.add("invoicing")
+    off.add("accounting")
     expect((await call("get_revenue", { from: last })).isError).toBeUndefined()
   })
 })

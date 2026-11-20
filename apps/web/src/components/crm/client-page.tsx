@@ -110,12 +110,11 @@ export function ClientPage({ clientId }: { clientId: string }) {
   const { user } = useAuth()
   const userId = user?.id
   const router = useRouter()
-  // A left-out module's parts are not on the page: no section, no index entry, no link into its routes.
-  const hasInvoicing = isModuleOn("invoicing")
-  const hasSolutions = isModuleOn("solutions")
+  // Without Accounting its parts are not on the page: no section, no index entry, no link into its routes.
+  const hasInvoicing = isModuleOn("accounting")
   const clientsQuery = useClients(userId)
   const engagementsQuery = useEngagements(userId)
-  const invoicesQuery = useInvoices(userId)
+  const invoicesQuery = useInvoices(hasInvoicing ? userId : undefined)
   const allocationsQuery = useAllocations(userId)
   const timecardsQuery = useTimecards(userId)
   const assignmentsQuery = useAssignments(userId)
@@ -179,7 +178,7 @@ export function ClientPage({ clientId }: { clientId: string }) {
   const gate = pageState([
     clientsQuery,
     engagementsQuery,
-    invoicesQuery,
+    ...(hasInvoicing ? [invoicesQuery] : []),
     allocationsQuery,
     timecardsQuery,
     assignmentsQuery,
@@ -464,7 +463,7 @@ export function ClientPage({ clientId }: { clientId: string }) {
             { id: "tasks", label: "Tasks", count: openTasks.length },
             { id: "meetings", label: "Meetings", count: clientMeetings.length },
             { id: "opportunities", label: "Opportunities", count: clientOpportunities.length },
-            ...(hasSolutions ? [{ id: "solutions", label: "Solutions", count: clientSolutions.length }] : []),
+            { id: "solutions", label: "Solutions", count: clientSolutions.length },
           ]}
         />
         <div className="flex min-w-0 flex-1 flex-col gap-8 sm:gap-11">
@@ -654,7 +653,7 @@ export function ClientPage({ clientId }: { clientId: string }) {
             ),
           )}
 
-          {hasSolutions && section(
+          {section(
             "solutions",
             "Solutions",
             tail(clientSolutions.length, " · what you built for them"),

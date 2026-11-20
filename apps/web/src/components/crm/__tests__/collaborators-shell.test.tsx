@@ -26,6 +26,9 @@ vi.mock("@/lib/backend", () => ({
   }),
 }))
 
+const off = vi.hoisted(() => new Set<string>())
+vi.mock("@/modules", async (actual) => ({ ...(await actual<Record<string, unknown>>()), isModuleOn: (id: string) => !off.has(id) }))
+
 const at = new Date(2026, 0, 1)
 const collaborator = (id: string, name: string, extra: Record<string, unknown>) => ({
   id, userId: "u1", name, type: "freelancer", notes: null, isActive: true, fee: null, createdAt: at, updatedAt: at, ...extra,
@@ -34,6 +37,7 @@ const collaborator = (id: string, name: string, extra: Record<string, unknown>) 
 beforeAll(() => vi.setSystemTime(new Date(2026, 9, 15)))
 afterAll(() => vi.useRealTimers())
 beforeEach(() => {
+  off.clear()
   calls.length = 0
   DATA.getCollaborators = [
     collaborator("verdi", "Studio Verdi", {
@@ -60,6 +64,16 @@ const names = () => screen.queryAllByRole("article").map((c) => within(c).getByR
 const card = (name: string) => screen.getByRole("article", { name })
 
 describe("the Collaborators page", () => {
+  it("reads the costs only when Accounting is on, and shows the page either way", async () => {
+    await show()
+    expect(calls.map(([m]) => m)).toContain("getCompanyExpenses")
+    calls.length = 0
+    off.add("accounting")
+    await show()
+    expect(calls.map(([m]) => m)).not.toContain("getCompanyExpenses")
+    expect(names()).toEqual(["Studio Verdi", "Marco Bianchi", "Giulia Neri", "Lab Nove Srl"])
+  })
+
   it("heads the list with the active count, the fees a month and this quarter's total", async () => {
     await show()
     const strip = screen.getByText("a month in fixed fees").closest("div")!
