@@ -1,5 +1,6 @@
 "use client"
 
+import { FinancePreferenceRows, FinanceSettings } from "@alter-ego/finance/settings"
 import { OnThisPage } from "@alter-ego/ui/page/on-this-page"
 import { PageHeader } from "@alter-ego/ui/page/page-header"
 import { SegmentedButtons } from "@alter-ego/ui/page/segmented-buttons"
@@ -17,6 +18,7 @@ import { ModulesSection } from "@/components/settings/modules-section"
 import { SettingsRow, SettingsSection } from "@/components/settings/settings-section"
 import { useAuth } from "@/hooks/use-auth"
 import { getBackend } from "@/lib/backend"
+import { isModuleOn } from "@/modules"
 import { useSettingsStore } from "@/stores/settings-store"
 
 const themeOptions = [
@@ -75,12 +77,23 @@ export function SettingsShell() {
     )
   }
 
+  // Personal Finance brings its own sections (Categories & Tags, Data, Danger Zone) when it is on; the app's
+  // rows go into its Data section as children, so there is one Data section either way.
+  const finance = isModuleOn("finance")
   const sections = [
     { id: "profile", label: "Profile" },
     { id: "preferences", label: "Preferences" },
     { id: "modules", label: "Plugins" },
+    ...(finance ? [{ id: "sorting", label: "Categories & Tags" }] : []),
     { id: "data", label: "Data" },
+    ...(finance ? [{ id: "danger", label: "Danger Zone" }] : []),
   ]
+  const dataRows = (
+    <>
+      <ApiKeysSection userId={user?.id} />
+      <ConnectorsSection />
+    </>
+  )
 
   return (
     <div>
@@ -156,14 +169,18 @@ export function SettingsShell() {
                 options={themeOptions.map(({ value, label, icon: Icon }) => ({ value, label, icon: <Icon aria-hidden className="size-[15px]" /> }))}
               />
             </SettingsRow>
+            {finance && <FinancePreferenceRows />}
           </SettingsSection>
 
           <ModulesSection />
 
-          <SettingsSection id="data" title="Data" description="Let your own tools read your data.">
-            <ApiKeysSection userId={user?.id} />
-            <ConnectorsSection />
-          </SettingsSection>
+          {finance ? (
+            <FinanceSettings>{dataRows}</FinanceSettings>
+          ) : (
+            <SettingsSection id="data" title="Data" description="Let your own tools read your data.">
+              {dataRows}
+            </SettingsSection>
+          )}
 
         </div>
       </div>

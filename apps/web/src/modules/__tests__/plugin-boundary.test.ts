@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest"
 
 import { KNOWN_EDGES } from "./known-edges"
-import { RULE, crossEdges, diffEdges, existsInSrc, isTestFile, pluginOf, readSource, resolveSpec, specifiers } from "./plugin-graph"
+import { FINANCE_RULE, RULE, crossEdges, diffEdges, existsInSrc, financeImporters, isTestFile, pluginOf, readSource, resolveSpec, specifiers } from "./plugin-graph"
 
 describe("which plugin a file belongs to", () => {
   it.each([
@@ -136,6 +136,36 @@ describe("the edges a set of files makes", () => {
   it("is a test file by folder or by name", () => {
     expect(["lib/__tests__/x.ts", "lib/x.test.ts", "components/a/b.test.tsx"].every(isTestFile)).toBe(true)
     expect(isTestFile("lib/invoices.ts")).toBe(false)
+  })
+})
+
+// Rule 4: Finance is imported only by the host. Its files live in a package, so no app file maps to it;
+// what is left to guard is that no plugin's file, nor a file placed under a plugin, reaches for it.
+describe("who may import Finance", () => {
+  const files = {
+    "lib/nav.ts": `import { FINANCE_NAV } from "@alter-ego/finance/nav"`,
+    "app/(app)/dashboard/page.tsx": `import { DashboardPage } from "@alter-ego/finance/pages/dashboard-page"`,
+    "lib/invoices.ts": `import { x } from "@alter-ego/finance/lib/categories"`,
+    "components/crm/a.tsx": `export { y } from "@alter-ego/finance/host"`,
+    "components/rent/b.tsx": `const l = () => import("@alter-ego/finance/types")`,
+    "hooks/use-leases.ts": `import { z } from "@alter-ego/kernel/currency"`,
+    "components/cash-book/__tests__/c.test.tsx": `import { x } from "@alter-ego/finance/contract"`,
+  }
+
+  it("flags a file of Consulting, Accounting or Rent that imports the package, in any form, and no host file or test", () => {
+    expect(financeImporters(files)).toEqual([
+      "accounting:lib/invoices.ts -> @alter-ego/finance/lib/categories",
+      "consulting:components/crm/a.tsx -> @alter-ego/finance/host",
+      "rent:components/rent/b.tsx -> @alter-ego/finance/types",
+    ])
+  })
+
+  it("does not take a package that only starts with the name for Finance", () => {
+    expect(financeImporters({ "lib/invoices.ts": `import { x } from "@alter-ego/finance-tools"` })).toEqual([])
+  })
+
+  it("finds no file of a plugin that imports Finance", () => {
+    expect(financeImporters(readSource()), FINANCE_RULE).toEqual([])
   })
 })
 

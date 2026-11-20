@@ -7,9 +7,10 @@ import { readFileSync } from "node:fs"
 
 import { describe, expect, it } from "vitest"
 
-import { REGISTERS, registerAllTools } from "@/lib/mcp/plugins"
+import { REGISTERS, WRITE_TOOL_NAMES, registerAllTools } from "@/lib/mcp/plugins"
 import { registerCrmReadTools } from "@/lib/mcp/tools/crm-read"
 import { registerCrmWriteTools, WRITE_TOOLS } from "@/lib/mcp/tools/crm-write"
+import { FINANCE_WRITE_TOOLS, registerFinanceRead, registerFinanceWrite } from "@/lib/mcp/tools/finance"
 import { RENT_WRITE_TOOLS, registerRentTools } from "@/lib/mcp/tools/rent"
 import { enabledToolNames, resolveModules } from "@/modules"
 
@@ -33,6 +34,9 @@ function descriptions(...registers: ((server: McpServer) => void)[]): Record<str
 
 const crmWrite = collect(registerCrmWriteTools)
 const rentTools = collect(registerRentTools)
+const financeRead = collect(registerFinanceRead)
+const financeWrite = collect(registerFinanceWrite)
+const financeTools = [...financeRead, ...financeWrite].sort()
 // Every tool, from the one list: a register function added to plugins.ts is counted here without an edit.
 const all = REGISTERS.flatMap(collect).sort()
 
@@ -47,6 +51,10 @@ describe("tool module registrations", () => {
     expect(crmWrite.filter((t) => !WRITE_TOOLS.has(t))).toEqual([])
     expect(rentTools.filter((t) => ["create_tenant", "update_tenant", "create_lease", "update_lease"].includes(t) !== RENT_WRITE_TOOLS.has(t))).toEqual([])
     expect([...RENT_WRITE_TOOLS].sort()).toEqual(["create_lease", "create_tenant", "update_lease", "update_tenant"])
+    // Finance's writes, read from what its register function registers, are all held by the same gate.
+    expect(financeWrite).toEqual([...FINANCE_WRITE_TOOLS].sort())
+    expect(financeRead.filter((t) => FINANCE_WRITE_TOOLS.has(t))).toEqual([])
+    expect(financeWrite.filter((t) => !WRITE_TOOL_NAMES.has(t))).toEqual([])
   })
 
   it("claims no write tool it does not register", () => {
@@ -55,8 +63,10 @@ describe("tool module registrations", () => {
 
   // The README's count went stale once: it is checked here now. ping is not counted.
   it("the README counts every tool served, ping excluded", () => {
-    expect(all.length).toBe(68)
-    expect(readFileSync("../../README.md", "utf8")).toContain("- 68 tools over the company data")
+    expect(all.length).toBe(79)
+    expect(all.length - financeTools.length).toBe(68)
+    expect(financeTools).toHaveLength(11)
+    expect(readFileSync("../../README.md", "utf8")).toContain("- 79 tools: 68 over the company data and 11 over Personal Finance")
   })
 })
 
@@ -104,9 +114,18 @@ describe("tools served per module set", () => {
     return names.sort()
   }
 
-  it("serves every tool when every plugin is listed, or none is", () => {
-    expect(served()).toEqual(all)
+  it("serves every tool when all four plugins are listed", () => {
+    expect(served("finance,consulting,accounting,rent")).toEqual(all)
+  })
+
+  // Personal Finance is opt-in: an unset list, or the three that existed before it, serves none of its tools.
+  it("serves every tool but Finance's when none is listed, or the other three are", () => {
+    expect(served()).toEqual(all.filter((t) => !financeTools.includes(t)))
     expect(served("consulting,accounting,rent")).toEqual(served())
+  })
+
+  it("serves only Finance's tools when it is the only plugin", () => {
+    expect(served("finance")).toEqual(financeTools)
   })
 
   it("serves only Consulting's tools when it is the only plugin: no invoice, cash, Quarters or rent tool", () => {

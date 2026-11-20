@@ -2,7 +2,7 @@
  * A module is one switchable slice of the app. Manifests are plain data and import
  * nothing.
  */
-export type ModuleId = "consulting" | "accounting" | "rent"
+export type ModuleId = "finance" | "consulting" | "accounting" | "rent"
 
 export interface ModuleManifest {
   id: ModuleId

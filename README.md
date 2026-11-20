@@ -110,8 +110,8 @@ server, which uses the Admin SDK and bypasses Firestore rules:
 
 ## MCP server
 
-- 68 tools over the company data, for Claude or any MCP client; a plugin
-  that is left out serves none of its tools
+- 79 tools: 68 over the company data and 11 over Personal Finance, for Claude or any
+  MCP client; a plugin that is left out serves none of its tools
 - Remote over HTTP at `/api/mcp` with OAuth 2.1 + PKCE (scopes `data:read` and
   `data:write`) or an API key, or local over stdio with no auth at all
 - `/file-work`: a Claude Code skill in [skills/file-work/](skills/file-work/SKILL.md) that
@@ -126,7 +126,9 @@ apps/web/src/   (kernel: packages/kernel; UI kit: packages/ui; Rent: packages/mo
 │   ├── (auth)/              # /login, /register (sign-up is closed)
 │   ├── (app)/               # /pipeline, /clients, /contracts, /collaborators,
 │   │                        #   /solutions, /invoices, /cash-book, /rent, /month-end,
-│   │                        #   /tasks, /plan, /deadlines, /costs, /settings
+│   │                        #   /tasks, /plan, /deadlines, /costs, /settings, and
+│   │                        #   Personal Finance's /dashboard, /accounts, /transactions,
+│   │                        #   /categories, /budgets, /goals, /recurring, /reports
 │   ├── api/                 # MCP server, OAuth endpoints, API keys
 │   └── [lang]/docs/         # Fumadocs pages
 ├── components/              # crm, plan, deadlines, company-expenses, cash-book,

@@ -9,15 +9,12 @@ import {
   Target,
 } from "lucide-react"
 
-import { type features } from "./lib/features"
-
 import type { LucideIcon } from "lucide-react"
 
 export interface FinanceNavItem {
   label: string
   href: string
   icon: LucideIcon
-  featureFlag?: keyof typeof features
 }
 
 export interface FinanceNavGroup {
@@ -27,15 +24,15 @@ export interface FinanceNavGroup {
 
 /** Finance's sidebar group. The host decides which groups show and gates routes by the same table. */
 export const FINANCE_NAV: FinanceNavGroup = {
-  label: "Personal",
+  label: "Personal Finance",
   items: [
     { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
     { label: "Accounts", href: "/accounts", icon: Wallet },
     { label: "Transactions", href: "/transactions", icon: ArrowLeftRight },
     { label: "Categories", href: "/categories", icon: Tags },
-    { label: "Budgets", href: "/budgets", icon: PiggyBank, featureFlag: "budgets" },
-    { label: "Goals", href: "/goals", icon: Target, featureFlag: "savingsGoals" },
-    { label: "Recurring", href: "/recurring", icon: CalendarClock, featureFlag: "recurring" },
+    { label: "Budgets", href: "/budgets", icon: PiggyBank },
+    { label: "Goals", href: "/goals", icon: Target },
+    { label: "Recurring", href: "/recurring", icon: CalendarClock },
     { label: "Reports", href: "/reports", icon: BarChart3 },
   ],
 }

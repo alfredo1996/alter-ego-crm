@@ -6,14 +6,16 @@ import { rent } from "@alter-ego/rent/manifest"
 
 import { accounting } from "./accounting/manifest"
 import { consulting } from "./consulting/manifest"
+import { finance } from "./finance/manifest"
 
 import type { ModuleId, ModuleManifest } from "@alter-ego/kernel/module"
 
-export const MODULES: ModuleManifest[] = [consulting, accounting, rent]
+// The order is the sidebar's: Personal Finance first, so `/` opens its Dashboard when it is on.
+export const MODULES: ModuleManifest[] = [finance, consulting, accounting, rent]
 
 /**
  * What an unset NEXT_PUBLIC_PLUGINS runs. A literal on purpose, not MODULES: a plugin added later
- * must stay off until a deployment lists it, so an upgrade never changes what it shows.
+ * (Personal Finance was) must stay off until a deployment lists it, so an upgrade never changes what it shows.
  */
 export const DEFAULT_PLUGINS: ModuleId[] = ["consulting", "accounting", "rent"]
 

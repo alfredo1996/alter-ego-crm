@@ -1,6 +1,6 @@
-import { globSync, readFileSync } from "node:fs"
-import path from "node:path"
+import { readFileSync } from "node:fs"
 
+import { FINANCE_WRITE_TOOLS } from "@alter-ego/finance/mcp"
 import { RENT_WRITE_TOOL_NAMES } from "@alter-ego/rent/tools"
 import { afterEach, describe, expect, it, vi } from "vitest"
 
@@ -8,7 +8,7 @@ import { afterEach, describe, expect, it, vi } from "vitest"
 import { PLUGIN_REGISTERS, WRITE_TOOL_NAMES, registerAllTools } from "@/lib/mcp/plugins"
 import { registerCrmWriteTools } from "@/lib/mcp/tools/crm-write"
 
-import { NOT_YET_WIRED, collectFacts, problems, type Facts } from "./plugin-checks"
+import { collectFacts, problems, type Facts } from "./plugin-checks"
 import { DEFAULT_PLUGINS, MODULES, allToolNames, enabledToolNames, gateTools, resolveModules } from "../index"
 
 import type { ModuleId } from "../index"
@@ -24,6 +24,10 @@ describe("selection", () => {
     ["consulting,accounting", ["accounting", "consulting"]],
     [" Consulting , ACCOUNTING , rent ", ["accounting", "consulting", "rent"]],
     ["rent,accounting,consulting,rent", ["accounting", "consulting", "rent"]],
+    // Finance is opt-in: listed alone it runs alone, listed with the rest it joins them.
+    ["finance", ["finance"]],
+    [" Finance ,consulting", ["consulting", "finance"]],
+    ["finance,consulting,accounting,rent", ["accounting", "consulting", "finance", "rent"]],
   ] as const)("listing %j runs %j", (plugins, expected) => {
     expect(on(plugins)).toEqual(expected)
   })
@@ -31,11 +35,17 @@ describe("selection", () => {
   it("names what the deployment runs, for Settings, in the registry's order", () => {
     expect(resolveModules(undefined).selection).toEqual({ variable: "NEXT_PUBLIC_PLUGINS", value: "consulting,accounting,rent" })
     expect(resolveModules(" Accounting,consulting ").selection).toEqual({ variable: "NEXT_PUBLIC_PLUGINS", value: "consulting,accounting" })
+    // Finance is first in the registry, so first in the list it names.
+    expect(resolveModules("rent,accounting,consulting,finance").selection).toEqual({ variable: "NEXT_PUBLIC_PLUGINS", value: "finance,consulting,accounting,rent" })
+  })
+
+  it("lists Finance first in the registry", () => {
+    expect(MODULES.map((m) => m.id)).toEqual(["finance", "consulting", "accounting", "rent"])
   })
 
   it("rejects an id it does not know", () => {
     expect(() => resolveModules("consulting,billing")).toThrow(
-      'Unknown plugin "billing" in NEXT_PUBLIC_PLUGINS. The plugins are: consulting, accounting, rent.',
+      'Unknown plugin "billing" in NEXT_PUBLIC_PLUGINS. The plugins are: finance, consulting, accounting, rent.',
     )
   })
 
@@ -47,6 +57,11 @@ describe("selection", () => {
 })
 
 describe("requirements", () => {
+  it("lets Finance stand alone: it needs no other plugin", () => {
+    expect(MODULES.find((m) => m.id === "finance")!.requires).toEqual([])
+    expect(() => resolveModules("finance")).not.toThrow()
+  })
+
   it("names the missing plugin and the way out", () => {
     expect(() => resolveModules("accounting")).toThrow(
       "Accounting needs Consulting, but NEXT_PUBLIC_PLUGINS does not list Consulting. List Consulting, or leave Accounting out too.",
@@ -65,19 +80,21 @@ describe("isModuleOn", () => {
   })
 
   it.each([
-    ["consulting", [true, false, false]],
-    ["consulting,accounting", [true, true, false]],
-    ["consulting,accounting,rent", [true, true, true]],
+    ["consulting", [false, true, false, false]],
+    ["consulting,accounting", [false, true, true, false]],
+    ["consulting,accounting,rent", [false, true, true, true]],
+    ["finance", [true, false, false, false]],
+    ["finance,consulting,accounting,rent", [true, true, true, true]],
   ] as const)("answers per id from the selection %j", async (plugins, expected) => {
     vi.stubEnv("NEXT_PUBLIC_PLUGINS", plugins)
     vi.resetModules()
     const { isModuleOn } = await import("../index")
-    expect((["consulting", "accounting", "rent"] as ModuleId[]).map((id) => isModuleOn(id))).toEqual(expected)
+    expect((["finance", "consulting", "accounting", "rent"] as ModuleId[]).map((id) => isModuleOn(id))).toEqual(expected)
   })
 })
 
 describe("the default", () => {
-  it("is the three plugins that exist today, so a plugin added later stays off until it is listed", () => {
+  it("is the three plugins that existed before Finance, so Finance stays off until it is listed", () => {
     expect(DEFAULT_PLUGINS).toEqual(["consulting", "accounting", "rent"])
   })
 })
@@ -86,7 +103,8 @@ describe("the default", () => {
 function registered(): string[] {
   const names: string[] = []
   const server = { registerTool: (name: string) => void names.push(name) } as unknown as McpServer
-  registerAllTools(server)
+  // Every plugin's tools, not only the default plugins': Finance is off unless listed.
+  registerAllTools(server, new Set(allToolNames()))
   return names
 }
 
@@ -100,7 +118,7 @@ describe("one tool list", () => {
   it("holds every write tool a plugin registers", () => {
     const names: string[] = []
     registerCrmWriteTools({ registerTool: (name: string) => void names.push(name) } as unknown as McpServer)
-    expect([...names, ...RENT_WRITE_TOOL_NAMES].filter((t) => !WRITE_TOOL_NAMES.has(t))).toEqual([])
+    expect([...names, ...RENT_WRITE_TOOL_NAMES, ...FINANCE_WRITE_TOOLS].filter((t) => !WRITE_TOOL_NAMES.has(t))).toEqual([])
   })
 
   // The route and the stdio server once each wrote the register calls out by hand.
@@ -116,6 +134,21 @@ describe("one tool list", () => {
 describe("tools", () => {
   it("assigns every registered tool to exactly one module", () => {
     expect(allToolNames().sort()).toEqual(registered().sort())
+  })
+
+  const FINANCE_TOOLS = [
+    "list_categories", "list_accounts", "list_tags", "list_transactions", "get_spending", "get_budget_status",
+    "add_transaction", "update_transaction", "delete_transaction", "create_account", "archive_account",
+  ]
+
+  it("gives Finance its eleven tools, and no other plugin one of them", () => {
+    expect(MODULES.find((m) => m.id === "finance")!.tools).toEqual(FINANCE_TOOLS)
+    expect(MODULES.filter((m) => m.id !== "finance").flatMap((m) => m.tools).filter((t) => FINANCE_TOOLS.includes(t))).toEqual([])
+  })
+
+  it("serves Finance's tools only when it is listed", () => {
+    expect([...enabledToolNames(resolveModules("finance").enabled)].sort()).toEqual([...FINANCE_TOOLS].sort())
+    expect(FINANCE_TOOLS.filter((t) => enabledToolNames(resolveModules(undefined).enabled).has(t))).toEqual([])
   })
 
   it("serves only the enabled modules' tools", () => {
@@ -148,7 +181,7 @@ describe("module manifests are plain data", () => {
     index: ["@/lib/env", "@alter-ego/kernel/module"],
     resolve: ["@alter-ego/kernel/module", "@alter-ego/rent/manifest"],
   }
-  it.each(["index", "resolve", "consulting/manifest", "accounting/manifest"])(
+  it.each(["index", "resolve", "finance/manifest", "consulting/manifest", "accounting/manifest"])(
     "%s imports only other module files",
     (file) => {
       const specs = [...readFileSync(`src/modules/${file}.ts`, "utf8").matchAll(/from\s+"([^"]+)"/g)].map((m) => m[1])
@@ -229,18 +262,13 @@ describe("a plugin is wired end to end", () => {
     expect(broken(change)).toEqual([message])
   })
 
-  // The one exemption is named, not a pattern: rent's fragment is still read, finance's two are not.
-  it("leaves out only the packages named as not yet wired", () => {
-    expect(NOT_YET_WIRED).toEqual(["finance"])
-    expect(collectFacts().fragments.map((f) => f.name).sort()).toEqual(["crm.rules", "rent.rules"])
+  // Every package's fragments are read, none is exempt: finance's two are spliced like crm's and rent's.
+  it("reads every rules fragment there is", () => {
+    expect(collectFacts().fragments.map((f) => f.name).sort()).toEqual(["crm.rules", "finance-root.rules", "finance.rules", "rent.rules"])
   })
 
-  // The exemption must expire: once a listed package's fragments are spliced in, this fails and the entry goes.
-  it.each(NOT_YET_WIRED)("%s is still unwired, so its exemption is still needed", (name) => {
-    const built = readFileSync(path.join("..", "..", "firestore.rules"), "utf8")
-    const fragments = globSync(path.join("..", "..", "packages", "modules", name, "src", "*.rules"))
-    expect(fragments.length).toBeGreaterThan(0)
-    expect(fragments.some((f) => !built.includes(readFileSync(f, "utf8").trim()))).toBe(true)
+  it("reads every package's index file, finance's included", () => {
+    expect(collectFacts().indexFiles.map((f) => f.name).sort()).toEqual(["firestore.indexes.json"])
   })
 
   it("holds for the real plugins", () => {
