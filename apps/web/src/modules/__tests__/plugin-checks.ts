@@ -118,7 +118,7 @@ export function collectFacts(): Facts {
     routes: new Set(NAV_GROUPS.flatMap((g) => g.items.map((i) => i.href)).filter((h) => existsSync(path.join("src", "app", "(app)", h, "page.tsx")))),
     fragments: rulesFiles.map((file) => ({ name: path.basename(file), text: readFileSync(file, "utf8") })),
     builtRules: readFileSync(repo("firestore.rules"), "utf8"),
-    // A module package keeps its own indexes in src/<name>.indexes.json, same shape as the root file.
+    // A module package keeps its own indexes in a src/*.indexes.json file (finance's is src/firestore.indexes.json), same shape as the root file.
     indexFiles: globSync(repo("packages", "modules", "*", "src", "*.indexes.json")).filter(wired).map((file) => ({
       name: path.basename(file),
       indexes: JSON.parse(readFileSync(file, "utf8")).indexes ?? [],

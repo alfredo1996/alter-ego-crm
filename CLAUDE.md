@@ -74,6 +74,7 @@ apps/web/                 # the Next.js app (@alter-ego/web); its own .env.local
 packages/
 ├── kernel/               # @alter-ego/kernel: money (currency), dates, the module contract.
 │                         # Imports nothing app-side
+├── modules/finance/      # @alter-ego/finance, copied from alter-ego at 68c19bd; not wired until issue 31
 ├── modules/rent/         # @alter-ego/rent, the first module package: types, zod, pure lease logic, its
 │                         # adapter slice (mock + Firebase), its rules fragment, hooks, the page and dialogs.
 │                         # The app only composes it. See "The Module Registry" below

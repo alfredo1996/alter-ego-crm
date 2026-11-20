@@ -59,7 +59,8 @@ export default defineConfig({
         "**/packages/modules/*/src/adapter-firebase.ts",
         // The finance package's carve-outs, as alter-ego had them: types and schemas, the Admin SDK adapter,
         // UI and pages, hooks and stores, the settings sections and floating buttons, and the Firestore
-        // I/O tool handlers (its emulator tests). Written per file under finance, never as `*`, so rent's
+        // I/O tool handlers and the Admin
+        // adapter, untested here until the emulator tests are ported (issue 31). Written per file under finance, never as `*`, so rent's
         // coverage is unchanged.
         "**/packages/modules/finance/src/adapter-admin.ts",
         "**/packages/modules/finance/src/types.ts",

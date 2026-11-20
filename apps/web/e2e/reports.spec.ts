@@ -3,15 +3,13 @@ import { test, expect } from "@playwright/test"
 import { signIn, navigateTo } from "./helpers/test-utils"
 
 import type { BackendAdapter } from "@/lib/backend"
+import type { FinanceAdapter } from "@alter-ego/finance/adapter"
 
 // Parked spec (issue 30): this app's DatabaseAdapter has no accounting half until issue 31 wires finance's
 // adapter, so the two seed calls are typed here. Issue 31 deletes this type and reads BackendAdapter again.
 type SeedBackend = {
   auth: BackendAdapter["auth"]
-  db: {
-    createAccount(userId: string, account: Record<string, unknown>): Promise<{ id: string }>
-    createTransaction(userId: string, transaction: Record<string, unknown>): Promise<unknown>
-  }
+  db: Pick<FinanceAdapter, "createAccount" | "createTransaction">
 }
 
 test.describe("Reports", () => {
