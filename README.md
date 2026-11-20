@@ -1,6 +1,6 @@
 # Alter Ego CRM
 
-> Run a small Italian SRL from one codebase: pipeline, contracts, time, invoices, the cash book.
+> Run a small Italian SRL from one codebase: pipeline, contracts, time, invoices, the cash book, and optionally your own money.
 
 ## Overview
 
@@ -15,6 +15,8 @@ one owner), built on Next.js 16. It covers:
   book over the company accounts (with the workbook import), costs, cost centres,
   the Month End close, and the runway and quarters on the Plan.
 - **Rent** — tenants and yearly leases, with payments linked to the month they cover.
+- **Personal Finance** (opt-in) — accounts, transactions, categories, budgets, savings goals, recurring
+  transactions, reports and a dashboard, for one person's own money.
 
 Each area is a **plugin**, and a deployment lists the ones it runs in
 `NEXT_PUBLIC_PLUGINS`: a plugin that is not listed has no pages, links or connector
@@ -121,7 +123,7 @@ server, which uses the Admin SDK and bypasses Firestore rules:
 ## Project Structure
 
 ```
-apps/web/src/   (kernel: packages/kernel; UI kit: packages/ui; Rent: packages/modules/rent)
+apps/web/src/   (kernel: packages/kernel; UI kit: packages/ui; Rent: packages/modules/rent; Personal Finance: packages/modules/finance)
 ├── app/
 │   ├── (auth)/              # /login, /register (sign-up is closed)
 │   ├── (app)/               # /pipeline, /clients, /contracts, /collaborators,
@@ -136,7 +138,7 @@ apps/web/src/   (kernel: packages/kernel; UI kit: packages/ui; Rent: packages/mo
 ├── hooks/                   # TanStack Query hooks (use-clients, use-invoices, …)
 ├── lib/
 │   ├── backend/             # Adapter: types.ts, mock.ts, firebase.ts, firebase-admin.ts
-│   ├── mcp/                 # MCP tools (crm-*, rent, shared helpers)
+│   ├── mcp/                 # MCP tools (crm-*, rent, finance-*, shared helpers)
 │   ├── oauth/               # OAuth 2.1 authorization server for the MCP endpoint
 │   ├── projection.ts        # Month-by-month company projection
 │   ├── engagement-burndown.ts # Contract budget burn-down
@@ -189,7 +191,7 @@ so edit those, never the output. The registry tests prove a deployment can switc
 Personal Finance, Accounting and Rent out, and that each plugin is wired end to end; `plugin-boundary.test.ts`
 keeps new imports between plugins out (a ratchet over `known-edges.ts`: a new import across plugins fails).
 
-### E2E Tests (Playwright) — 31 specs run, 10 parked
+### E2E Tests (Playwright) — 41 specs run
 
 ```bash
 pnpm test:e2e           # the whole suite, against a production mock build
@@ -198,7 +200,8 @@ pnpm test:e2e:modules   # a build that lists only Consulting
 
 Specs are in `apps/web/e2e/`: sign-in and sign-out, navigation, settings, the
 pipeline, clients and collaborators, invoices and invoice files, the cash book,
-Month End, Rent, the Plan, the phone layout and the loading states.
+Month End, Rent, Personal Finance (dashboard, accounts, transactions, categories, budgets, goals, recurring,
+reports), the Plan, the phone layout and the loading states.
 
 ### Contract Tests
 

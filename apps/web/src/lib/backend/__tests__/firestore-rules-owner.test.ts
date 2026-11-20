@@ -45,11 +45,18 @@ describe("owner-only rules", () => {
     expect(await call("GET", `users/${OWNER_UID}/company_accounts/a1`, OWNER_UID)).toBe(200)
   })
 
+  it("lets the owner read the system categories and its Personal Finance accounts (404: allowed, none stored)", async () => {
+    expect(await call("GET", "categories/c1", OWNER_UID)).toBe(404)
+    expect(await call("GET", `users/${OWNER_UID}/accounts/a1`, OWNER_UID)).toBe(404)
+  })
+
   it.each([
     ["writes its own area", () => call("PATCH", `users/${STRANGER}/company_accounts/a1`, STRANGER, account(STRANGER))],
     ["reads its own area", () => call("GET", `users/${STRANGER}/company_accounts/a1`, STRANGER)],
     ["reads the owner's area", () => call("GET", `users/${OWNER_UID}/company_accounts/a1`, STRANGER)],
     ["writes the owner's area", () => call("PATCH", `users/${OWNER_UID}/company_accounts/a2`, STRANGER, account(OWNER_UID))],
+    ["reads the system categories", () => call("GET", "categories/c1", STRANGER)],
+    ["reads the owner's Personal Finance accounts", () => call("GET", `users/${OWNER_UID}/accounts/a1`, STRANGER)],
   ])("refuses another signed-in uid that %s", async (_, run) => {
     expect(await run()).toBe(403)
   })
@@ -57,6 +64,8 @@ describe("owner-only rules", () => {
   it.each([
     ["reads the owner's area", () => call("GET", `users/${OWNER_UID}/company_accounts/a1`)],
     ["writes the owner's area", () => call("PATCH", `users/${OWNER_UID}/company_accounts/a2`, undefined, account(OWNER_UID))],
+    ["reads the system categories", () => call("GET", "categories/c1")],
+    ["reads the owner's Personal Finance accounts", () => call("GET", `users/${OWNER_UID}/accounts/a1`)],
   ])("refuses a signed-out caller that %s", async (_, run) => {
     expect(await run()).toBe(403)
   })

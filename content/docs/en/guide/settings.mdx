@@ -25,6 +25,15 @@ Choose how the app looks:
 
 Lists the plugins this deployment runs (Personal Finance, Consulting, Accounting, Rent) and which are off. The list is set where the app is deployed, with `NEXT_PUBLIC_PLUGINS`; a change applies on the next deploy.
 
+## When Personal Finance is on
+
+Four things join the page, and none shows with the plugin off:
+
+- **Preferences** gain **Currency** (used for totals and new accounts; each account keeps its own) and **Language and Format** (how numbers and dates are written).
+- **Categories & Tags**: **Open Categories** goes to the [Categories](/en/docs/guide/categories) page. **Tags** are labels that cut across categories. **Auto-categorization Rules** pair a **Pattern** with the **Category** to suggest (and an optional **Display as** name); each rule has a switch, and **Re-normalize All Transactions** applies them to what you already have.
+- **Data** gains **Export All Data (JSON)**, one file with accounts, transactions, budgets, goals, tags and rules.
+- **Danger Zone**, last on the page; each action asks you to confirm and none can be undone: **Delete All Transactions**, **Delete All Accounts & Transactions** and **Reset Categories to Default**.
+
 ## Data
 
 - **API Keys** — generate a key for your own tools; the key is shown once.

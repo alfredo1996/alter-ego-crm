@@ -32,6 +32,7 @@ test.describe("a deployment that lists only Consulting", () => {
   // Personal Finance is opt-in: a deployment that does not list it has no group, no link and no page of it.
   test("has no Personal Finance group or link", async ({ page }) => {
     const sidebar = page.getByRole("navigation", { name: "Main" })
+    await expect(sidebar.getByRole("link", { name: "Pipeline", exact: true })).toBeVisible()
     await expect(sidebar.getByText("Personal Finance")).toHaveCount(0)
     for (const name of ["Dashboard", "Accounts", "Transactions", "Categories", "Budgets", "Goals", "Recurring", "Reports"]) {
       await expect(sidebar.getByRole("link", { name, exact: true })).toHaveCount(0)
@@ -47,6 +48,10 @@ test.describe("a deployment that lists only Consulting", () => {
 
   test("Settings has none of Personal Finance's sections", async ({ page }) => {
     await navigateTo(page, "Settings", "/settings")
+    const index = page.getByRole("navigation", { name: "On this page" })
+    await expect(index.getByRole("link")).toHaveText(["Profile", "Preferences", "Plugins", "Data"])
+    await index.getByRole("link", { name: "Data" }).click()
+    await expect(page.getByRole("heading", { level: 2, name: "Data" })).toBeInViewport()
     for (const name of ["Categories & Tags", "Danger Zone"]) {
       await expect(page.getByRole("heading", { level: 2, name })).toHaveCount(0)
     }

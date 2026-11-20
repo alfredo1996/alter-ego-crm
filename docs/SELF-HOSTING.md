@@ -18,7 +18,7 @@ pnpm dev:emulator    # the app, on http://localhost:3003
 ```
 
 Sign-up is closed in the app: production admits one uid (the allowlist,
-`isAllowedUser()` in `firestore/base.rules`, and `owner()` in `storage.rules`).
+`isAllowedUser()` in `firestore/base.rules` and in `storage.rules`).
 `pnpm local:start` loads the rules with that allowlist open, so locally any
 account works. Create one with `pnpm seed:demo`, or in the Auth emulator UI on
 http://localhost:4000. To run your own deployment, put your uid in those two
@@ -46,7 +46,8 @@ no invoices, only your accounts, transactions, budgets, goals, recurring bills a
    set; it skips a project that already has them). Against the local emulator, `pnpm local:seed`. `pnpm seed` does the same
    with the variables read from `apps/web/.env.local`.
 5. **Name the owner.** Sign-up is closed, so create your user in the Firebase console (Authentication), put its uid in
-   `isAllowedUser()` in `firestore/base.rules`, in `owner()` in `storage.rules` and in `apps/web/src/lib/owner-uid.ts`,
+   `isAllowedUser()` in `firestore/base.rules` and in `storage.rules` (a finance-only deployment never deploys the latter),
+   and in `apps/web/src/lib/owner-uid.ts`,
    then run `pnpm rules:build` and deploy the rules again.
 
 ## Invoice files

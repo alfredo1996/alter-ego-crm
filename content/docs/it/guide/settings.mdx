@@ -25,6 +25,15 @@ Scegli l'aspetto dell'app:
 
 Elenca i plugin che questa installazione esegue (**Personal Finance**, **Consulting**, **Accounting**, **Rent**) e quali sono spenti. L'elenco si imposta dove l'app viene distribuita, con `NEXT_PUBLIC_PLUGINS`; una modifica si applica al prossimo deploy.
 
+## Quando Personal Finance è attivo
+
+Alla pagina si aggiungono quattro cose, che con il plugin spento non compaiono:
+
+- **Preferences** aggiunge **Currency** (usata per i totali e i nuovi conti; ogni conto mantiene la propria) e **Language and Format** (come vengono scritti numeri e date).
+- **Categories & Tags**: **Open Categories** porta alla pagina [Categorie](/it/docs/guide/categories). I **Tags** sono etichette trasversali alle categorie. Le **Auto-categorization Rules** abbinano un **Pattern** alla **Category** da suggerire (e un nome **Display as** facoltativo); ogni regola ha un interruttore e **Re-normalize All Transactions** le applica a ciò che hai già.
+- **Data** aggiunge **Export All Data (JSON)**, un file con conti, transazioni, budget, obiettivi, tag e regole.
+- **Danger Zone**, ultima nella pagina; ogni azione chiede conferma e nessuna si può annullare: **Delete All Transactions**, **Delete All Accounts & Transactions** e **Reset Categories to Default**.
+
 ## Dati
 
 - **API Keys** — genera una chiave per i tuoi strumenti; viene mostrata una sola volta.

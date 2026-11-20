@@ -48,7 +48,7 @@ test.describe("Settings", () => {
   })
 
   // Personal Finance is listed in this build: its Categories & Tags, Data and Danger Zone sections join the page (the
-  // Consulting-only build's list, with no Danger Zone, is in modules.spec.ts).
+  // Consulting-only build's list, with no Danger Zone, is checked in modules.spec.ts).
   test("should list the sections in an index and keep Danger Zone last", async ({ page }) => {
     const index = page.getByRole("navigation", { name: "On this page" })
     await expect(index.getByRole("link")).toHaveText(["Profile", "Preferences", "Plugins", "Categories & Tags", "Data", "Danger Zone"])

@@ -12,7 +12,7 @@ Deep planning mode for complex features. Produces a detailed implementation plan
 
 1. **Understand the requirement**
    - Clarify the goal with the user if ambiguous
-   - Say which plugins it touches (consulting, accounting, rent) and what happens with each left out of `NEXT_PUBLIC_PLUGINS`
+   - Say which plugins it touches (finance, consulting, accounting, rent) and what happens with each left out of `NEXT_PUBLIC_PLUGINS`
 
 2. **Research the codebase**
    - Read relevant existing files

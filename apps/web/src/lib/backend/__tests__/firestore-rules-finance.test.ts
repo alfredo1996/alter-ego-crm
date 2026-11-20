@@ -8,7 +8,9 @@
  * the company's own collections are in firestore-rules.test.ts.
  *
  * Ported from the personal-finance app's rules suite; the cases of the shared collections (API keys,
- * OAuth, MCP audit, default deny, signed out) are not repeated: firestore-rules.test.ts has them.
+ * OAuth, MCP audit) are not repeated: firestore-rules.test.ts has them. Who may reach root /categories
+ * and the finance collections (a uid outside the allowlist, a signed-out caller) is in
+ * firestore-rules-owner.test.ts, which loads the production rules; this suite opens the allowlist.
  *
  * Runs under the Firebase emulator (vitest.emulator.ts).
  */
