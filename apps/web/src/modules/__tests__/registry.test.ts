@@ -1,12 +1,14 @@
 import { readFileSync } from "node:fs"
 
+import { RENT_WRITE_TOOL_NAMES } from "@alter-ego/rent/tools"
 import { afterEach, describe, expect, it, vi } from "vitest"
 
-import { registerCrmReadTools } from "@/lib/mcp/tools/crm-read"
-import { registerCrmWriteTools } from "@/lib/mcp/tools/crm-write"
-import { registerRentTools } from "@/lib/mcp/tools/rent"
 
-import { DEFAULT_PLUGINS, allToolNames, enabledToolNames, gateTools, resolveModules } from "../index"
+import { PLUGIN_REGISTERS, WRITE_TOOL_NAMES, registerAllTools } from "@/lib/mcp/plugins"
+import { registerCrmWriteTools } from "@/lib/mcp/tools/crm-write"
+
+import { collectFacts, problems, type Facts } from "./plugin-checks"
+import { DEFAULT_PLUGINS, MODULES, allToolNames, enabledToolNames, gateTools, resolveModules } from "../index"
 
 import type { ModuleId } from "../index"
 import type { McpServer } from "@modelcontextprotocol/server"
@@ -83,9 +85,32 @@ describe("the default", () => {
 function registered(): string[] {
   const names: string[] = []
   const server = { registerTool: (name: string) => void names.push(name) } as unknown as McpServer
-  for (const r of [registerCrmReadTools, registerCrmWriteTools, registerRentTools]) r(server)
+  registerAllTools(server)
   return names
 }
+
+describe("one tool list", () => {
+  it("has an entry for every plugin the registry knows, and no other", () => {
+    expect(Object.keys(PLUGIN_REGISTERS).sort()).toEqual(MODULES.map((m) => m.id).sort())
+  })
+
+  // The scope gate reads WRITE_TOOL_NAMES alone: a write tool missing from it would answer a read-only token.
+  // Checked against the write tools each side declares itself, not against the union plugins.ts builds.
+  it("holds every write tool a plugin registers", () => {
+    const names: string[] = []
+    registerCrmWriteTools({ registerTool: (name: string) => void names.push(name) } as unknown as McpServer)
+    expect([...names, ...RENT_WRITE_TOOL_NAMES].filter((t) => !WRITE_TOOL_NAMES.has(t))).toEqual([])
+  })
+
+  // The route and the stdio server once each wrote the register calls out by hand.
+  it.each(["src/app/api/mcp/route.ts", "scripts/mcp-stdio.ts"])("%s names no register function: it reads lib/mcp/plugins", (file) => {
+    const source = readFileSync(file, "utf8")
+    expect(source.match(/register[A-Z]\w*Tools/g)?.filter((n) => n !== "registerAllTools") ?? []).toEqual([])
+    expect(source).toContain("@/lib/mcp/plugins")
+    // The module gate lives inside registerAllTools, so a caller cannot skip it.
+    expect(source).not.toContain("gateTools")
+  })
+})
 
 describe("tools", () => {
   it("assigns every registered tool to exactly one module", () => {
@@ -129,4 +154,81 @@ describe("module manifests are plain data", () => {
       expect([...new Set(specs.filter((s) => !s.startsWith(".")))].sort()).toEqual(externals[file] ?? ["@alter-ego/kernel/module"])
     },
   )
+})
+
+// A plugin is wired when every step below is done. Each check is proven on a fake plugin that skips just that step.
+describe("a plugin is wired end to end", () => {
+  const good = (): Facts => ({
+    plugins: [
+      { id: "alpha", tools: ["a_read", "a_write"], navGroups: 1, hrefs: ["/alpha"], registers: ["registerAlpha"] },
+      { id: "beta", tools: ["b_read"], navGroups: 1, hrefs: ["/beta", "/beta/more"], registers: ["registerAlpha", "registerBeta"] },
+    ],
+    registered: { registerAlpha: ["a_read", "a_write"], registerBeta: ["b_read"] },
+    writeTools: ["a_write"],
+    routes: new Set(["/alpha", "/beta", "/beta/more"]),
+    fragments: [{ name: "alpha.rules", text: "match /alpha/{id}" }],
+    builtRules: "rules { match /alpha/{id} }",
+    indexFiles: [{ name: "alpha.indexes.json", indexes: [{ collectionGroup: "alpha", fields: ["x"] }] }],
+    rootIndexes: [{ collectionGroup: "alpha", fields: ["x"] }, { collectionGroup: "other", fields: ["y"] }],
+  })
+  const broken = (change: (f: Facts) => void): string[] => {
+    const f = good()
+    change(f)
+    return problems(f)
+  }
+
+  it("finds nothing wrong with a fully wired plugin", () => {
+    expect(problems(good())).toEqual([])
+  })
+
+  it.each([
+    ["no nav group", (f: Facts) => (f.plugins[0].navGroups = 0), 'Plugin "alpha" has 0 nav groups in lib/nav.ts; it needs exactly one group with module: "alpha".'],
+    ["two nav groups", (f: Facts) => (f.plugins[1].navGroups = 2), 'Plugin "beta" has 2 nav groups in lib/nav.ts; it needs exactly one group with module: "beta".'],
+    [
+      "a link without a page",
+      (f: Facts) => f.plugins[1].hrefs.push("/beta/ghost"),
+      'Plugin "beta" links /beta/ghost in lib/nav.ts, but app/(app)/beta/ghost/page.tsx does not exist. Add the page, or remove the link.',
+    ],
+    [
+      "a manifest tool no register function registers",
+      (f: Facts) => f.plugins[0].tools.push("a_ghost"),
+      'Plugin "alpha" lists tool "a_ghost" in its manifest, but none of its register functions in lib/mcp/plugins.ts registers it. Register it, or take it off the manifest.',
+    ],
+    [
+      "a registered tool no manifest lists",
+      (f: Facts) => f.registered.registerBeta.push("b_stray"),
+      'Register function registerBeta registers "b_stray", but no manifest of a plugin that lists it in lib/mcp/plugins.ts lists that tool. Add it to a manifest, or stop registering it.',
+    ],
+    [
+      "a tool owned twice",
+      (f: Facts) => f.plugins[1].tools.push("a_read"),
+      'Tool "a_read" is listed by two manifests (alpha, beta). A tool belongs to exactly one plugin.',
+    ],
+    [
+      "a tool registered twice",
+      (f: Facts) => f.registered.registerAlpha.push("a_read"),
+      'Tool "a_read" is registered 2 times (registerAlpha, registerAlpha). Register it once.',
+    ],
+    [
+      "a write tool no manifest owns",
+      (f: Facts) => f.writeTools.push("orphan_write"),
+      'Write tool "orphan_write" is not owned by any manifest, so it is never served and its scope gate guards nothing. Add it to a manifest, or drop it from the write list.',
+    ],
+    [
+      "a rules fragment not spliced in",
+      (f: Facts) => f.fragments.push({ name: "beta.rules", text: "match /beta/{id}" }),
+      "Rules fragment beta.rules is not in firestore.rules. Splice it in (scripts/build-firestore-rules.mjs) and run pnpm rules:build.",
+    ],
+    [
+      "an index not in the root file",
+      (f: Facts) => f.indexFiles[0].indexes.push({ collectionGroup: "beta", fields: ["z"] }),
+      'Index file alpha.indexes.json holds an index that firestore.indexes.json does not: {"collectionGroup":"beta","fields":["z"]}. Add it to the root file.',
+    ],
+  ])("fails, naming the missing step, for %s", (_name, change, message) => {
+    expect(broken(change)).toEqual([message])
+  })
+
+  it("holds for the real plugins", () => {
+    expect(problems(collectFacts())).toEqual([])
+  })
 })

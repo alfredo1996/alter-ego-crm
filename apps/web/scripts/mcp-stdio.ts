@@ -18,11 +18,8 @@ import { McpServer } from "@modelcontextprotocol/server"
 import { serveStdio } from "@modelcontextprotocol/server/stdio"
 
 import { MCP_VERSION } from "@/lib/mcp/config"
+import { registerAllTools } from "@/lib/mcp/plugins"
 import { STDIO_USER_ID_ENV } from "@/lib/mcp/tools/context"
-import { registerCrmReadTools } from "@/lib/mcp/tools/crm-read"
-import { registerCrmWriteTools } from "@/lib/mcp/tools/crm-write"
-import { registerRentTools } from "@/lib/mcp/tools/rent"
-import { gateTools } from "@/modules"
 
 
 pinServerTimeZone()
@@ -47,11 +44,8 @@ serveStdio(() => {
     { capabilities: { tools: {} } }
   )
 
-  // Same gate as the HTTP route: the module registry.
-  const gated = gateTools(server)
-  registerCrmReadTools(gated)
-  registerCrmWriteTools(gated)
-  registerRentTools(gated)
+  // Same gate as the HTTP route: registerAllTools applies the module registry.
+  registerAllTools(server)
 
   return server
 })

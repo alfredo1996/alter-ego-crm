@@ -9,14 +9,15 @@ personal-finance app; nothing of that side is left, and there is no build mode.
 
 Some tests guard the structure, and working around one of them defeats the point:
 
-| Test                                                       | Enforces                                                                      |
-| ---------------------------------------------------------- | ----------------------------------------------------------------------------- |
-| `apps/web/src/lib/__tests__/firestore-rules-build.test.ts` | `firestore.rules` matches its sources                                         |
-| `apps/web/src/lib/mcp/__tests__/adapter-boundary.test.ts`  | The MCP layer never imports Firebase directly                                 |
-| `apps/web/src/modules/__tests__/registry.test.ts`          | Every MCP tool belongs to one module; a plugin can be left out                |
-| `packages/kernel/src/__tests__/boundary.test.ts`           | The kernel imports nothing app-side                                           |
-| `packages/ui/src/__tests__/boundary.test.ts`               | The UI kit imports only the kernel and its own dependencies                   |
-| `packages/modules/rent/src/__tests__/boundary.test.ts`     | A module package imports only the kernel, the UI kit and its own dependencies |
+| Test                                                       | Enforces                                                                                                                                          |
+| ---------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `apps/web/src/lib/__tests__/firestore-rules-build.test.ts` | `firestore.rules` matches its sources                                                                                                             |
+| `apps/web/src/lib/mcp/__tests__/adapter-boundary.test.ts`  | The MCP layer never imports Firebase directly                                                                                                     |
+| `apps/web/src/modules/__tests__/registry.test.ts`          | Every MCP tool belongs to one module; a plugin can be left out; a plugin is wired end to end (one nav group, its pages, tools, rules and indexes) |
+| `apps/web/src/modules/__tests__/plugin-boundary.test.ts`   | No new import from one plugin into another; a listed one that is gone must leave `known-edges.ts`                                                 |
+| `packages/kernel/src/__tests__/boundary.test.ts`           | The kernel imports nothing app-side                                                                                                               |
+| `packages/ui/src/__tests__/boundary.test.ts`               | The UI kit imports only the kernel and its own dependencies                                                                                       |
+| `packages/modules/rent/src/__tests__/boundary.test.ts`     | A module package imports only the kernel, the UI kit and its own dependencies                                                                     |
 
 **`firestore.rules` is generated.** Edit `firestore/base.rules` (the shared part:
 users, API keys, OAuth, `mcp_audit`), `firestore/crm.rules` or a module's
@@ -90,6 +91,17 @@ Each package has a boundary test (`packages/*/src/__tests__/boundary.test.ts`) t
 fails on a forbidden import. Type-check everything with `pnpm typecheck`.
 
 ## The Module Registry
+
+**One tool list, one import ratchet.** `apps/web/src/lib/mcp/plugins.ts` lists each plugin's register functions;
+the MCP route, `scripts/mcp-stdio.ts` and the tests read it, so a new tool module is added there and nowhere
+else (the tool names are in the manifests, and `registry.test.ts` fails when the two disagree). No plugin gains a
+new import of another: `plugin-boundary.test.ts` maps every file under `apps/web/src` to a plugin or to the host
+(`modules/__tests__/plugin-graph.ts`) and compares each import across plugins with `known-edges.ts`, seeded once
+from the source. A new edge fails, and so does a listed edge that is gone: delete it from the list, which only
+shrinks. A new file is host, and so unchecked, until a rule in `PATH_MAP` (`plugin-graph.ts`) places it: place
+it when you add it. Test files are not scanned. A file that serves two plugins (`crm-read.ts`, `crm-write.ts`) is host until
+it splits. A module package keeps its indexes in `src/<name>.indexes.json`; the registry test checks they are in
+the root `firestore.indexes.json`.
 
 The areas of the app are plugins (`consulting`, `accounting`, `rent`; the code says module), declared as data in
 `apps/web/src/modules`, and each sidebar group is one plugin. `NEXT_PUBLIC_PLUGINS` (comma-separated ids, opt-in,

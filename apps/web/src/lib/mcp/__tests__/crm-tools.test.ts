@@ -7,10 +7,11 @@ import { readFileSync } from "node:fs"
 
 import { describe, expect, it } from "vitest"
 
+import { REGISTERS, registerAllTools } from "@/lib/mcp/plugins"
 import { registerCrmReadTools } from "@/lib/mcp/tools/crm-read"
 import { registerCrmWriteTools, WRITE_TOOLS } from "@/lib/mcp/tools/crm-write"
 import { RENT_WRITE_TOOLS, registerRentTools } from "@/lib/mcp/tools/rent"
-import { enabledToolNames, gateTools, resolveModules } from "@/modules"
+import { enabledToolNames, resolveModules } from "@/modules"
 
 import type { McpServer } from "@modelcontextprotocol/server"
 
@@ -30,13 +31,13 @@ function descriptions(...registers: ((server: McpServer) => void)[]): Record<str
   return out
 }
 
-const crmRead = collect(registerCrmReadTools)
 const crmWrite = collect(registerCrmWriteTools)
 const rentTools = collect(registerRentTools)
+// Every tool, from the one list: a register function added to plugins.ts is counted here without an edit.
+const all = REGISTERS.flatMap(collect).sort()
 
 describe("tool module registrations", () => {
   it("registers every tool exactly once", () => {
-    const all = [...crmRead, ...crmWrite, ...rentTools]
     expect(new Set(all).size).toBe(all.length)
   })
 
@@ -54,7 +55,7 @@ describe("tool module registrations", () => {
 
   // The README's count went stale once: it is checked here now. ping is not counted.
   it("the README counts every tool served, ping excluded", () => {
-    expect(crmRead.length + crmWrite.length + rentTools.length).toBe(68)
+    expect(all.length).toBe(68)
     expect(readFileSync("../../README.md", "utf8")).toContain("- 68 tools over the company data")
   })
 })
@@ -99,15 +100,12 @@ describe("tool descriptions keep the owner's rules", () => {
 describe("tools served per module set", () => {
   const served = (plugins?: string): string[] => {
     const names: string[] = []
-    const gated = gateTools({ registerTool: (name: string) => void names.push(name) }, enabledToolNames(resolveModules(plugins).enabled))
-    for (const register of [registerCrmReadTools, registerCrmWriteTools, registerRentTools]) {
-      register(gated as unknown as McpServer)
-    }
+    registerAllTools({ registerTool: (name: string) => void names.push(name) } as unknown as McpServer, enabledToolNames(resolveModules(plugins).enabled))
     return names.sort()
   }
 
   it("serves every tool when every plugin is listed, or none is", () => {
-    expect(served()).toEqual([...crmRead, ...crmWrite, ...rentTools].sort())
+    expect(served()).toEqual(all)
     expect(served("consulting,accounting,rent")).toEqual(served())
   })
 
@@ -120,7 +118,7 @@ describe("tools served per module set", () => {
     expect(accounting.filter((t) => names.has(t))).toEqual([])
     expect(rentTools.filter((t) => names.has(t))).toEqual([])
     expect(["create_client", "list_solutions", "log_work"].filter((t) => names.has(t))).toEqual(["create_client", "list_solutions", "log_work"])
-    expect(names.size).toBe(crmRead.length + crmWrite.length + rentTools.length - 21 - 1 - rentTools.length)
+    expect(names.size).toBe(enabledToolNames(resolveModules("consulting").enabled).size)
   })
 
   it("leaves out the rent tools when Rent is not listed, and keeps Accounting's", () => {
