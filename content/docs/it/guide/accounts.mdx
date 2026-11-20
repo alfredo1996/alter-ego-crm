@@ -1,0 +1,57 @@
+---
+title: Conti
+description: Gestisci conti bancari, carte di credito, prestiti e contanti.
+---
+
+I conti sono i luoghi dove stanno i tuoi soldi: conti bancari, carte, contanti, investimenti e prestiti. Ogni transazione appartiene a un conto, e i totali della dashboard sono calcolati da essi.
+
+## Tipi di Conto
+
+Il campo **Type** offre Checking, Savings, Credit Card, Cash, Investment, Loan e Other. Puoi anche scrivere un tipo tuo. La pagina Accounts raggruppa i conti nelle schede Bank, Cards, Cash, Loans, Investments e Other, e un tipo personalizzato finisce in Other.
+
+**Counts as** dice come si legge un saldo sopra 0: tuo (**Asset**) o dovuto a te (**Liability**). Scegliendo un tipo predefinito viene impostato da solo; puoi cambiarlo. Il patrimonio netto è la somma dei saldi: quelli positivi contano come attività e quelli negativi come passività, qualunque sia il tipo.
+
+## Creare un Conto
+
+1. Apri **Accounts** dalla barra laterale.
+2. Seleziona **New Account**.
+3. Inserisci un nome, scegli o scrivi un tipo, scegli la valuta e inserisci il saldo iniziale.
+4. Seleziona **Create Account**.
+
+## Modificare un Conto
+
+Apri il menu del conto e scegli **Edit**. Il campo del saldo si chiama allora **Opening Balance**: è il saldo prima di qualsiasi transazione.
+
+## Archiviare ed Eliminare
+
+Il menu di un conto ha **Archive** e **Delete**.
+
+- **Archive** chiude un conto e ne conserva la cronologia. Un conto archiviato esce dai totali e dai selettori di conto, e compare nella scheda **Archived**. Un conto si può archiviare solo con saldo 0; altrimenti l'app ti chiede di spostare prima il saldo. **Unarchive** lo riporta indietro.
+- **Delete** vale solo per un conto senza transazioni. Se ne ha, l'app rifiuta, e Archive è il modo per chiuderlo.
+
+## Pagina Dettaglio Conto
+
+Seleziona un conto per aprire la sua pagina. Mostra un grafico **Balance Over Time**, cosa è entrato e uscito questo mese, e le transazioni del conto.
+
+## Prestiti e Persone
+
+Un conto **Loan** tiene traccia dei soldi prestati a persone o presi in prestito da loro. Quando il conto ha transazioni, una scheda **By Person** elenca una riga per persona, con un saldo:
+
+- La persona si legge dalla descrizione. Una descrizione come "Soldi Alice" mette la transazione nel gruppo **Alice**. Senza quel prefisso, l'intera descrizione è il nome del gruppo.
+- Sopra 0 ti devono dei soldi. Sotto 0 li devi tu. La scheda mostra i totali nelle due direzioni.
+- Un errore di battitura crea un secondo gruppo. Correggi la descrizione per unirli.
+
+Seleziona un nome per vedere le transazioni di quella persona.
+
+## Come Funzionano i Saldi
+
+Il saldo di un conto è il saldo iniziale aggiustato da ogni transazione:
+
+- Le **entrate** lo aumentano.
+- Le **uscite** lo diminuiscono.
+- I **trasferimenti** diminuiscono il conto di origine e aumentano quello di destinazione.
+
+## Suggerimenti
+
+- **Dai nomi chiari ai conti** — "Conto Corrente Principale" è meglio di "Conto 1".
+- **Riconcilia ogni tanto** — confronta il saldo con quello della banca.

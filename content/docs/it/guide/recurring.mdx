@@ -1,0 +1,45 @@
+---
+title: Transazioni Ricorrenti
+description: Automatizza entrate e uscite che si ripetono.
+---
+
+Una regola ricorrente descrive un pagamento che si ripete: affitto, stipendio, abbonamento, rata di un prestito. Alter Ego crea le transazioni in scadenza.
+
+## Creare una Regola
+
+1. Apri **Recurring** dalla barra laterale.
+2. Seleziona **New Rule**. La finestra si chiama **New Recurring Transaction**.
+3. Compila:
+   - **Description**, **Type** e **Amount**.
+   - **Account** e **Category**.
+   - **Frequency** — Daily, Weekly, Monthly o Yearly — e **Every (interval)**, quante di quelle unità passano tra una occorrenza e l'altra.
+   - **Start Date** e, se vuoi, **End Date**.
+4. Salva.
+
+## Come Vengono Create le Transazioni in Scadenza
+
+La prima volta che apri la pagina Recurring in un dato giorno, l'app crea le transazioni arrivate a scadenza. Compaiono nell'elenco Transactions come le altre, e puoi modificarle o eliminarle senza toccare la regola.
+
+## Pausa e Ripresa
+
+Ogni regola ha un pulsante **Pause**, che diventa **Resume** una volta in pausa. Una regola in pausa è segnata **Paused** e non crea nulla finché non la riprendi.
+
+## Le Schede
+
+- **Active** — le regole in corso senza dati di prestito.
+- **Loans** — le regole in corso con dati di prestito. La scheda compare solo se ne hai una, e la regola mostra un badge come "Loan 4.5% · 30 yr".
+- **Paused** — le regole che hai messo in pausa.
+- **Suggested** — addebiti ripetuti trovati negli ultimi 13 mesi che nessuna regola copre ancora. **Confirm** apre una nuova regola già compilata; un addebito scartato non viene più suggerito.
+
+Quando ci sono regole in corso, tre cifre stanno sopra le schede: **In every month**, **Out every month** e **Left every month**.
+
+## Modificare ed Eliminare
+
+Ogni regola ha i pulsanti **Edit** e **Delete**.
+
+## Suggerimenti
+
+- **Parti dai costi fissi** — affitto, utenze, abbonamenti.
+- **Usa una End Date** per gli impegni che finiscono.
+- **Le rate dei prestiti sono divise** — ogni pagamento generato da una regola di prestito è diviso in capitale e interessi secondo il piano di ammortamento.
+- **Controlla gli importi generati** — una transazione usa l'importo della regola, quindi correggilo se una bolletta varia.

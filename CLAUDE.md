@@ -74,6 +74,7 @@ apps/web/                 # the Next.js app (@alter-ego/web); its own .env.local
 packages/
 ├── kernel/               # @alter-ego/kernel: money (currency), dates, the module contract.
 │                         # Imports nothing app-side
+├── modules/finance/      # @alter-ego/finance, copied from alter-ego at 68c19bd; not wired until issue 31
 ├── modules/rent/         # @alter-ego/rent, the first module package: types, zod, pure lease logic, its
 │                         # adapter slice (mock + Firebase), its rules fragment, hooks, the page and dialogs.
 │                         # The app only composes it. See "The Module Registry" below
@@ -100,8 +101,8 @@ new import of another: `plugin-boundary.test.ts` maps every file under `apps/web
 from the source. A new edge fails, and so does a listed edge that is gone: delete it from the list, which only
 shrinks. A new file is host, and so unchecked, until a rule in `PATH_MAP` (`plugin-graph.ts`) places it: place
 it when you add it. Test files are not scanned. A file that serves two plugins (`crm-read.ts`, `crm-write.ts`) is host until
-it splits. A module package keeps its indexes in `src/<name>.indexes.json`; the registry test checks they are in
-the root `firestore.indexes.json`.
+it splits. A module package keeps its indexes in a `src/*.indexes.json` file (finance's is `src/firestore.indexes.json`); the registry test checks they are in
+the root `firestore.indexes.json`. `packages/modules/finance` is copied in but not wired: `NOT_YET_WIRED` in `plugin-checks.ts` exempts it from the rules and index checks until issue 31.
 
 The areas of the app are plugins (`consulting`, `accounting`, `rent`; the code says module), declared as data in
 `apps/web/src/modules`, and each sidebar group is one plugin. `NEXT_PUBLIC_PLUGINS` (comma-separated ids, opt-in,

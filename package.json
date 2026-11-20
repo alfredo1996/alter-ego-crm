@@ -10,7 +10,7 @@
     "build": "pnpm --filter @alter-ego/web build",
     "start": "pnpm --filter @alter-ego/web start",
     "lint": "eslint . --max-warnings 0",
-    "typecheck": "pnpm --filter @alter-ego/web --filter @alter-ego/kernel --filter @alter-ego/ui --filter @alter-ego/rent exec tsc --noEmit",
+    "typecheck": "pnpm --filter @alter-ego/web --filter @alter-ego/kernel --filter @alter-ego/ui --filter @alter-ego/rent --filter @alter-ego/finance exec tsc --noEmit",
     "test": "pnpm --filter @alter-ego/web test",
     "test:coverage": "pnpm --filter @alter-ego/web test:coverage",
     "rules:build": "node scripts/build-firestore-rules.mjs",

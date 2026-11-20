@@ -24,7 +24,23 @@ export default defineConfig({
     },
     {
       name: "chromium",
-      testIgnore: ["auth.spec.ts", "mobile.spec.ts", "modules.spec.ts"],
+      testIgnore: [
+        "auth.spec.ts",
+        "mobile.spec.ts",
+        "modules.spec.ts",
+        // Parked: Personal Finance's specs came with its package (issue 30) and cannot pass until its pages
+        // exist. Issue 31 wires them and deletes this list.
+        "account-detail.spec.ts",
+        "accounts.spec.ts",
+        "budgets.spec.ts",
+        "categories.spec.ts",
+        "dashboard.spec.ts",
+        "mm-import.spec.ts",
+        "recurring.spec.ts",
+        "reports.spec.ts",
+        "savings-goals.spec.ts",
+        "transactions.spec.ts",
+      ],
       use: { ...devices["Desktop Chrome"] },
     },
     {

@@ -186,7 +186,7 @@ so edit those, never the output. The registry tests prove a deployment can switc
 Accounting and Rent out, and that each plugin is wired end to end; `plugin-boundary.test.ts`
 keeps new imports between plugins out (a ratchet over `known-edges.ts`: a new import across plugins fails).
 
-### E2E Tests (Playwright) — 30 specs
+### E2E Tests (Playwright) — 31 specs run, 10 parked
 
 ```bash
 pnpm test:e2e           # the whole suite, against a production mock build

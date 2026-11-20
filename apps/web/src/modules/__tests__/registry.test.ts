@@ -1,4 +1,5 @@
-import { readFileSync } from "node:fs"
+import { globSync, readFileSync } from "node:fs"
+import path from "node:path"
 
 import { RENT_WRITE_TOOL_NAMES } from "@alter-ego/rent/tools"
 import { afterEach, describe, expect, it, vi } from "vitest"
@@ -7,7 +8,7 @@ import { afterEach, describe, expect, it, vi } from "vitest"
 import { PLUGIN_REGISTERS, WRITE_TOOL_NAMES, registerAllTools } from "@/lib/mcp/plugins"
 import { registerCrmWriteTools } from "@/lib/mcp/tools/crm-write"
 
-import { collectFacts, problems, type Facts } from "./plugin-checks"
+import { NOT_YET_WIRED, collectFacts, problems, type Facts } from "./plugin-checks"
 import { DEFAULT_PLUGINS, MODULES, allToolNames, enabledToolNames, gateTools, resolveModules } from "../index"
 
 import type { ModuleId } from "../index"
@@ -226,6 +227,20 @@ describe("a plugin is wired end to end", () => {
     ],
   ])("fails, naming the missing step, for %s", (_name, change, message) => {
     expect(broken(change)).toEqual([message])
+  })
+
+  // The one exemption is named, not a pattern: rent's fragment is still read, finance's two are not.
+  it("leaves out only the packages named as not yet wired", () => {
+    expect(NOT_YET_WIRED).toEqual(["finance"])
+    expect(collectFacts().fragments.map((f) => f.name).sort()).toEqual(["crm.rules", "rent.rules"])
+  })
+
+  // The exemption must expire: once a listed package's fragments are spliced in, this fails and the entry goes.
+  it.each(NOT_YET_WIRED)("%s is still unwired, so its exemption is still needed", (name) => {
+    const built = readFileSync(path.join("..", "..", "firestore.rules"), "utf8")
+    const fragments = globSync(path.join("..", "..", "packages", "modules", name, "src", "*.rules"))
+    expect(fragments.length).toBeGreaterThan(0)
+    expect(fragments.some((f) => !built.includes(readFileSync(f, "utf8").trim()))).toBe(true)
   })
 
   it("holds for the real plugins", () => {
