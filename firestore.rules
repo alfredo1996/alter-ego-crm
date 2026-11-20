@@ -70,6 +70,13 @@ service cloud.firestore {
         && incoming().keys().hasAll(required);
     }
 
+    // ── System categories — read-only for authenticated users ─────────────────
+
+    match /categories/{categoryId} {
+      allow read: if isSignedIn();
+      allow write: if false;
+    }
+
     // ── User data — scoped to owner ───────────────────────────────────────────
 
     match /users/{userId} {
@@ -899,6 +906,365 @@ service cloud.firestore {
         allow update: if isOwner(userId)
           && isClosedUpdate(userId, leaseKeys(), leaseRequired())
           && validLease(incoming());
+      }
+
+      // Account type is free-form (built-ins + user-created custom types).
+      function isValidAccountType(t) {
+        return t is string && t.size() > 0 && t.size() <= 50;
+      }
+
+      function isValidAccountKind(k) {
+        return k in ['asset', 'liability'];
+      }
+
+      function isValidTransactionType(t) {
+        return t in ['income', 'expense', 'transfer'];
+      }
+
+      // A transfer must name a destination distinct from its source, or the
+      // amount leaves the source account and is credited nowhere. request.resource
+      // .data is the MERGED document on update, so this holds for edits too.
+      function transferHasDestination(d) {
+        return d.type != 'transfer'
+          || (('transferToAccountId' in d)
+              && d.transferToAccountId is string
+              && d.transferToAccountId != d.accountId);
+      }
+
+      function isValidCurrency(c) {
+        return c in ['USD', 'EUR', 'GBP', 'JPY', 'CAD', 'AUD', 'CHF', 'MXN', 'BRL', 'ARS'];
+      }
+
+      function isValidBudgetPeriod(p) {
+        return p in ['monthly', 'yearly'];
+      }
+
+      function isValidRolloverMode(m) {
+        return m in ['reset', 'surplus', 'deficit', 'full'];
+      }
+
+      function isValidRecurringFrequency(f) {
+        return f in ['daily', 'weekly', 'monthly', 'yearly'];
+      }
+
+      function isValidCategoryGroup(g) {
+        return g in [
+          'income', 'housing', 'transportation', 'food', 'utilities',
+          'healthcare', 'personal', 'entertainment', 'education',
+          'savings', 'debt', 'other'
+        ];
+      }
+
+      // ── Accounts ──────────────────────────────────────────────────────────
+
+      match /accounts/{accountId} {
+        function accountKeys() {
+          return ['userId', 'name', 'type', 'kind', 'currency', 'balance', 'openingBalance', 'icon', 'color',
+                  'isArchived', 'createdAt', 'updatedAt'];
+        }
+        function validAccountDoc(d) {
+          return isShortString(d.get('name', 'x'), 100)
+            && isValidAccountType(d.get('type', 'x'))
+            && (d.get('kind', null) == null || isValidAccountKind(d.kind))
+            && isValidCurrency(d.get('currency', 'USD'))
+            && isNum(d.get('balance', 0))
+            && isNum(d.get('openingBalance', 0))
+            && isOptionalString(d.get('icon', null), 40)
+            && isOptionalString(d.get('color', null), 40)
+            && d.get('isArchived', false) is bool
+            && isStamped(d);
+        }
+        allow read, delete: if isOwner(userId);
+        allow create: if isOwner(userId)
+          && isClosedCreate(userId, accountKeys(), ['userId', 'name', 'type', 'currency', 'balance', 'isArchived'])
+          && validAccountDoc(incoming());
+        allow update: if isOwner(userId)
+          && isClosedUpdate(userId, accountKeys(), ['userId', 'name', 'type', 'currency', 'balance', 'isArchived'])
+          && validAccountDoc(incoming());
+      }
+
+      // ── Transactions ──────────────────────────────────────────────────────
+
+      match /transactions/{transactionId} {
+        function transactionKeys() {
+          return ['userId', 'accountId', 'type', 'amount', 'currency', 'categoryId', 'description', 'rawDescription',
+                  'date', 'notes', 'tagIds', 'splits', 'attachments', 'status', 'isRecurring', 'importHash',
+                  'excludeFromReports', 'transferToAccountId', 'linkedTransactionId', 'createdAt', 'updatedAt'];
+        }
+        function transactionRequired() {
+          return ['userId', 'accountId', 'type', 'amount', 'currency', 'description', 'date', 'tagIds', 'splits',
+                  'isRecurring', 'excludeFromReports'];
+        }
+        // The amount is the absolute value; type gives the direction. Lists are capped
+        // (MAX_SPLITS and MAX_TAG_IDS in schemas.ts are 100).
+        function validTransactionDoc(d) {
+          return isShortString(d.get('accountId', 'x'), 200)
+            && isValidTransactionType(d.get('type', 'income'))
+            && transferHasDestination(d)
+            && isNum(d.get('amount', 0))
+            && d.get('amount', 0) >= 0
+            && isValidCurrency(d.get('currency', 'USD'))
+            && isOptionalString(d.get('categoryId', null), 200)
+            && isShortString(d.get('description', 'x'), 500)
+            && (d.get('rawDescription', null) == null || d.rawDescription is string) // importer keeps the bank memo whole
+            && d.get('date', request.time) is timestamp
+            && isOptionalString(d.get('notes', null), 5000)
+            && d.get('tagIds', []) is list && d.get('tagIds', []).size() <= 100
+            && d.get('splits', []) is list && d.get('splits', []).size() <= 100
+            && d.get('attachments', []).size() == 0 // the app always writes []
+            && d.get('status', 'cleared') in ['pending', 'cleared', 'reconciled']
+            && d.get('isRecurring', false) is bool
+            && d.get('excludeFromReports', false) is bool
+            && isOptionalString(d.get('importHash', null), 200)
+            && isOptionalString(d.get('transferToAccountId', null), 200)
+            && isOptionalString(d.get('linkedTransactionId', null), 200)
+            && isStamped(d);
+        }
+        allow read, delete: if isOwner(userId);
+        allow create: if isOwner(userId)
+          && isClosedCreate(userId, transactionKeys(), transactionRequired())
+          && validTransactionDoc(incoming());
+        allow update: if isOwner(userId)
+          && isClosedUpdate(userId, transactionKeys(), transactionRequired())
+          && validTransactionDoc(incoming());
+      }
+
+      // ── Categories (user-created) ─────────────────────────────────────────
+
+      match /categories/{categoryId} {
+        function categoryKeys() {
+          return ['userId', 'name', 'group', 'icon', 'color', 'parentId', 'isDefault', 'createdAt', 'updatedAt'];
+        }
+        function categoryRequired() {
+          return ['userId', 'name', 'group', 'icon', 'color', 'isDefault'];
+        }
+        function validCategoryDoc(d) {
+          return isShortString(d.get('name', 'x'), 100)
+            && isValidCategoryGroup(d.get('group', 'other'))
+            && isShortString(d.get('icon', 'x'), 40)
+            && isShortString(d.get('color', 'x'), 20)
+            && isOptionalString(d.get('parentId', null), 200)
+            && d.get('isDefault', false) == false
+            && isStamped(d);
+        }
+        allow read, delete: if isOwner(userId);
+        allow create: if isOwner(userId)
+          && isClosedCreate(userId, categoryKeys(), categoryRequired())
+          && validCategoryDoc(incoming());
+        allow update: if isOwner(userId)
+          && isClosedUpdate(userId, categoryKeys(), categoryRequired())
+          && validCategoryDoc(incoming());
+      }
+
+      // ── Budgets ───────────────────────────────────────────────────────────
+
+      match /budgets/{budgetId} {
+        function budgetKeys() {
+          return ['userId', 'name', 'categoryId', 'amount', 'currency', 'period', 'rolloverMode', 'createdAt', 'updatedAt'];
+        }
+        function budgetRequired() {
+          return ['userId', 'name', 'amount', 'currency', 'period', 'rolloverMode'];
+        }
+        function validBudgetDoc(d) {
+          return isShortString(d.get('name', 'x'), 100)
+            && isOptionalString(d.get('categoryId', null), 200)
+            && isNum(d.get('amount', 0))
+            && d.get('amount', 0) >= 0
+            && isValidCurrency(d.get('currency', 'USD'))
+            && isValidBudgetPeriod(d.get('period', 'monthly'))
+            && isValidRolloverMode(d.get('rolloverMode', 'reset'))
+            && isStamped(d);
+        }
+        allow read, delete: if isOwner(userId);
+        allow create: if isOwner(userId)
+          && isClosedCreate(userId, budgetKeys(), budgetRequired())
+          && validBudgetDoc(incoming());
+        allow update: if isOwner(userId)
+          && isClosedUpdate(userId, budgetKeys(), budgetRequired())
+          && validBudgetDoc(incoming());
+      }
+
+      // ── Savings Goals ─────────────────────────────────────────────────────
+
+      match /savings_goals/{goalId} {
+        function goalKeys() {
+          return ['userId', 'name', 'targetAmount', 'currentAmount', 'currency', 'targetDate', 'icon', 'color',
+                  'isCompleted', 'createdAt', 'updatedAt'];
+        }
+        function goalRequired() {
+          return ['userId', 'name', 'targetAmount', 'currentAmount', 'currency', 'isCompleted'];
+        }
+        function validGoalDoc(d) {
+          return isShortString(d.get('name', 'x'), 100)
+            && isNum(d.get('targetAmount', 1))
+            && d.get('targetAmount', 1) > 0
+            && isNum(d.get('currentAmount', 0))
+            && d.get('currentAmount', 0) >= 0
+            && isValidCurrency(d.get('currency', 'USD'))
+            && (d.get('targetDate', null) == null || d.targetDate is timestamp)
+            && isOptionalString(d.get('icon', null), 40)
+            && isOptionalString(d.get('color', null), 40)
+            && d.get('isCompleted', false) is bool
+            && isStamped(d);
+        }
+        allow read, delete: if isOwner(userId);
+        allow create: if isOwner(userId)
+          && isClosedCreate(userId, goalKeys(), goalRequired())
+          && validGoalDoc(incoming());
+        allow update: if isOwner(userId)
+          && isClosedUpdate(userId, goalKeys(), goalRequired())
+          && validGoalDoc(incoming());
+      }
+
+      // ── Recurring Transactions ────────────────────────────────────────────
+
+      match /recurring/{recurringId} {
+        function recurringKeys() {
+          return ['userId', 'accountId', 'type', 'amount', 'currency', 'categoryId', 'description', 'notes', 'frequency',
+                  'interval', 'startDate', 'endDate', 'nextDueDate', 'isActive', 'loanMeta', 'createdAt', 'updatedAt'];
+        }
+        function recurringRequired() {
+          return ['userId', 'accountId', 'type', 'amount', 'currency', 'description', 'frequency', 'interval',
+                  'startDate', 'isActive'];
+        }
+        function validRecurringDoc(d) {
+          return isShortString(d.get('accountId', 'x'), 200)
+            && d.get('type', 'expense') in ['income', 'expense']
+            && isNum(d.get('amount', 0))
+            && d.get('amount', 0) >= 0
+            && isValidCurrency(d.get('currency', 'USD'))
+            && isOptionalString(d.get('categoryId', null), 200)
+            && isShortString(d.get('description', 'x'), 500)
+            && isOptionalString(d.get('notes', null), 5000)
+            && isValidRecurringFrequency(d.get('frequency', 'monthly'))
+            && d.get('interval', 1) is int
+            && d.get('interval', 1) >= 1
+            && d.get('interval', 1) <= 1000
+            && d.get('startDate', request.time) is timestamp
+            && (d.get('endDate', null) == null || d.endDate is timestamp)
+            && d.get('nextDueDate', request.time) is timestamp
+            && d.get('isActive', true) is bool
+            && (d.get('loanMeta', null) == null || (d.loanMeta is map
+              && d.loanMeta.keys().hasOnly(['loanAmount', 'annualRate', 'termMonths', 'paymentStartMonth'])
+              && isNum(d.loanMeta.get('loanAmount', 0)) && isNum(d.loanMeta.get('annualRate', 0))
+              && isNum(d.loanMeta.get('termMonths', 0)) && isNum(d.loanMeta.get('paymentStartMonth', 0))))
+            && isStamped(d);
+        }
+        allow read, delete: if isOwner(userId);
+        allow create: if isOwner(userId)
+          && isClosedCreate(userId, recurringKeys(), recurringRequired())
+          && validRecurringDoc(incoming());
+        allow update: if isOwner(userId)
+          && isClosedUpdate(userId, recurringKeys(), recurringRequired())
+          && validRecurringDoc(incoming());
+      }
+
+      // ── Tags ──────────────────────────────────────────────────────────────
+
+      match /tags/{tagId} {
+        function validTagDoc(d) {
+          return isShortString(d.get('name', 'x'), 50)
+            && isShortString(d.get('color', 'x'), 20)
+            && isStamped(d);
+        }
+        allow read, delete: if isOwner(userId);
+        allow create: if isOwner(userId)
+          && isClosedCreate(userId, ['userId', 'name', 'color', 'createdAt'], ['userId', 'name', 'color'])
+          && validTagDoc(incoming());
+        allow update: if isOwner(userId)
+          && isClosedUpdate(userId, ['userId', 'name', 'color', 'createdAt'], ['userId', 'name', 'color'])
+          && validTagDoc(incoming());
+      }
+
+      // ── Categorization Rules ──────────────────────────────────────────────
+
+      match /categorization_rules/{ruleId} {
+        function ruleKeys() {
+          return ['userId', 'pattern', 'categoryId', 'displayAs', 'isActive', 'createdAt', 'updatedAt'];
+        }
+        function validRuleDoc(d) {
+          return isShortString(d.get('pattern', 'x'), 200)
+            && isShortString(d.get('categoryId', 'x'), 200)
+            && isOptionalString(d.get('displayAs', null), 200)
+            && d.get('isActive', true) is bool
+            && isStamped(d);
+        }
+        allow read, delete: if isOwner(userId);
+        allow create: if isOwner(userId)
+          && isClosedCreate(userId, ruleKeys(), ['userId', 'pattern', 'categoryId', 'isActive'])
+          && validRuleDoc(incoming());
+        allow update: if isOwner(userId)
+          && isClosedUpdate(userId, ruleKeys(), ['userId', 'pattern', 'categoryId', 'isActive'])
+          && validRuleDoc(incoming());
+      }
+
+      // ── Dismissed Subscription Patterns ──────────────────────────────────
+      //
+      // patternKey is computePatternKey (subscription-detector.ts): a description of up
+      // to 500 characters plus the account id and the amount in cents, so the cap is
+      // 800. Created and deleted, never updated.
+
+      match /dismissed_subscription_patterns/{patternId} {
+        allow read, delete: if isOwner(userId);
+        allow create: if isOwner(userId)
+          && isClosedCreate(userId, ['userId', 'patternKey', 'dismissedAt'], ['userId', 'patternKey'])
+          && isShortString(incoming().patternKey, 800)
+          && incoming().get('dismissedAt', request.time) is timestamp;
+      }
+
+      // ── Net Worth Snapshots ───────────────────────────────────────────────
+
+      match /account_balance_snapshots/{snapshotId} {
+        function validBalanceSnapshot(d) {
+          return isShortString(d.get('accountId', 'x'), 200)
+            && isNum(d.get('balance', 0))
+            && d.get('date', request.time) is timestamp
+            && d.get('createdAt', request.time) is timestamp;
+        }
+        allow read: if isOwner(userId);
+        allow create: if isOwner(userId)
+          && isClosedCreate(userId, ['userId', 'accountId', 'balance', 'date', 'createdAt'], ['userId', 'accountId', 'balance'])
+          && validBalanceSnapshot(incoming());
+        allow update: if isOwner(userId)
+          && isClosedUpdate(userId, ['userId', 'accountId', 'balance', 'date', 'createdAt'], ['userId', 'accountId', 'balance'])
+          && validBalanceSnapshot(incoming());
+        // Owner-only, for "start from zero" — history of deleted accounts would otherwise linger.
+        allow delete: if isOwner(userId);
+      }
+
+      // Expense totals per month, the rollup behind rollover budgets. Doc id is the
+      // month (yyyy-MM). Rules cannot walk a map, so the per-category values are not checked
+      // as numbers here. The app writes them with increment() (stageTotals), and fillMonth
+      // replaces the whole document with t.set inside a transaction.
+      match /monthly_totals/{month} {
+        allow read, delete: if isOwner(userId);
+        allow create, update: if isOwner(userId)
+          && month.matches('^[0-9]{4}-(0[1-9]|1[0-2])$')
+          && incoming().keys().hasOnly(['total', 'expenseByCategory', 'n', 'ready'])
+          && (!('total' in incoming()) || isNum(incoming().total))
+          && (!('n' in incoming()) || isNum(incoming().n))
+          && (!('ready' in incoming()) || incoming().ready is bool)
+          && (!('expenseByCategory' in incoming())
+              || (incoming().expenseByCategory is map && incoming().expenseByCategory.size() <= 500));
+      }
+
+      match /net_worth_snapshots/{snapshotId} {
+        function validNetWorthDoc(d) {
+          return d.get('date', request.time) is timestamp
+            && isNum(d.get('totalAssets', 0))
+            && isNum(d.get('totalLiabilities', 0))
+            && isNum(d.get('netWorth', 0));
+        }
+        allow read: if isOwner(userId);
+        allow create: if isOwner(userId)
+          && isClosedCreate(userId, ['userId', 'date', 'totalAssets', 'totalLiabilities', 'netWorth'],
+                            ['userId', 'totalAssets', 'totalLiabilities', 'netWorth'])
+          && validNetWorthDoc(incoming());
+        allow update: if isOwner(userId)
+          && isClosedUpdate(userId, ['userId', 'date', 'totalAssets', 'totalLiabilities', 'netWorth'],
+                            ['userId', 'totalAssets', 'totalLiabilities', 'netWorth'])
+          && validNetWorthDoc(incoming());
+        allow delete: if isOwner(userId);
       }
 
       // ── MCP-only collections (server-only, Admin SDK) ─────────────────────
