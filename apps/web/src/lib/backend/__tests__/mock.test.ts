@@ -117,6 +117,17 @@ describe("__resetMockState", () => {
     expect(user).toBeNull()
   })
 
+  // Personal Finance's slice keeps its own maps (adapter-mock), so the app's reset has to clear them too.
+  it("clears the personal accounts, transactions and budgets", async () => {
+    const account = await db.createAccount(USER, { name: "Wallet", type: "cash", currency: "EUR", balance: 50 })
+    await db.createTransaction(USER, { accountId: account.id, type: "expense", amount: 5, currency: "EUR", description: "Coffee", date: new Date() })
+    expect((await db.getAccounts(USER)).map((a) => a.name)).toEqual(["Wallet"])
+    __resetMockState()
+    adapter = createMockAdapter()
+    expect(await adapter.db.getAccounts(USER)).toEqual([])
+    expect((await adapter.db.getTransactions(USER)).data).toEqual([])
+  })
+
   it("clears timecards", async () => {
     await db.setTimecard(USER, { engagementId: "e1", date: "2026-09-21", hours: 6 })
     __resetMockState()

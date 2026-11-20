@@ -19,10 +19,13 @@ export default defineConfig({
     exclude: [
       "src/lib/backend/__tests__/firebase.adapter.test.ts",
       "src/lib/backend/__tests__/firebase.freshness.test.ts",
+      "src/lib/backend/__tests__/firebase.budgets.test.ts",
+      "src/lib/backend/__tests__/firebase.dashboard.test.ts",
       "src/lib/backend/__tests__/firebase.files.test.ts",
       "src/lib/backend/__tests__/firebaseadmin.adapter.test.ts",
       "src/lib/backend/__tests__/firebase.api-keys.test.ts",
       "src/lib/backend/__tests__/firestore-rules.test.ts",
+      "src/lib/backend/__tests__/firestore-rules-finance.test.ts",
       "src/lib/backend/__tests__/firestore-rules-owner.test.ts",
       "src/lib/backend/__tests__/storage-rules.test.ts",
       "src/lib/oauth/__tests__/flow.emulator.test.ts",
@@ -33,9 +36,11 @@ export default defineConfig({
       "src/lib/mcp/__tests__/solutions.emulator.test.ts",
       "src/lib/mcp/__tests__/collaborators.emulator.test.ts",
       "src/lib/mcp/__tests__/rent.emulator.test.ts",
+      "src/lib/mcp/__tests__/finance-read.emulator.test.ts",
+      "src/lib/mcp/__tests__/finance-write.emulator.test.ts",
       "src/lib/mcp/__tests__/invoice-files.emulator.test.ts",
     ],
-    setupFiles: ["./vitest.setup.ts"],
+    setupFiles: ["./vitest.setup.ts", "./vitest.finance-host.setup.ts"],
     coverage: {
       provider: "v8",
       // the kernel and UI helpers live outside apps/web
@@ -57,11 +62,10 @@ export default defineConfig({
         "**/packages/modules/*/src/**/__tests__/**",
         // Pure Firestore I/O — exercised by the module's emulator contract
         "**/packages/modules/*/src/adapter-firebase.ts",
-        // The finance package's carve-outs, as alter-ego had them: types and schemas, the Admin SDK adapter,
-        // UI and pages, hooks and stores, the settings sections and floating buttons, and the Firestore
-        // I/O tool handlers and the Admin
-        // adapter, untested here until the emulator tests are ported (issue 31). Written per file under finance, never as `*`, so rent's
-        // coverage is unchanged.
+        // The finance package's carve-outs, written per file, never as `*`, so rent's coverage is unchanged: types and
+        // schemas, UI and pages, hooks and stores, the settings sections and floating buttons (Playwright covers them),
+        // and the Firestore I/O (the Admin SDK adapter and the tool handlers), which the emulator suite exercises:
+        // describeFinanceAdminContract, and finance-read and finance-write.emulator.test.ts.
         "**/packages/modules/finance/src/adapter-admin.ts",
         "**/packages/modules/finance/src/types.ts",
         "**/packages/modules/finance/src/schemas.ts",

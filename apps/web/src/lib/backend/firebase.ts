@@ -1,3 +1,4 @@
+import { createFirebaseFinance } from "@alter-ego/finance/adapter-firebase"
 import { createFirebaseRent } from "@alter-ego/rent/adapter-firebase"
 import {
   signInWithEmailAndPassword,
@@ -1520,6 +1521,9 @@ function createFirebaseDbAdapter(): DatabaseAdapter {
     async deleteJournalEntry(userId: string, entryId: string): Promise<void> {
       await deleteDoc(docRef(userId, "journal", entryId))
     },
+
+    // The personal finance plugin's slice: it takes the Firestore getter, and keeps its own SDK helpers.
+    ...createFirebaseFinance(getFirebaseDb),
 
     // The rent module's slice: it takes our helpers instead of importing the SDK.
     ...createFirebaseRent({ col, docRef, now, getDocs, readBack, addDoc, updateDoc, toDate, isPermissionDenied }),

@@ -56,6 +56,7 @@ import type {
   CreateAllocationInput,
   UpdateAllocationInput,
 } from "@/types"
+import type { FinanceAdapter } from "@alter-ego/finance/adapter"
 import type { RentAdapter } from "@alter-ego/rent/adapter"
 
 export interface AuthAdapter {
@@ -252,10 +253,10 @@ export interface CrmAdapter {
 }
 
 /**
- * Everything a client reads and writes: the company side, rent and API keys.
+ * Everything a client reads and writes: the company side, rent, personal finance and API keys.
  * Every adapter in this repo implements this.
  */
-export interface DatabaseAdapter extends ApiKeysAdapter, CrmAdapter, RentAdapter {}
+export interface DatabaseAdapter extends ApiKeysAdapter, CrmAdapter, FinanceAdapter, RentAdapter {}
 
 /**
  * Server-only surfaces. These are deliberately NOT on DatabaseAdapter: the

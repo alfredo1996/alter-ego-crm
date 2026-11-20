@@ -11,6 +11,7 @@
 
 import { createHash } from "node:crypto"
 
+import { createFinanceAdmin } from "@alter-ego/finance/adapter-admin"
 import { createFirebaseRent } from "@alter-ego/rent/adapter-firebase"
 import { FieldValue, Timestamp, type DocumentData } from "firebase-admin/firestore"
 
@@ -1381,3 +1382,27 @@ export const updateTenant = rentSlice.updateTenant
 export const getLeases = rentSlice.getLeases
 export const createLease = rentSlice.createLease
 export const updateLease = rentSlice.updateLease
+
+// ── Personal finance ────────────────────────────────────────────────────────
+// The finance package's Admin SDK slice. It takes the Firestore getter and reads it on every call, never
+// at creation, so importing this module still initialises nothing. The Admin SDK bypasses the rules; the
+// package checks every write itself.
+const financeAdmin = createFinanceAdmin(() => getAdminFirestore())
+export const {
+  getAccounts,
+  getAccount,
+  getBudgets,
+  getTags,
+  getRecurringTransactions,
+  getLastActivity,
+  getTransactions,
+  getTransaction,
+  createTransaction,
+  updateTransaction,
+  deleteTransaction,
+  getMonthlyTotals,
+  createAccount,
+  updateAccount,
+  getCategories,
+  getReportData,
+} = financeAdmin
