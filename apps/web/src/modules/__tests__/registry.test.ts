@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from "vitest"
 
 import { PLUGIN_REGISTERS, REGISTERS, WRITE_TOOL_NAMES, registerAllTools } from "@/lib/mcp/plugins"
 
+import { collectFacts, problems, type Facts } from "./plugin-checks"
 import { DEFAULT_PLUGINS, MODULES, allToolNames, enabledToolNames, gateTools, resolveModules } from "../index"
 
 import type { ModuleId } from "../index"
@@ -150,4 +151,81 @@ describe("module manifests are plain data", () => {
       expect([...new Set(specs.filter((s) => !s.startsWith(".")))].sort()).toEqual(externals[file] ?? ["@alter-ego/kernel/module"])
     },
   )
+})
+
+// A plugin is wired when every step below is done. Each check is proven on a fake plugin that skips just that step.
+describe("a plugin is wired end to end", () => {
+  const good = (): Facts => ({
+    plugins: [
+      { id: "alpha", tools: ["a_read", "a_write"], navGroups: 1, hrefs: ["/alpha"], registers: ["registerAlpha"] },
+      { id: "beta", tools: ["b_read"], navGroups: 1, hrefs: ["/beta", "/beta/more"], registers: ["registerAlpha", "registerBeta"] },
+    ],
+    registered: { registerAlpha: ["a_read", "a_write"], registerBeta: ["b_read"] },
+    writeTools: ["a_write"],
+    routes: new Set(["/alpha", "/beta", "/beta/more"]),
+    fragments: [{ name: "alpha.rules", text: "match /alpha/{id}" }],
+    builtRules: "rules { match /alpha/{id} }",
+    indexFiles: [{ name: "alpha.indexes.json", indexes: [{ collectionGroup: "alpha", fields: ["x"] }] }],
+    rootIndexes: [{ collectionGroup: "alpha", fields: ["x"] }, { collectionGroup: "other", fields: ["y"] }],
+  })
+  const broken = (change: (f: Facts) => void): string[] => {
+    const f = good()
+    change(f)
+    return problems(f)
+  }
+
+  it("finds nothing wrong with a fully wired plugin", () => {
+    expect(problems(good())).toEqual([])
+  })
+
+  it.each([
+    ["no nav group", (f: Facts) => (f.plugins[0].navGroups = 0), 'Plugin "alpha" has 0 nav groups in lib/nav.ts; it needs exactly one group with module: "alpha".'],
+    ["two nav groups", (f: Facts) => (f.plugins[1].navGroups = 2), 'Plugin "beta" has 2 nav groups in lib/nav.ts; it needs exactly one group with module: "beta".'],
+    [
+      "a link without a page",
+      (f: Facts) => f.plugins[1].hrefs.push("/beta/ghost"),
+      'Plugin "beta" links /beta/ghost in lib/nav.ts, but app/(app)/beta/ghost/page.tsx does not exist. Add the page, or remove the link.',
+    ],
+    [
+      "a manifest tool no register function registers",
+      (f: Facts) => f.plugins[0].tools.push("a_ghost"),
+      'Plugin "alpha" lists tool "a_ghost" in its manifest, but none of its register functions in lib/mcp/plugins.ts registers it. Register it, or take it off the manifest.',
+    ],
+    [
+      "a registered tool no manifest lists",
+      (f: Facts) => f.registered.registerBeta.push("b_stray"),
+      'Register function registerBeta registers "b_stray", but no manifest of a plugin that lists it in lib/mcp/plugins.ts lists that tool. Add it to a manifest, or stop registering it.',
+    ],
+    [
+      "a tool owned twice",
+      (f: Facts) => f.plugins[1].tools.push("a_read"),
+      'Tool "a_read" is listed by two manifests (alpha, beta). A tool belongs to exactly one plugin.',
+    ],
+    [
+      "a tool registered twice",
+      (f: Facts) => f.registered.registerAlpha.push("a_read"),
+      'Tool "a_read" is registered 2 times (registerAlpha, registerAlpha). Register it once.',
+    ],
+    [
+      "a write tool no manifest owns",
+      (f: Facts) => f.writeTools.push("orphan_write"),
+      'Write tool "orphan_write" is not owned by any manifest, so it is never served and its scope gate guards nothing. Add it to a manifest, or drop it from the write list.',
+    ],
+    [
+      "a rules fragment not spliced in",
+      (f: Facts) => f.fragments.push({ name: "beta.rules", text: "match /beta/{id}" }),
+      "Rules fragment beta.rules is not in firestore.rules. Splice it in (scripts/build-firestore-rules.mjs) and run pnpm rules:build.",
+    ],
+    [
+      "an index not in the root file",
+      (f: Facts) => f.indexFiles[0].indexes.push({ collectionGroup: "beta", fields: ["z"] }),
+      'Index file alpha.indexes.json holds an index that firestore.indexes.json does not: {"collectionGroup":"beta","fields":["z"]}. Add it to the root file.',
+    ],
+  ])("fails, naming the missing step, for %s", (_name, change, message) => {
+    expect(broken(change)).toEqual([message])
+  })
+
+  it("holds for the real plugins", () => {
+    expect(problems(collectFacts())).toEqual([])
+  })
 })
