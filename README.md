@@ -7,19 +7,18 @@
 Alter Ego CRM is the management app of an Italian SRL (a small consultancy, for
 one owner), built on Next.js 16. It covers:
 
-- **CRM** — the sales pipeline, clients, contracts and their amendments,
-  collaborators, tasks, deadlines, and the Plan: capacity and hours (the runway
-  appears with Books, the quarters with Books and Invoicing).
-- **Invoicing** — invoices and credit notes, unbilled hours, invoice files
-  (FatturaPA XML, signed or not, or PDF) and the accountant's package.
-- **Books** — the cash book over the company accounts (with the workbook
-  import), costs, cost centres and the Month End close.
-- **Solutions** — a catalog of delivered solutions with their data model graph.
+- **Consulting** — the sales pipeline, clients, contracts and their amendments,
+  collaborators, tasks, deadlines, the Plan (capacity and hours), and a catalog
+  of delivered solutions with their data model graph.
+- **Accounting** — invoices and credit notes, unbilled hours, invoice files
+  (FatturaPA XML, signed or not, or PDF) and the accountant's package, the cash
+  book over the company accounts (with the workbook import), costs, cost centres,
+  the Month End close, and the runway and quarters on the Plan.
 - **Rent** — tenants and yearly leases, with payments linked to the month they cover.
 
-Each area is a **module** that a deployment can switch off with
-`NEXT_PUBLIC_DISABLED_MODULES`: its pages, links and connector tools go, and its
-data is not touched. The backend is swappable through an adapter (`mock` or
+Each area is a **plugin**, and a deployment lists the ones it runs in
+`NEXT_PUBLIC_PLUGINS`: a plugin that is not listed has no pages, links or connector
+tools, and its data is not touched. The backend is swappable through an adapter (`mock` or
 Firebase), and an MCP server exposes the same data to an AI client over HTTP
 (OAuth 2.1) or stdio.
 
@@ -94,15 +93,15 @@ Copy `apps/web/.env.example` to `apps/web/.env.local` and set these:
 | `NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET`      | Firebase storage bucket       | When `firebase` | —       |
 | `NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID` | Firebase messaging sender ID  | When `firebase` | —       |
 | `NEXT_PUBLIC_FIREBASE_APP_ID`              | Firebase app ID               | When `firebase` | —       |
-| `NEXT_PUBLIC_DISABLED_MODULES`             | Ids to leave out; see below   | No              | none    |
+| `NEXT_PUBLIC_PLUGINS`                      | Plugins to run; see below     | No              | all     |
 | `NEXT_PUBLIC_USE_EMULATOR`                 | Point the SDK at the emulator | No              | `false` |
 
-`NEXT_PUBLIC_DISABLED_MODULES` is a comma-separated list of the modules a
-deployment leaves out: `crm`, `invoicing`, `books`, `solutions`, `rent`.
-`invoicing` and `solutions` need `crm`, and `rent` needs `books`: leaving out a
-module that another still needs stops the build. Everything is on when it is
-unset. A module that is left out disappears from the sidebar, its pages and the
-connector, and its data is not touched.
+`NEXT_PUBLIC_PLUGINS` is a comma-separated list of the plugins a deployment
+runs: `consulting`, `accounting`, `rent`. `accounting` needs `consulting`, and
+`rent` needs `accounting`: an unknown id, or a plugin whose requirement is not
+listed, stops the build. Every plugin runs when it is unset. A plugin that is not
+listed disappears from the sidebar, its pages and the connector, and its data is
+not touched.
 
 Server-side only, never `NEXT_PUBLIC_` and never committed — needed for the MCP
 server, which uses the Admin SDK and bypasses Firestore rules:
@@ -190,7 +189,7 @@ so edit those, never the output. The registry tests prove a deployment can switc
 
 ```bash
 pnpm test:e2e           # the whole suite, against a production mock build
-pnpm test:e2e:modules   # a build with Invoicing and Solutions left out
+pnpm test:e2e:modules   # a build that lists only Consulting
 ```
 
 Specs are in `apps/web/e2e/`: sign-in and sign-out, navigation, settings, the

@@ -13,7 +13,7 @@ Some tests guard the structure, and working around one of them defeats the point
 | ---------------------------------------------------------- | ----------------------------------------------------------------------------- |
 | `apps/web/src/lib/__tests__/firestore-rules-build.test.ts` | `firestore.rules` matches its sources                                         |
 | `apps/web/src/lib/mcp/__tests__/adapter-boundary.test.ts`  | The MCP layer never imports Firebase directly                                 |
-| `apps/web/src/modules/__tests__/registry.test.ts`          | Every MCP tool belongs to one module; a module can be switched off            |
+| `apps/web/src/modules/__tests__/registry.test.ts`          | Every MCP tool belongs to one module; a plugin can be left out                |
 | `packages/kernel/src/__tests__/boundary.test.ts`           | The kernel imports nothing app-side                                           |
 | `packages/ui/src/__tests__/boundary.test.ts`               | The UI kit imports only the kernel and its own dependencies                   |
 | `packages/modules/rent/src/__tests__/boundary.test.ts`     | A module package imports only the kernel, the UI kit and its own dependencies |
@@ -91,11 +91,14 @@ fails on a forbidden import. Type-check everything with `pnpm typecheck`.
 
 ## The Module Registry
 
-The areas of the app are modules (`crm`, `invoicing`, `books`, `solutions`, `rent`), declared as data in
-`apps/web/src/modules`. `NEXT_PUBLIC_DISABLED_MODULES` (comma-separated ids, everything on when unset) leaves
-some out: their nav links, routes and MCP tools go, their data is not touched, and a module that needs a
-disabled one fails the build. `resolveModules` is the one place that decides; `isModuleOn` is what pages and
-tools ask. Anything that works with every module on has to keep working with one off.
+The areas of the app are plugins (`consulting`, `accounting`, `rent`; the code says module), declared as data in
+`apps/web/src/modules`, and each sidebar group is one plugin. `NEXT_PUBLIC_PLUGINS` (comma-separated ids, opt-in,
+every plugin when unset) lists the ones a deployment runs: the others' nav group, routes and MCP tools go, their
+data is not touched. An unknown id, a plugin whose requirement is not listed (accounting needs consulting, rent
+needs accounting) and the retired variable that this one replaced fail the build, the retired one even when defined empty: `resolveModules`
+(`modules/resolve.ts`, called by `next.config.ts` and by the registry) is the one place that decides;
+`isModuleOn` is what pages and tools ask. Anything that works with every plugin on has to keep working with
+one off.
 
 A module may also be a package under `packages/modules/<name>` (`@alter-ego/<name>`), TypeScript source with
 `exports` pointing at `src` and no build step, like the kernel and the UI kit. It imports only the
@@ -164,7 +167,7 @@ This rule is enforced, not just stated: the MCP tools once imported
   - Run: `pnpm test`
 - **Playwright**: E2E tests for critical user flows
   - Directory: `apps/web/e2e/`
-  - Run: `pnpm test:e2e` (`pnpm test:e2e:modules` for a build with modules left out)
+  - Run: `pnpm test:e2e` (`pnpm test:e2e:modules` for a build that lists only Consulting)
 
 ## Commands
 
@@ -176,7 +179,7 @@ pnpm lint                  # ESLint
 pnpm test                  # Vitest (watch mode)
 pnpm test --run            # Vitest (single run)
 pnpm test:e2e              # Playwright E2E tests
-pnpm test:e2e:modules      # E2E against a build with Invoicing and Solutions left out
+pnpm test:e2e:modules      # E2E against a build that lists only Consulting
 pnpm shots                 # Every page and tab, sign-in, empty pipeline; desktop + phone, light + dark (mock server; --base, --out, --prefix, paths)
 pnpm seed:demo             # Demo user with sample data in the local emulator; credentials in scripts/seed-demo.mjs
 pnpm test:firebase:docker  # Emulator suite (Docker)

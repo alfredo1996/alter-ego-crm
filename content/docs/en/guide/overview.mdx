@@ -3,23 +3,21 @@ title: Overview
 description: What each area of the app does, and the modules a deployment can switch off
 ---
 
-Alter Ego CRM runs the company side of a small Italian SRL. Every area below is a **module**; a deployment can leave some out with `NEXT_PUBLIC_DISABLED_MODULES`, and Settings lists which ones are on.
+Alter Ego CRM runs the company side of a small Italian SRL. Every area below is a **plugin**; a deployment lists the ones it runs in `NEXT_PUBLIC_PLUGINS`, and Settings lists which ones are on.
 
-| Module | What it covers |
+| Plugin | What it covers |
 |---|---|
-| **CRM** | Pipeline of deals, clients, contracts and their amendments, collaborators, tasks, the Plan (capacity and hours) and deadlines. The Plan also shows the runway when Books is on, and the quarters when Books and Invoicing are on. |
-| **Invoicing** | Invoices and credit notes, unbilled hours, invoice files and the accountant's package. Needs CRM. |
-| **Books** | The cash book (with its workbook import), costs, cost centres, the runway (shown on the Plan) and the Month End close. |
-| **Solutions** | The solution catalog and its data model graph. Needs CRM. |
-| **Rent** | Tenants and yearly leases, with rent payments linked to the month they cover. Needs Books. |
+| **Consulting** | Pipeline of deals, clients, contracts and their amendments, collaborators, tasks, the Plan (capacity and hours), deadlines, and the solution catalog with its data model graph. |
+| **Accounting** | Invoices and credit notes, unbilled hours, invoice files and the accountant's package, the cash book (with its workbook import), costs, cost centres and the Month End close. The Plan shows the runway and the quarters when it is on. Needs Consulting. |
+| **Rent** | Tenants and yearly leases, with rent payments linked to the month they cover. Needs Accounting. |
 
 ## Getting around
 
-The sidebar lists the pages of the modules that are on; on a phone it opens from the menu button. Pages sit in two groups, Consulting and Accounting; the group of the page you are on is open, and the other is a heading that opens it in place. **Settings** is pinned below the links.
+The sidebar lists the pages of the plugins that are on; on a phone it opens from the menu button. Pages sit in one group per plugin, Consulting, Accounting and Rent; the group of the page you are on is open, and the others are headings that open in place. **Settings** is pinned below the links.
 
 ## MCP connector
 
-The app serves an MCP server at `/api/mcp`, with OAuth 2.1 and API keys, so an AI assistant can read and write the same data. Connect it from **Settings, Data**. The tools of a module that is switched off are not offered.
+The app serves an MCP server at `/api/mcp`, with OAuth 2.1 and API keys, so an AI assistant can read and write the same data. Connect it from **Settings, Data**. The tools of a plugin that is not listed are not offered.
 
 ## Cash flow only
 

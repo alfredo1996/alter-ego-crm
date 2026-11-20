@@ -49,7 +49,7 @@ test.describe("Settings", () => {
 
   test("should list the sections in an index and keep Data last", async ({ page }) => {
     const index = page.getByRole("navigation", { name: "On this page" })
-    await expect(index.getByRole("link")).toHaveText(["Profile", "Preferences", "Modules", "Data"])
+    await expect(index.getByRole("link")).toHaveText(["Profile", "Preferences", "Plugins", "Data"])
     await index.getByRole("link", { name: "Data" }).click()
     await expect(page.getByRole("heading", { level: 2, name: "Data" })).toBeInViewport()
   })

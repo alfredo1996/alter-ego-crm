@@ -81,7 +81,7 @@ then point the client at:
 user from, and defaulting would mean writing to the wrong user's books. The server
 exits immediately with a message rather than starting without it.
 
-Set `NEXT_PUBLIC_DISABLED_MODULES` here too, to leave a module's tools out.
+Set `NEXT_PUBLIC_PLUGINS` here too, to serve only the tools of the plugins you run.
 
 ### Remote clients and OAuth scopes
 

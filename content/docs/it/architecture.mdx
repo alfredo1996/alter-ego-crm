@@ -45,7 +45,7 @@ Vedi la [Panoramica Backend](/it/docs/backend/overview) per i dettagli.
 
 ## Moduli
 
-Ogni area dell'app è un modulo: `crm`, `invoicing`, `books`, `solutions` e `rent`. Un'installazione ne lascia fuori alcuni con `NEXT_PUBLIC_DISABLED_MODULES`: le loro pagine, i link e gli strumenti MCP spariscono, e un modulo che ne richiede un altro fa fallire la build se quello è escluso. Il registro è in `apps/web/src/modules`.
+Ogni area dell'app è un plugin: `consulting`, `accounting` e `rent`. Un'installazione elenca quelli che esegue in `NEXT_PUBLIC_PLUGINS` (tutti se non è impostata): gli altri non hanno pagine, link né strumenti MCP, e un plugin che ne richiede un altro, o un id sconosciuto, fa fallire la build. Il registro è in `apps/web/src/modules`.
 
 ## Gestione dello Stato
 

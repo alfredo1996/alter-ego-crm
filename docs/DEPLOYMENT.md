@@ -37,10 +37,10 @@ gcloud storage buckets update gs://YOUR_PROJECT_ID.firebasestorage.app --cors-fi
 
 ## Which modules run
 
-Every area is a module (`crm`, `invoicing`, `books`, `solutions`, `rent`). Leave some out with
-`NEXT_PUBLIC_DISABLED_MODULES` in `apphosting.yaml`, for example `solutions,rent`. A module that
-needs another one (invoicing and solutions need crm, rent needs books) fails the build when that one is left
-out. Settings lists what a deployment runs.
+Every area is a plugin (`consulting`, `accounting`, `rent`). List the ones to run in
+`NEXT_PUBLIC_PLUGINS` in `apphosting.yaml`, for example `consulting,accounting`; every plugin runs when it is
+unset. A plugin that needs another one (accounting needs consulting, rent needs accounting) fails the build
+when that one is not listed, and so does an unknown id. Settings lists what a deployment runs.
 
 ## Who can sign in
 

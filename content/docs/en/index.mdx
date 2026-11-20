@@ -37,8 +37,8 @@ Create an `apps/web/.env.local` file:
 # Backend: "mock" | "firebase"
 NEXT_PUBLIC_BACKEND=mock
 
-# Modules this deployment leaves out (crm, invoicing, books, solutions, rent)
-NEXT_PUBLIC_DISABLED_MODULES=
+# Plugins this deployment runs (consulting, accounting, rent); every plugin when unset
+# NEXT_PUBLIC_PLUGINS=consulting,accounting,rent
 
 # Firebase (only needed when NEXT_PUBLIC_BACKEND=firebase)
 NEXT_PUBLIC_FIREBASE_API_KEY=

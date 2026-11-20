@@ -42,6 +42,13 @@ test.describe("Navigation", () => {
     await expect(page).toHaveURL("/invoices")
     await expect(nav.getByRole("button", { name: "Accounting" })).toHaveAttribute("aria-expanded", "true")
 
+    // Three groups, one open: Rent is a heading after Accounting, and opening it closes Accounting's.
+    await expect(nav.getByRole("button", { name: "Rent" })).toHaveAttribute("aria-expanded", "false")
+    await nav.getByRole("button", { name: "Rent" }).click()
+    await expect(nav.getByRole("link", { name: "Rent", exact: true })).toBeVisible()
+    await expect(nav.getByRole("link", { name: "Invoices", exact: true })).toHaveCount(0)
+    await expect(page).toHaveURL("/invoices")
+
     // Back to the page where a heading was pressed: its own group, not the picked one.
     await page.goBack()
     await expect(page).toHaveURL("/clients")
