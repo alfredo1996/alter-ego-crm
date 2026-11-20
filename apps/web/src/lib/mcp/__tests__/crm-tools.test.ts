@@ -7,6 +7,7 @@ import { readFileSync } from "node:fs"
 
 import { describe, expect, it } from "vitest"
 
+import { REGISTERS } from "@/lib/mcp/plugins"
 import { registerCrmReadTools } from "@/lib/mcp/tools/crm-read"
 import { registerCrmWriteTools, WRITE_TOOLS } from "@/lib/mcp/tools/crm-write"
 import { RENT_WRITE_TOOLS, registerRentTools } from "@/lib/mcp/tools/rent"
@@ -100,7 +101,7 @@ describe("tools served per module set", () => {
   const served = (plugins?: string): string[] => {
     const names: string[] = []
     const gated = gateTools({ registerTool: (name: string) => void names.push(name) }, enabledToolNames(resolveModules(plugins).enabled))
-    for (const register of [registerCrmReadTools, registerCrmWriteTools, registerRentTools]) {
+    for (const register of REGISTERS) {
       register(gated as unknown as McpServer)
     }
     return names.sort()

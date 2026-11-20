@@ -2,11 +2,9 @@ import { readFileSync } from "node:fs"
 
 import { afterEach, describe, expect, it, vi } from "vitest"
 
-import { registerCrmReadTools } from "@/lib/mcp/tools/crm-read"
-import { registerCrmWriteTools } from "@/lib/mcp/tools/crm-write"
-import { registerRentTools } from "@/lib/mcp/tools/rent"
+import { PLUGIN_REGISTERS, REGISTERS, WRITE_TOOL_NAMES, registerAllTools } from "@/lib/mcp/plugins"
 
-import { DEFAULT_PLUGINS, allToolNames, enabledToolNames, gateTools, resolveModules } from "../index"
+import { DEFAULT_PLUGINS, MODULES, allToolNames, enabledToolNames, gateTools, resolveModules } from "../index"
 
 import type { ModuleId } from "../index"
 import type { McpServer } from "@modelcontextprotocol/server"
@@ -83,9 +81,32 @@ describe("the default", () => {
 function registered(): string[] {
   const names: string[] = []
   const server = { registerTool: (name: string) => void names.push(name) } as unknown as McpServer
-  for (const r of [registerCrmReadTools, registerCrmWriteTools, registerRentTools]) r(server)
+  registerAllTools(server)
   return names
 }
+
+describe("one tool list", () => {
+  it("has an entry for every plugin the registry knows, and no other", () => {
+    expect(Object.keys(PLUGIN_REGISTERS).sort()).toEqual(MODULES.map((m) => m.id).sort())
+  })
+
+  it("lists each register function once even when two plugins share it", () => {
+    expect(REGISTERS.length).toBe(new Set(REGISTERS).size)
+    expect(REGISTERS.length).toBe(new Set(Object.values(PLUGIN_REGISTERS).flat()).size)
+  })
+
+  it("holds every write tool, each owned by a manifest", () => {
+    const owned = new Set(allToolNames())
+    expect([...WRITE_TOOL_NAMES].filter((t) => !owned.has(t))).toEqual([])
+  })
+
+  // The route and the stdio server once each wrote the register calls out by hand.
+  it.each(["src/app/api/mcp/route.ts", "scripts/mcp-stdio.ts"])("%s names no register function: it reads lib/mcp/plugins", (file) => {
+    const source = readFileSync(file, "utf8")
+    expect(source.match(/register[A-Z]\w*Tools/g)?.filter((n) => n !== "registerAllTools") ?? []).toEqual([])
+    expect(source).toContain("@/lib/mcp/plugins")
+  })
+})
 
 describe("tools", () => {
   it("assigns every registered tool to exactly one module", () => {

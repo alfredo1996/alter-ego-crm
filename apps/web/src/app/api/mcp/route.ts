@@ -2,9 +2,7 @@ import { createMcpHandler, type McpHandlerOptions } from "mcp-handler"
 
 import { authenticate, insufficientScope, unauthorized } from "@/lib/mcp/auth"
 import { MCP_VERSION } from "@/lib/mcp/config"
-import { registerCrmReadTools } from "@/lib/mcp/tools/crm-read"
-import { registerCrmWriteTools, WRITE_TOOLS } from "@/lib/mcp/tools/crm-write"
-import { RENT_WRITE_TOOLS, registerRentTools } from "@/lib/mcp/tools/rent"
+import { WRITE_TOOL_NAMES, registerAllTools } from "@/lib/mcp/plugins"
 import { hasScopes, SCOPE_WRITE } from "@/lib/oauth/tokens"
 import { z } from "@/lib/zod"
 import { enabledToolNames, gateTools } from "@/modules"
@@ -52,9 +50,7 @@ const handler = createMcpHandler(
     // never registered. `ping` stays in every build — it is how a client checks
     // reachability before it knows what else is there.
     const gated = gateTools(server)
-    registerCrmReadTools(gated)
-    registerCrmWriteTools(gated)
-    registerRentTools(gated)
+    registerAllTools(gated)
   },
   handlerOptions
 )
@@ -66,7 +62,7 @@ const handler = createMcpHandler(
  * tool" is the truth.
  */
 const SERVED = enabledToolNames()
-const ALL_WRITE_TOOLS = new Set([...WRITE_TOOLS, ...RENT_WRITE_TOOLS].filter((t) => SERVED.has(t)))
+const ALL_WRITE_TOOLS = new Set([...WRITE_TOOL_NAMES].filter((t) => SERVED.has(t)))
 
 /** The first tool in the JSON-RPC body that requires the write scope, or null. */
 async function writeToolCalled(request: Request): Promise<string | null> {

@@ -19,7 +19,7 @@ vi.mock("mcp-handler", async (orig) => {
   }
 })
 
-import { WRITE_TOOLS } from "@/lib/mcp/tools/crm-write"
+import { WRITE_TOOL_NAMES } from "@/lib/mcp/plugins"
 
 import { POST } from "../route"
 
@@ -29,7 +29,7 @@ const readOnly = { userId: "u1", clientId: "c1", scopes: ["data:read"] }
 const writer = { userId: "u1", clientId: "c1", scopes: ["data:read", "data:write"] }
 
 // A write tool this deployment actually registers.
-const writeTool = [...WRITE_TOOLS][0]
+const writeTool = [...WRITE_TOOL_NAMES][0]
 
 const rpc = (body: unknown) =>
   POST(
