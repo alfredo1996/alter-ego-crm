@@ -3,8 +3,12 @@ import { join } from "node:path"
 import { createMDX } from "fumadocs-mdx/next";
 
 import { securityHeaders } from "./src/lib/csp";
+import { resolveModules } from "./src/modules/resolve";
 
 import type { NextConfig } from "next";
+
+// A bad plugin list stops the build here, before any page is compiled.
+resolveModules(process.env.NEXT_PUBLIC_PLUGINS, process.env.NEXT_PUBLIC_DISABLED_MODULES);
 
 const withMDX = createMDX();
 

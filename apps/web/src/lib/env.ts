@@ -2,8 +2,10 @@ import { z } from "@/lib/zod"
 
 const envSchema = z.object({
   NEXT_PUBLIC_BACKEND: z.enum(["mock", "firebase"]).default("mock"),
-  /** Comma-separated module ids this deployment leaves out (see src/modules). Everything is on otherwise. */
-  NEXT_PUBLIC_DISABLED_MODULES: z.string().default(""),
+  /** Comma-separated plugin ids this deployment runs (see src/modules). Every plugin when unset. */
+  NEXT_PUBLIC_PLUGINS: z.string().optional(),
+  /** Retired: src/modules/resolve.ts fails when it is defined at all. */
+  NEXT_PUBLIC_DISABLED_MODULES: z.string().optional(),
   NEXT_PUBLIC_FIREBASE_API_KEY: z.string().optional(),
   NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: z.string().optional(),
   NEXT_PUBLIC_FIREBASE_PROJECT_ID: z.string().optional(),
@@ -20,6 +22,7 @@ const envSchema = z.object({
 function validateEnv() {
   const result = envSchema.safeParse({
     NEXT_PUBLIC_BACKEND: process.env.NEXT_PUBLIC_BACKEND,
+    NEXT_PUBLIC_PLUGINS: process.env.NEXT_PUBLIC_PLUGINS,
     NEXT_PUBLIC_DISABLED_MODULES: process.env.NEXT_PUBLIC_DISABLED_MODULES,
     NEXT_PUBLIC_FIREBASE_API_KEY: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
     NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,

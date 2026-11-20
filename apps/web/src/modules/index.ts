@@ -1,57 +1,22 @@
 /**
- * The registry: which modules this deployment runs, resolved once at load from
- * NEXT_PUBLIC_DISABLED_MODULES (everything on otherwise).
+ * The registry: which plugins this deployment runs, resolved once at load from
+ * NEXT_PUBLIC_PLUGINS (every plugin when unset).
  *
- * A module that needs a disabled one throws here, which fails the build: pages
- * import this file, so `next build` evaluates it.
+ * A bad list throws here, and next.config.ts calls the same resolver, so `next build` fails before it
+ * compiles a page.
  */
-import { rent } from "@alter-ego/rent/manifest"
-
 import { env } from "@/lib/env"
 
-import { books } from "./books/manifest"
-import { crm } from "./crm/manifest"
-import { invoicing } from "./invoicing/manifest"
-import { solutions } from "./solutions/manifest"
+import { MODULES, resolveModules } from "./resolve"
 
-import type { ModuleId, ModuleManifest } from "@alter-ego/kernel/module"
+import type { ModuleId } from "@alter-ego/kernel/module"
 
+export { MODULES, resolveModules } from "./resolve"
 export type { ModuleId, ModuleManifest } from "@alter-ego/kernel/module"
 
-export const MODULES: ModuleManifest[] = [crm, invoicing, books, solutions, rent]
+const resolved = resolveModules(env.NEXT_PUBLIC_PLUGINS, env.NEXT_PUBLIC_DISABLED_MODULES)
 
-const byId = new Map(MODULES.map((m) => [m.id, m]))
-
-export interface ResolvedModules {
-  enabled: Set<ModuleId>
-  /** The variable and value that left modules out, for Settings: "none" when nothing is. */
-  leftOut: { variable: string; value: string }
-}
-
-export function resolveModules(disabledCsv: string): ResolvedModules {
-  const listed = disabledCsv.split(",").map((s) => s.trim().toLowerCase()).filter(Boolean)
-  for (const id of listed) {
-    if (!byId.has(id as ModuleId)) throw new Error(`Unknown module "${id}" in NEXT_PUBLIC_DISABLED_MODULES.`)
-  }
-  const off = new Set<string>(listed)
-  const enabled = new Set(MODULES.filter((m) => !off.has(m.id)).map((m) => m.id))
-  for (const m of MODULES) {
-    for (const need of m.requires) {
-      if (enabled.has(m.id) && !enabled.has(need)) {
-        const dep = byId.get(need)!.label
-        throw new Error(
-          `${m.label} needs ${dep}, but NEXT_PUBLIC_DISABLED_MODULES leaves ${dep} out. Turn ${dep} back on, or leave ${m.label} out too.`,
-        )
-      }
-    }
-  }
-  const leftOut = { variable: "NEXT_PUBLIC_DISABLED_MODULES", value: listed.length ? listed.join(",") : "none" }
-  return { enabled, leftOut }
-}
-
-const resolved = resolveModules(env.NEXT_PUBLIC_DISABLED_MODULES)
-
-export const leftOut = resolved.leftOut
+export const selection = resolved.selection
 
 export function isModuleOn(id: ModuleId): boolean {
   return resolved.enabled.has(id)
@@ -62,11 +27,11 @@ export function allToolNames(): string[] {
 }
 
 /**
- * get_quarters is declared under crm but reads ended months off invoices and
- * costs: without either, every ended quarter would say €0. ponytail: one rule, so
+ * get_quarters is declared under consulting but reads ended months off invoices and
+ * costs: without Accounting, every ended quarter would say €0. ponytail: one rule, so
  * a constant here; a `needs` field on the manifest if a second tool ever wants it.
  */
-const QUARTERS_NEED: ModuleId[] = ["invoicing", "books"]
+const QUARTERS_NEED: ModuleId[] = ["accounting"]
 
 export function enabledToolNames(enabled: Set<ModuleId> = resolved.enabled): Set<string> {
   const names = new Set(MODULES.filter((m) => enabled.has(m.id)).flatMap((m) => m.tools))
