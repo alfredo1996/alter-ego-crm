@@ -62,6 +62,26 @@ describe("firebase — reading back a write", () => {
     expect(reads.anySource).toEqual([])
     expect(reads.server).toHaveLength(1)
   })
+
+  // Personal Finance's slice (createFirebaseFinance) reads back the same way: its writes come from the cache, its reads from the server.
+  it("does the same for a personal account", async () => {
+    const reset = () => { reads.anySource.length = 0; reads.server.length = 0 }
+    reset()
+    const written = await db.createAccount(user.uid, { name: "Acme", type: "checking", currency: "EUR", balance: 10 })
+    const path = `users/${user.uid}/accounts/${written.id}`
+    expect(reads.anySource).toContain(path)
+    expect(reads.server).not.toContain(path)
+
+    reset()
+    expect(await db.updateAccount(user.uid, written.id, { name: "Acme SRL" })).toMatchObject({ name: "Acme SRL" })
+    expect(reads.anySource).toContain(path)
+    expect(reads.server).not.toContain(path)
+
+    reset()
+    await db.getAccount(user.uid, "none")
+    expect(reads.anySource).toEqual([])
+    expect(reads.server).toHaveLength(1)
+  })
 })
 
 // A reopened tab whose Firestore connection had lapsed got its reads answered from
@@ -72,7 +92,8 @@ describe("firebase — reads while offline", () => {
   it("rejects with 'unavailable' instead of answering from the cache, and reads again once online", async () => {
     const accountId = (await db.createCompanyAccount(user.uid, { name: "Offline", openingBalance: 10, openingDate: new Date("2026-01-01") })).id
     // Fill the SDK cache: these are exactly what the old reads served back offline.
-    await Promise.all([db.getCompanyAccounts(user.uid), db.getCompanySettings(user.uid), db.getClients(user.uid)])
+    const personalId = (await db.createAccount(user.uid, { name: "Offline", type: "checking", currency: "EUR", balance: 10 })).id
+    await Promise.all([db.getCompanyAccounts(user.uid), db.getCompanySettings(user.uid), db.getClients(user.uid), db.getAccounts(user.uid), db.getAccount(user.uid, personalId), db.getBudgets(user.uid)])
 
     await disableNetwork(getFirebaseDb())
     try {
@@ -80,6 +101,9 @@ describe("firebase — reads while offline", () => {
         () => db.getCompanyAccounts(user.uid),
         () => db.getCompanySettings(user.uid),
         () => db.getClients(user.uid),
+        () => db.getAccounts(user.uid),
+        () => db.getAccount(user.uid, personalId),
+        () => db.getBudgets(user.uid),
       ]) {
         await expect(read()).rejects.toMatchObject({ code: "unavailable", message: expect.stringMatching(/^Can.t reach the server/) })
       }
@@ -87,5 +111,6 @@ describe("firebase — reads while offline", () => {
       await enableNetwork(getFirebaseDb())
     }
     expect((await db.getCompanyAccounts(user.uid)).map((a) => a.id)).toEqual([accountId])
+    expect((await db.getAccounts(user.uid)).map((a) => a.id)).toContain(personalId)
   })
 })
