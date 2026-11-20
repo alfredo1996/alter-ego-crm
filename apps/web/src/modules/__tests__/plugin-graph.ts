@@ -47,7 +47,7 @@ const PATH_MAP: [RegExp, Plugin][] = [
 ]
 
 export const RULE =
-  "A plugin imports no other plugin's files. Move what both need into the host (shared lib, hooks, types), or go through the host; " +
+  "A plugin imports no other plugin's files. Move what both need into the host (shared lib, hooks, types); " +
   "do not add the edge to KNOWN_EDGES, which was seeded once and only ever shrinks."
 
 export function isTestFile(rel: string): boolean {
