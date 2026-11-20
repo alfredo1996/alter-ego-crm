@@ -38,6 +38,9 @@ importers:
 
   apps/web:
     dependencies:
+      '@alter-ego/finance':
+        specifier: workspace:*
+        version: link:../../packages/modules/finance
       '@alter-ego/kernel':
         specifier: workspace:*
         version: link:../../packages/kernel

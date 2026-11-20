@@ -4,6 +4,16 @@ import { signIn, navigateTo } from "./helpers/test-utils"
 
 import type { BackendAdapter } from "@/lib/backend"
 
+// Parked spec (issue 30): this app's DatabaseAdapter has no accounting half until issue 31 wires finance's
+// adapter, so the two seed calls are typed here. Issue 31 deletes this type and reads BackendAdapter again.
+type SeedBackend = {
+  auth: BackendAdapter["auth"]
+  db: {
+    createAccount(userId: string, account: Record<string, unknown>): Promise<{ id: string }>
+    createTransaction(userId: string, transaction: Record<string, unknown>): Promise<unknown>
+  }
+}
+
 test.describe("Reports", () => {
   test.beforeEach(async ({ page }) => {
     await signIn(page)
@@ -64,7 +74,7 @@ test.describe("Reports", () => {
 
   test("Compare shows its figures, and on a phone a removable chip", async ({ page }) => {
     await page.evaluate(async () => {
-      const backend = (window as unknown as { __mockBackend: BackendAdapter }).__mockBackend
+      const backend = (window as unknown as { __mockBackend: SeedBackend }).__mockBackend
       const u = (await backend.auth.getCurrentUser())!.id
       const account = await backend.db.createAccount(u, { name: "Checking", type: "checking", currency: "EUR", balance: 0 })
       const now = new Date()
@@ -95,7 +105,7 @@ test.describe("Reports", () => {
 
   test("In and Out sets the month against the three before it, as a chart or a table, and Top Expenses lists the largest", async ({ page }) => {
     await page.evaluate(async () => {
-      const backend = (window as unknown as { __mockBackend: BackendAdapter }).__mockBackend
+      const backend = (window as unknown as { __mockBackend: SeedBackend }).__mockBackend
       const u = (await backend.auth.getCurrentUser())!.id
       const account = await backend.db.createAccount(u, { name: "Checking", type: "checking", currency: "EUR", balance: 0 })
       const now = new Date()

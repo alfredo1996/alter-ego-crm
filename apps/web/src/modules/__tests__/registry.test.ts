@@ -7,7 +7,7 @@ import { afterEach, describe, expect, it, vi } from "vitest"
 import { PLUGIN_REGISTERS, WRITE_TOOL_NAMES, registerAllTools } from "@/lib/mcp/plugins"
 import { registerCrmWriteTools } from "@/lib/mcp/tools/crm-write"
 
-import { collectFacts, problems, type Facts } from "./plugin-checks"
+import { NOT_YET_WIRED, collectFacts, problems, type Facts } from "./plugin-checks"
 import { DEFAULT_PLUGINS, MODULES, allToolNames, enabledToolNames, gateTools, resolveModules } from "../index"
 
 import type { ModuleId } from "../index"
@@ -226,6 +226,12 @@ describe("a plugin is wired end to end", () => {
     ],
   ])("fails, naming the missing step, for %s", (_name, change, message) => {
     expect(broken(change)).toEqual([message])
+  })
+
+  // The one exemption is named, not a pattern: rent's fragment is still read, finance's two are not.
+  it("leaves out only the packages named as not yet wired", () => {
+    expect(NOT_YET_WIRED).toEqual(["finance"])
+    expect(collectFacts().fragments.map((f) => f.name).sort()).toEqual(["crm.rules", "rent.rules"])
   })
 
   it("holds for the real plugins", () => {

@@ -20,6 +20,7 @@
     "mcp:stdio": "tsx scripts/mcp-stdio.ts"
   },
   "dependencies": {
+    "@alter-ego/finance": "workspace:*",
     "@alter-ego/kernel": "workspace:*",
     "@alter-ego/rent": "workspace:*",
     "@alter-ego/ui": "workspace:*",
