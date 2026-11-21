@@ -14,11 +14,13 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest"
 import { getFirebaseAuth, getFirebaseStorage } from "@/lib/firebase-client"
 
 import { emulatorHosts } from "./emulator-hosts"
+import { rulesFor } from "./owner-copy"
 import { loadStorageRules, productionStorageRules, testStorageRules } from "./rules-source"
-import { OWNER_UID } from "../../owner-uid"
 
 const { auth: AUTH_HOST, storage: STORAGE_HOST } = emulatorHosts()
 
+const PLACEHOLDER = "OWNER_UID_NOT_SET"
+const OWNER_UID = "owner-test-uid"
 const PASSWORD = "Test1234!"
 const stamp = Date.now()
 const emails = { a: `storage-a-${stamp}@example.com`, b: `storage-b-${stamp}@example.com` }
@@ -104,20 +106,50 @@ describe("another user", () => {
   })
 })
 
-describe("the production rules (one uid)", () => {
+/** Auth emulator sign-up with an explicit uid ("Bearer owner" is the emulator's admin: only it may set one). */
+async function signUpWithUid(email: string, localId: string) {
+  const res = await fetch(`http://${AUTH_HOST}/identitytoolkit.googleapis.com/v1/accounts:signUp?key=fake`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: "Bearer owner" },
+    body: JSON.stringify({ email, password: PASSWORD, localId }),
+  })
+  if (!res.ok) throw new Error(`Cannot create ${localId} in the Auth emulator: ${res.status}`)
+}
+
+describe("the rules as committed (placeholder: nobody)", () => {
+  const EMAIL = `storage-placeholder-${stamp}@example.com`
+  const placeholderPath = `users/${PLACEHOLDER}/company-files/${fresh("xml")}`
+
+  beforeAll(async () => {
+    await signUpWithUid(EMAIL, PLACEHOLDER)
+    await loadStorageRules(STORAGE_HOST, productionStorageRules())
+  })
+  afterAll(() => loadStorageRules(STORAGE_HOST, testStorageRules()))
+
+  it("refuses a token whose uid is the placeholder, in its own folder", async () => {
+    await signInWithEmailAndPassword(getFirebaseAuth(), EMAIL, PASSWORD)
+    await expect(put(placeholderPath, "<a/>", "application/xml")).rejects.toMatchObject({ code: "storage/unauthorized" })
+    await expect(getBytes(at(placeholderPath))).rejects.toMatchObject({ code: "storage/unauthorized" })
+  })
+
+  it("refuses a random signed-in uid in its own folder", async () => {
+    await signInAs("a")
+    await expect(put(mine(fresh("xml")), "<a/>", "application/xml")).rejects.toThrow()
+  })
+
+  it("refuses a signed-out visitor", async () => {
+    await getFirebaseAuth().signOut()
+    await expect(put(placeholderPath, "<a/>", "application/xml")).rejects.toMatchObject({ code: "storage/unauthorized" })
+  })
+})
+
+describe("the rules after setup:owner (a made-up uid)", () => {
   const EMAIL = `storage-owner-${stamp}@example.com`
   const ownerPath = `users/${OWNER_UID}/company-files/${fresh("xml")}`
 
   beforeAll(async () => {
-    // The Auth emulator takes an explicit uid at sign-up: the owner's.
-    const res = await fetch(`http://${AUTH_HOST}/identitytoolkit.googleapis.com/v1/accounts:signUp?key=fake`, {
-      method: "POST",
-      // "Bearer owner" is the emulator's admin: only it may set the uid.
-      headers: { "Content-Type": "application/json", Authorization: "Bearer owner" },
-      body: JSON.stringify({ email: EMAIL, password: PASSWORD, localId: OWNER_UID }),
-    })
-    if (!res.ok) throw new Error(`Cannot create the owner in the Auth emulator: ${res.status}`)
-    await loadStorageRules(STORAGE_HOST, productionStorageRules())
+    await signUpWithUid(EMAIL, OWNER_UID)
+    await loadStorageRules(STORAGE_HOST, rulesFor(OWNER_UID).storage)
   })
   afterAll(() => loadStorageRules(STORAGE_HOST, testStorageRules()))
 
@@ -135,7 +167,7 @@ describe("the production rules (one uid)", () => {
 
   it("refuses a signed-out visitor", async () => {
     await getFirebaseAuth().signOut()
-    await expect(put(ownerPath, "<a/>", "application/xml")).rejects.toThrow()
-    await expect(getBytes(at(ownerPath))).rejects.toThrow()
+    await expect(put(ownerPath, "<a/>", "application/xml")).rejects.toMatchObject({ code: "storage/unauthorized" })
+    await expect(getBytes(at(ownerPath))).rejects.toMatchObject({ code: "storage/unauthorized" })
   })
 })

@@ -3,7 +3,11 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 import { DELETE } from "@/app/api/keys/[id]/route"
 import { POST } from "@/app/api/keys/route"
 import { __resetMockState, createMockAdapter } from "@/lib/backend/mock"
-import { OWNER_UID } from "@/lib/owner-uid"
+import { isOwner } from "@/lib/owner-uid"
+
+// The owner is stubbed per case: the committed uid is a placeholder that admits nobody (#32).
+const OWNER_UID = "owner-test-uid"
+vi.mock("@/lib/owner-uid", async (orig) => ({ ...(await orig<object>()), isOwner: vi.fn() }))
 
 // Tokens "token-<uid>" verify to <uid>; anything else is rejected.
 vi.mock("@/lib/firebase-admin-client", () => ({
@@ -23,7 +27,10 @@ const req = (method: string, token?: string) =>
 const params = (id: string) => ({ params: Promise.resolve({ id }) })
 
 describe("/api/keys", () => {
-  beforeEach(() => __resetMockState())
+  beforeEach(() => {
+    __resetMockState()
+    vi.mocked(isOwner).mockImplementation((uid) => uid === OWNER_UID)
+  })
 
   it("POST without or with an invalid ID token is 401 and creates nothing", async () => {
     expect((await POST(req("POST"))).status).toBe(401)

@@ -11,8 +11,9 @@ rules_version = '2';
 // One uid only (#389): sign-up is closed, but a stranger's account must not be
 // able to store 10 MB objects on the owner's bill either. `isAllowedUser` holds
 // the same uid as firestore/base.rules and apps/web/src/lib/owner-uid.ts;
-// firestore-rules-owner.test.ts fails if they drift. The emulator suite opens
-// this one function (rules-source.ts) because it signs up random users.
+// setup-owner.test.ts fails if they drift, and `pnpm setup:owner <uid>` writes it
+// (#32). The emulator suite opens this one function (rules-source.ts) because it
+// signs up random users.
 //
 // Everything else in the bucket stays closed: no rule, no access.
 
@@ -20,7 +21,7 @@ service firebase.storage {
   match /b/{bucket}/o {
     match /users/{uid}/company-files/{file} {
       function isAllowedUser() {
-        return request.auth.uid == 'AF95t2LVcpYfm9iecrisGyaM2mC2';
+        return request.auth.uid != 'OWNER_UID_NOT_SET' && request.auth.uid == 'OWNER_UID_NOT_SET';
       }
       function owner() {
         return request.auth != null && isAllowedUser() && request.auth.uid == uid;

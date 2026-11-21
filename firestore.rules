@@ -6,9 +6,10 @@ service cloud.firestore {
 
     // The app is single-user (#389): one uid, an opaque id and never an email.
     // The emulator suite opens this one function up (rules-source.ts); the
-    // production rules are tested in firestore-rules-owner.test.ts.
+    // production rules are tested in firestore-rules-owner.test.ts. `pnpm setup:owner <uid>`
+    // writes the uid (#32); the placeholder is refused outright, so a copy nobody set up admits nobody.
     function isAllowedUser() {
-      return request.auth.uid in ['AF95t2LVcpYfm9iecrisGyaM2mC2'];
+      return request.auth.uid != 'OWNER_UID_NOT_SET' && request.auth.uid in ['OWNER_UID_NOT_SET'];
     }
 
     // Every rule that admits "a signed-in user" goes through here, so a stranger

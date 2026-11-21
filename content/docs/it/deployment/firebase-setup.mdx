@@ -15,11 +15,12 @@ description: Configura Firebase per la produzione
 Costruisci e distribuisci le regole, che `pnpm rules:build` assembla da `firestore/base.rules`, `firestore/crm.rules` e dalle regole dei moduli:
 
 ```bash
+pnpm setup:owner IL_TUO_UID   # una volta, prima del primo deploy (vedi sotto)
 pnpm rules:build
 firebase deploy --only firestore:rules,firestore:indexes,storage --project IL_TUO_PROJECT_ID
 ```
 
-La registrazione è chiusa: inserisci l'uid del tuo utente in `firestore/base.rules`, `storage.rules` e `apps/web/src/lib/owner-uid.ts`.
+La registrazione è chiusa. Prima del deploy esegui `pnpm setup:owner <uid>` con l'uid del tuo utente: scrive l'uid in `firestore/base.rules`, `storage.rules` e `apps/web/src/lib/owner-uid.ts` e ricostruisce `firestore.rules`. Una copia senza questo passo non lascia scrivere nessuno. Fai il commit dei quattro file modificati sul branch che App Hosting compila, nella tua copia del repository, prima del rollout: il server legge `owner-uid.ts` da quella build.
 
 ## Variabili d'Ambiente
 
