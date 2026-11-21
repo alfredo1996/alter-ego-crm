@@ -14,6 +14,7 @@
     "test": "pnpm --filter @alter-ego/web test",
     "test:coverage": "pnpm --filter @alter-ego/web test:coverage",
     "rules:build": "node scripts/build-firestore-rules.mjs",
+    "setup:owner": "node scripts/setup-owner.mjs",
     "test:firebase": "pnpm --filter @alter-ego/web test:firebase",
     "test:firebase:alt": "pnpm --filter @alter-ego/web test:firebase:alt",
     "test:firebase:docker": "docker compose up -d --wait && pnpm --filter @alter-ego/web test:firebase",

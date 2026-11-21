@@ -28,6 +28,7 @@ firebase apphosting:secrets:set FIREBASE_APP_ID --project YOUR_PROJECT_ID
 #    and your origin in cors.json
 
 # 4. Deploy the security rules and indexes (Firestore and Storage)
+pnpm setup:owner YOUR_UID   # once, before the first deploy (see below)
 pnpm rules:build
 firebase deploy --only firestore:rules,firestore:indexes,storage --project YOUR_PROJECT_ID
 
@@ -45,9 +46,10 @@ when that one is not listed, and so does an unknown id. Settings lists what a de
 ## Who can sign in
 
 Sign-up is closed: the rules admit one user id, `isAllowedUser` in `firestore/base.rules`
-(and `storage.rules`), mirrored in `apps/web/src/lib/owner-uid.ts`. Create your user in the
-Firebase console (Authentication), then put its uid in all three places and run
-`pnpm rules:build`.
+(and `storage.rules`), mirrored in `apps/web/src/lib/owner-uid.ts`. The code carries a placeholder
+(`OWNER_UID_NOT_SET`) that admits nobody. Create your user in the Firebase console (Authentication),
+then run `pnpm setup:owner <uid>` with its uid before you deploy: it writes the uid into all three places
+and rebuilds `firestore.rules`. A copy without it lets nobody write.
 
 ## Notes
 

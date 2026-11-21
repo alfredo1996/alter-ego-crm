@@ -15,11 +15,12 @@ description: Set up Firebase for production
 Build and deploy the rules, which `pnpm rules:build` assembles from `firestore/base.rules`, `firestore/crm.rules` and the modules' rules:
 
 ```bash
+pnpm setup:owner YOUR_UID   # once, before the first deploy (see below)
 pnpm rules:build
 firebase deploy --only firestore:rules,firestore:indexes,storage --project YOUR_PROJECT_ID
 ```
 
-Sign-up is closed: put your user's uid in `firestore/base.rules`, `storage.rules` and `apps/web/src/lib/owner-uid.ts`.
+Sign-up is closed. Before you deploy, run `pnpm setup:owner <uid>` with your user's uid: it writes the uid into `firestore/base.rules`, `storage.rules` and `apps/web/src/lib/owner-uid.ts` and rebuilds `firestore.rules`. A copy without it lets nobody write.
 
 ## Environment Variables
 

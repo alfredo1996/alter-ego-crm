@@ -21,8 +21,9 @@ Sign-up is closed in the app: production admits one uid (the allowlist,
 `isAllowedUser()` in `firestore/base.rules` and in `storage.rules`).
 `pnpm local:start` loads the rules with that allowlist open, so locally any
 account works. Create one with `pnpm seed:demo`, or in the Auth emulator UI on
-http://localhost:4000. To run your own deployment, put your uid in those two
-rules and in `apps/web/src/lib/owner-uid.ts`, then `pnpm rules:build`. Stop with:
+http://localhost:4000. To run your own deployment, run `pnpm setup:owner <uid>` with your
+uid before deploying (it writes the three places that hold it and rebuilds `firestore.rules`); a copy without it
+lets nobody write. Stop with:
 
 ```bash
 pnpm local:stop      # exports data on the way out
@@ -45,10 +46,10 @@ no invoices, only your accounts, transactions, budgets, goals, recurring bills a
    write: `pnpm seed:firebase` writes them with the Admin SDK (`GOOGLE_APPLICATION_CREDENTIALS` and `FIREBASE_PROJECT_ID`
    set; it skips a project that already has them). Against the local emulator, `pnpm local:seed`. `pnpm seed` does the same
    with the variables read from `apps/web/.env.local`.
-5. **Name the owner.** Sign-up is closed, so create your user in the Firebase console (Authentication), put its uid in
-   `isAllowedUser()` in `firestore/base.rules` and in `storage.rules` (a finance-only deployment never deploys the latter),
-   and in `apps/web/src/lib/owner-uid.ts`,
-   then run `pnpm rules:build` and deploy the rules again.
+5. **Name the owner.** Sign-up is closed, so create your user in the Firebase console (Authentication), run
+   `pnpm setup:owner <uid>` with its uid. It writes the uid into `firestore/base.rules`, `storage.rules` (a finance-only
+   deployment never deploys that one) and `apps/web/src/lib/owner-uid.ts`, and rebuilds `firestore.rules`. Run it before
+   you deploy: a copy without it lets nobody write. Then deploy the rules again.
 
 ## Invoice files
 
@@ -110,8 +111,8 @@ scopes: **`data:read`** and **`data:write`**. Clients discover them from
 `/.well-known/oauth-authorization-server`, so there is nothing to configure.
 
 Creating an API key (`/api/keys`) and approving a remote client
-(`/api/oauth/authorize`) call `isOwner` on the emulator too, so for either one your
-uid has to be in `apps/web/src/lib/owner-uid.ts`. Everything else in the UI, and
+(`/api/oauth/authorize`) call `isOwner` on the emulator too, so for either one you
+need to have run `pnpm setup:owner <uid>` with your uid (until then nobody is the owner). Everything else in the UI, and
 the stdio MCP server, work with any local account.
 
 Try it without a client:

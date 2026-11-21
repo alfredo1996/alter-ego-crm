@@ -26,6 +26,12 @@ users, API keys, OAuth, `mcp_audit`), `firestore/crm.rules` or a module's
 `src/<name>.rules`, and run `pnpm rules:build`. Editing the output directly loses
 the change on the next build.
 
+**The owner uid is a placeholder in the committed code** (`OWNER_UID_NOT_SET`, refused
+outright, so a copy nobody set up admits nobody). `pnpm setup:owner <uid>` is the only
+thing that writes it: into `apps/web/src/lib/owner-uid.ts`, `firestore/base.rules` and
+`storage.rules`, then it rebuilds `firestore.rules`. Never commit a real uid; tests use a
+made-up one (`setup-owner.test.ts` checks the three agree).
+
 **The test gate is one run**: `pnpm test --run`.
 
 ## Core Principle
@@ -199,6 +205,7 @@ pnpm shots                 # Every page and tab, sign-in, empty pipeline; deskto
 pnpm seed:demo             # Demo user with sample data in the local emulator; credentials in scripts/seed-demo.mjs
 pnpm test:firebase:docker  # Emulator suite (Docker)
 pnpm rules:build           # Regenerate firestore.rules from its fragments
+pnpm setup:owner <uid>     # Write the owner's Firebase uid into the three places that hold it (run before deploying)
 pnpm local:start           # Persistent emulator (docs/SELF-HOSTING.md)
 pnpm mcp:stdio             # MCP server over stdio (needs ALTER_EGO_USER_ID)
 ```

@@ -15,6 +15,7 @@
  * rather than permissive. Finance needs no company side, so its two fragments are required.
  */
 import { readFileSync, writeFileSync, existsSync } from "node:fs"
+import { join } from "node:path"
 
 const MARKER = "      // @@CRM_COLLECTIONS@@"
 const ROOT_MARKER = "    // @@ROOT_COLLECTIONS@@"
@@ -39,15 +40,24 @@ export function buildRules({ base, crm, rent = null, finance, financeRoot }) {
   return base.replace(MARKER, () => users).replace(ROOT_MARKER, () => financeRoot.trimEnd())
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
-  const base = readFileSync("firestore/base.rules", "utf8")
-  const crm = existsSync("firestore/crm.rules")
-    ? readFileSync("firestore/crm.rules", "utf8")
-    : null
-  const rentPath = "packages/modules/rent/src/rent.rules"
+/**
+ * Reads the fragments under `root` and builds the rules (the CRM and Rent fragments are optional).
+ * @param {string} root
+ * @returns {{ rules: string, withCrm: boolean }}
+ */
+export function buildRulesAt(root = ".") {
+  const at = (/** @type {string} */ p) => join(root, p)
+  const base = readFileSync(at("firestore/base.rules"), "utf8")
+  const crm = existsSync(at("firestore/crm.rules")) ? readFileSync(at("firestore/crm.rules"), "utf8") : null
+  const rentPath = at("packages/modules/rent/src/rent.rules")
   const rent = crm && existsSync(rentPath) ? readFileSync(rentPath, "utf8") : null
-  const finance = readFileSync("packages/modules/finance/src/finance.rules", "utf8")
-  const financeRoot = readFileSync("packages/modules/finance/src/finance-root.rules", "utf8")
-  writeFileSync("firestore.rules", buildRules({ base, crm, rent, finance, financeRoot }))
-  console.log(`firestore.rules written (${crm ? "with" : "without"} CRM collections)`)
+  const finance = readFileSync(at("packages/modules/finance/src/finance.rules"), "utf8")
+  const financeRoot = readFileSync(at("packages/modules/finance/src/finance-root.rules"), "utf8")
+  return { rules: buildRules({ base, crm, rent, finance, financeRoot }), withCrm: crm !== null }
+}
+
+if (import.meta.url === `file://${process.argv[1]}`) {
+  const { rules, withCrm } = buildRulesAt()
+  writeFileSync("firestore.rules", rules)
+  console.log(`firestore.rules written (${withCrm ? "with" : "without"} CRM collections)`)
 }

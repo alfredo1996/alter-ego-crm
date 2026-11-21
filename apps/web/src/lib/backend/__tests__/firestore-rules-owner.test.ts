@@ -1,20 +1,20 @@
 /**
- * Only the owner's uid reaches the database (#389). Runs the PRODUCTION rules in a
- * project of its own (the shared one runs `testRules`, see rules-source.ts) and
- * talks to the emulator over REST with unsigned tokens, the way rules-unit-testing does.
+ * Only the owner's uid reaches the database (#389). Runs the PRODUCTION rules in projects of
+ * their own (the shared one runs `testRules`, see rules-source.ts) and talks to the emulator
+ * over REST with unsigned tokens, the way rules-unit-testing does. Two states (#32): the rules as
+ * committed, which carry a placeholder and admit nobody, and the rules `pnpm setup:owner` builds
+ * on a temporary copy for a made-up uid.
  */
-import { readFileSync } from "node:fs"
-
 import { beforeAll, describe, expect, it } from "vitest"
 
 import { emulatorHosts } from "./emulator-hosts"
+import { rulesFor } from "./owner-copy"
 import { loadRules, productionRules } from "./rules-source"
-import { OWNER_UID } from "../../owner-uid"
 
-const PROJECT = "demo-alter-ego-owner-only"
+const PLACEHOLDER = "OWNER_UID_NOT_SET"
+const OWNER_UID = "owner-test-uid"
 const STRANGER = "some-other-user-uid"
 const { firestore: HOST } = emulatorHosts()
-const BASE = `http://${HOST}/v1/projects/${PROJECT}/databases/(default)/documents`
 
 const token = (uid: string) => {
   const b64 = (o: object) => Buffer.from(JSON.stringify(o)).toString("base64url")
@@ -22,8 +22,8 @@ const token = (uid: string) => {
 }
 
 /** The HTTP status of one REST call as `uid` (undefined: signed out). */
-async function call(method: string, path: string, uid?: string, fields?: object): Promise<number> {
-  const res = await fetch(`${BASE}/${path}`, {
+const caller = (project: string) => async (method: string, path: string, uid?: string, fields?: object): Promise<number> => {
+  const res = await fetch(`http://${HOST}/v1/projects/${project}/databases/(default)/documents/${path}`, {
     method,
     headers: { "Content-Type": "application/json", ...(uid ? { Authorization: `Bearer ${token(uid)}` } : {}) },
     body: fields ? JSON.stringify({ fields }) : undefined,
@@ -37,9 +37,31 @@ const account = (userId: string) => ({
   statementDate: { nullValue: null }, importRef: { nullValue: null },
 })
 
-beforeAll(() => loadRules(HOST, PROJECT, productionRules()))
 
-describe("owner-only rules", () => {
+describe("the rules as committed (placeholder: nobody)", () => {
+  const call = caller("demo-alter-ego-placeholder")
+  beforeAll(() => loadRules(HOST, "demo-alter-ego-placeholder", productionRules()))
+
+  it.each([
+    ["a random signed-in uid", STRANGER],
+    ["a token whose uid is the placeholder", PLACEHOLDER],
+  ])("refuses %s everywhere", async (_, uid) => {
+    expect(await call("PATCH", `users/${uid}/company_accounts/a1`, uid, account(uid))).toBe(403)
+    expect(await call("GET", `users/${uid}/company_accounts/a1`, uid)).toBe(403)
+    expect(await call("GET", "categories/c1", uid)).toBe(403)
+    expect(await call("GET", `users/${uid}/accounts/a1`, uid)).toBe(403)
+  })
+
+  it("refuses a signed-out caller", async () => {
+    expect(await call("PATCH", `users/${PLACEHOLDER}/company_accounts/a2`, undefined, account(PLACEHOLDER))).toBe(403)
+    expect(await call("GET", "categories/c1")).toBe(403)
+  })
+})
+
+describe("the rules after setup:owner (a made-up uid)", () => {
+  const call = caller("demo-alter-ego-owner-only")
+  beforeAll(() => loadRules(HOST, "demo-alter-ego-owner-only", rulesFor(OWNER_UID).firestore))
+
   it("lets the owner write and read its own area", async () => {
     expect(await call("PATCH", `users/${OWNER_UID}/company_accounts/a1`, OWNER_UID, account(OWNER_UID))).toBe(200)
     expect(await call("GET", `users/${OWNER_UID}/company_accounts/a1`, OWNER_UID)).toBe(200)
@@ -61,6 +83,10 @@ describe("owner-only rules", () => {
     expect(await run()).toBe(403)
   })
 
+  it("refuses a token whose uid is the placeholder", async () => {
+    expect(await call("PATCH", `users/${PLACEHOLDER}/company_accounts/a1`, PLACEHOLDER, account(PLACEHOLDER))).toBe(403)
+  })
+
   it.each([
     ["reads the owner's area", () => call("GET", `users/${OWNER_UID}/company_accounts/a1`)],
     ["writes the owner's area", () => call("PATCH", `users/${OWNER_UID}/company_accounts/a2`, undefined, account(OWNER_UID))],
@@ -68,11 +94,5 @@ describe("owner-only rules", () => {
     ["reads the owner's Personal Finance accounts", () => call("GET", `users/${OWNER_UID}/accounts/a1`)],
   ])("refuses a signed-out caller that %s", async (_, run) => {
     expect(await run()).toBe(403)
-  })
-})
-
-describe("the uid literal", () => {
-  it.each(["../../firestore.rules", "../../storage.rules"])("%s holds owner-uid.ts's uid", (file) => {
-    expect(readFileSync(file, "utf8")).toContain(`'${OWNER_UID}'`)
   })
 })

@@ -28,7 +28,7 @@ I file delle fatture stanno in Storage sotto `users/{userId}/company-files/`.
 
 ## Regole di Sicurezza
 
-`firestore.rules` è generato: modifica `firestore/base.rules`, `firestore/crm.rules` o le regole di un modulo, poi esegui `pnpm rules:build`. Ogni collezione ha uno schema chiuso e viene ammesso un solo id utente (`isAllowedUser`). `storage.rules` protegge i file delle fatture.
+`firestore.rules` è generato: modifica `firestore/base.rules`, `firestore/crm.rules` o le regole di un modulo, poi esegui `pnpm rules:build`. Ogni collezione ha uno schema chiuso e viene ammesso un solo id utente (`isAllowedUser`): lo scrive `pnpm setup:owner <uid>`, e una copia senza di esso non lascia scrivere nessuno. `storage.rules` protegge i file delle fatture.
 
 ## Accesso dal Server
 

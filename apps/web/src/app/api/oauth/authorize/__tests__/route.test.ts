@@ -1,8 +1,12 @@
-import { describe, expect, it, vi } from "vitest"
+import { beforeEach, describe, expect, it, vi } from "vitest"
 
-import { OWNER_UID } from "@/lib/owner-uid"
+import { isOwner } from "@/lib/owner-uid"
 
 import { POST } from "../route"
+
+// The owner is stubbed per case: the committed uid is a placeholder that admits nobody (#32).
+const OWNER_UID = "owner-test-uid"
+vi.mock("@/lib/owner-uid", async (orig) => ({ ...(await orig<object>()), isOwner: vi.fn() }))
 
 // Tokens "token-<uid>" verify to <uid>.
 vi.mock("@/lib/firebase-admin-client", () => ({
@@ -44,6 +48,17 @@ describe("POST /api/oauth/authorize scope", () => {
 })
 
 describe("POST /api/oauth/authorize owner check", () => {
+  beforeEach(() => {
+    vi.mocked(isOwner).mockImplementation((uid) => uid === OWNER_UID)
+  })
+
+  it("refuses the placeholder uid under the real check with access_denied, 403", async () => {
+    vi.mocked(isOwner).mockImplementation((await vi.importActual<{ isOwner: (uid: string) => boolean }>("@/lib/owner-uid")).isOwner)
+    const res = await post("data:read", "token-OWNER_UID_NOT_SET")
+    expect(res.status).toBe(403)
+    expect((await res.json()).error).toBe("access_denied")
+  })
+
   it("refuses a signed-in uid that is not the owner with access_denied, 403", async () => {
     const res = await post("data:read", "token-someone-else")
     expect(res.status).toBe(403)
