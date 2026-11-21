@@ -42,7 +42,8 @@ async function run() {
   await page.getByLabel("Email").fill(DEMO_EMAIL)
   await page.getByLabel("Password").fill(DEMO_PASSWORD)
   await page.getByRole("button", { name: "Sign In" }).click()
-  await page.waitForURL("**/pipeline")
+  // The first page of the deployment: Personal Finance's Dashboard when it is listed, Pipeline otherwise.
+  await page.waitForURL(/\/(dashboard|pipeline)$/)
 
   const clients = await page.evaluate(async () => {
     const backend = window.__mockBackend

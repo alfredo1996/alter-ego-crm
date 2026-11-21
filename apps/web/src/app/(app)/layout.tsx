@@ -1,8 +1,11 @@
+import { FinanceOverlays } from "@alter-ego/finance/overlays"
+
 import { AppSidebar } from "@/components/app-sidebar"
 import { AuthGuard } from "@/components/auth/auth-guard"
 import { HideWhenPresenting } from "@/components/hide-when-presenting"
 import { MobileNav } from "@/components/mobile-nav"
 import { RouteGuard } from "@/components/route-guard"
+import { isModuleOn } from "@/modules"
 
 export default function AppLayout({
   children,
@@ -26,6 +29,12 @@ export default function AppLayout({
             </div>
           </main>
         </div>
+        {/* What Personal Finance floats over every page: its New Transaction button and import progress. */}
+        {isModuleOn("finance") && (
+          <HideWhenPresenting>
+            <FinanceOverlays />
+          </HideWhenPresenting>
+        )}
       </div>
     </AuthGuard>
   )

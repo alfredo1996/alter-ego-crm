@@ -37,9 +37,9 @@ gcloud storage buckets update gs://YOUR_PROJECT_ID.firebasestorage.app --cors-fi
 
 ## Which plugins run
 
-Every area is a plugin (`consulting`, `accounting`, `rent`). List the ones to run in
-`NEXT_PUBLIC_PLUGINS` in `apphosting.yaml`, for example `consulting,accounting`; `consulting,accounting,rent` run when it is
-unset, and a plugin added later is never on until it is listed. A plugin that needs another one (accounting needs consulting, rent needs accounting) fails the build
+Every area is a plugin (`finance`, `consulting`, `accounting`, `rent`). List the ones to run in
+`NEXT_PUBLIC_PLUGINS` in `apphosting.yaml`, for example `consulting,accounting` or `finance` alone; `consulting,accounting,rent` run when it is
+unset, and `finance`, like a plugin added later, is never on until it is listed. A plugin that needs another one (accounting needs consulting, rent needs accounting; finance needs none) fails the build
 when that one is not listed, and so does an unknown id. Settings lists what a deployment runs.
 
 ## Who can sign in

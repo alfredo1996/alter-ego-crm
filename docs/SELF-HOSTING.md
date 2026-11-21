@@ -18,7 +18,7 @@ pnpm dev:emulator    # the app, on http://localhost:3003
 ```
 
 Sign-up is closed in the app: production admits one uid (the allowlist,
-`isAllowedUser()` in `firestore/base.rules`, and `owner()` in `storage.rules`).
+`isAllowedUser()` in `firestore/base.rules` and in `storage.rules`).
 `pnpm local:start` loads the rules with that allowlist open, so locally any
 account works. Create one with `pnpm seed:demo`, or in the Auth emulator UI on
 http://localhost:4000. To run your own deployment, put your uid in those two
@@ -29,6 +29,26 @@ pnpm local:stop      # exports data on the way out
 ```
 
 `pnpm local:logs` tails the emulator. The emulator UI is on http://localhost:4000.
+
+## Personal Finance only
+
+Personal Finance is a plugin of its own and needs no other, so a deployment can run it alone: no pipeline,
+no invoices, only your accounts, transactions, budgets, goals, recurring bills and reports. Five steps:
+
+1. **Clone** the repository and run `pnpm install`.
+2. **List the plugin.** Set `NEXT_PUBLIC_PLUGINS=finance` in `apps/web/.env.local`, or in `apphosting.yaml` for a hosted
+   deployment. It is inlined at build time, so a change applies on the next build.
+3. **Build and deploy the rules and indexes.** `pnpm rules:build`, then
+   `firebase deploy --only firestore:rules,firestore:indexes --project YOUR_PROJECT_ID`. The rules include Personal
+   Finance's (`packages/modules/finance/src/finance.rules` and `packages/modules/finance/src/finance-root.rules`), and the root `firestore.indexes.json` holds its indexes.
+4. **Seed the categories once.** The default categories live in the root `/categories` collection, which clients cannot
+   write: `pnpm seed:firebase` writes them with the Admin SDK (`GOOGLE_APPLICATION_CREDENTIALS` and `FIREBASE_PROJECT_ID`
+   set; it skips a project that already has them). Against the local emulator, `pnpm local:seed`. `pnpm seed` does the same
+   with the variables read from `apps/web/.env.local`.
+5. **Name the owner.** Sign-up is closed, so create your user in the Firebase console (Authentication), put its uid in
+   `isAllowedUser()` in `firestore/base.rules` and in `storage.rules` (a finance-only deployment never deploys the latter),
+   and in `apps/web/src/lib/owner-uid.ts`,
+   then run `pnpm rules:build` and deploy the rules again.
 
 ## Invoice files
 

@@ -1,3 +1,4 @@
+import { clearMockFinance, mockFinance } from "@alter-ego/finance/adapter-mock"
 import { createMockRent } from "@alter-ego/rent/adapter-mock"
 
 import { ASSIGNMENT_EXISTS, ASSIGNMENT_HAS_DAYS, assignmentId, COLLABORATOR_HAS_DAYS, timecardId } from "@/lib/assignments"
@@ -338,6 +339,7 @@ const mockAuth: AuthAdapter = {
 const { rent: mockRent, clear: clearRent } = createMockRent(nextId)
 
 const mockDb: DatabaseAdapter & AuditAdapter & CrmServerAdapter & { validateApiKey(keyHash: string): Promise<string | null> } = {
+  ...mockFinance,
   ...mockRent,
 
   // API keys
@@ -1309,6 +1311,7 @@ export function __resetMockState() {
   journal.clear()
   collaborators.clear()
   clearRent()
+  clearMockFinance()
   assignments.clear()
   invoices.clear()
   companyDeadlines.clear()

@@ -17,7 +17,9 @@
     "shots": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/shots.mjs",
     "local:rules": "tsx scripts/local-rules.ts",
     "seed:demo": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/seed-demo.mjs",
-    "mcp:stdio": "tsx scripts/mcp-stdio.ts"
+    "mcp:stdio": "tsx scripts/mcp-stdio.ts",
+    "seed": "tsx --env-file=.env.local scripts/seed-firebase-categories.ts",
+    "seed:firebase": "tsx scripts/seed-firebase-categories.ts"
   },
   "dependencies": {
     "@alter-ego/finance": "workspace:*",

@@ -123,6 +123,76 @@ describe("nav with every plugin on", () => {
   })
 })
 
+describe("nav with Finance on", () => {
+  const ALL = "finance,consulting,accounting,rent"
+  const FINANCE_PAGES = ["/dashboard", "/accounts", "/transactions", "/categories", "/budgets", "/goals", "/recurring", "/reports"]
+
+  it("lists Personal Finance first, then the others in order", async () => {
+    const nav = await loadNav(ALL)
+    expect(nav.visibleNavGroups().map((g) => g.label)).toEqual(["Personal Finance", "Consulting", "Accounting", "Rent"])
+  })
+
+  it("orders Personal Finance's items exactly", async () => {
+    const nav = await loadNav(ALL)
+    expect(nav.visibleNavGroups()[0].items.map((i) => [i.label, i.href])).toEqual([
+      ["Dashboard", "/dashboard"],
+      ["Accounts", "/accounts"],
+      ["Transactions", "/transactions"],
+      ["Categories", "/categories"],
+      ["Budgets", "/budgets"],
+      ["Goals", "/goals"],
+      ["Recurring", "/recurring"],
+      ["Reports", "/reports"],
+    ])
+  })
+
+  it("opens the Dashboard at /, and sends a blocked route there", async () => {
+    const nav = await loadNav(ALL)
+    expect(nav.homeRoute()).toBe("/dashboard")
+  })
+
+  it("opens the Dashboard first when Finance is the only plugin", async () => {
+    const nav = await loadNav("finance")
+    expect(nav.visibleNavGroups().map((g) => g.label)).toEqual(["Personal Finance"])
+    expect(nav.homeRoute()).toBe("/dashboard")
+  })
+
+  it.each([...FINANCE_PAGES, "/accounts/a1"])("opens %s", async (path) => {
+    const nav = await loadNav(ALL)
+    expect(nav.isRouteEnabled(path)).toBe(true)
+    expect(nav.groupOf(path)).toBe("Personal Finance")
+  })
+
+  it("keeps the other plugins' pages open beside it", async () => {
+    const nav = await loadNav(ALL)
+    expect(["/pipeline", "/invoices", "/rent"].map((p) => nav.isRouteEnabled(p))).toEqual([true, true, true])
+  })
+
+  it("leaves the other plugins out of a Finance-only deployment", async () => {
+    const nav = await loadNav("finance")
+    expect(["/pipeline", "/invoices", "/rent"].map((p) => nav.isRouteEnabled(p))).toEqual([false, false, false])
+  })
+})
+
+describe("nav with Finance off", () => {
+  const FINANCE_PAGES = ["/dashboard", "/accounts", "/accounts/a1", "/transactions", "/categories", "/budgets", "/goals", "/recurring", "/reports"]
+
+  it.each([undefined, "consulting", "consulting,accounting,rent"])("has no Personal Finance group when the list is %j", async (plugins) => {
+    const nav = await loadNav(plugins)
+    expect(nav.visibleNavGroups().map((g) => g.label)).not.toContain("Personal Finance")
+  })
+
+  it.each(FINANCE_PAGES)("closes %s, so typing the URL does not open it", async (path) => {
+    const nav = await loadNav()
+    expect(nav.isRouteEnabled(path)).toBe(false)
+    expect(nav.groupOf(path)).toBeNull()
+  })
+
+  it("still opens /pipeline at /", async () => {
+    expect((await loadNav()).homeRoute()).toBe("/pipeline")
+  })
+})
+
 describe("nav with plugins left out", () => {
   it("a plugin that is off has no group, and the others keep theirs", async () => {
     const nav = await loadNav("consulting,accounting")

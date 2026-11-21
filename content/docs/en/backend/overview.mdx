@@ -22,7 +22,7 @@ The adapter has three sub-interfaces:
 ```typescript
 interface BackendAdapter {
   auth: AuthAdapter       // Sign in, sign out, onAuthStateChanged
-  db: DatabaseAdapter     // The company side, rent and API keys
+  db: DatabaseAdapter     // The company side, rent, Personal Finance and API keys
   files: FilesAdapter     // Invoice files (Storage)
 }
 ```
@@ -39,6 +39,7 @@ Operations are grouped by domain:
 - **Company Deadlines** — deadlines
 - **Solutions, Journal** — the solution catalog and each solution's journal of work
 - **Tenants, Leases** — the Rent module (`packages/modules/rent`)
+- **Accounts, Transactions, Categories, Budgets, Savings Goals, Recurring** — Personal Finance (`packages/modules/finance`); its slices are composed into the mock, client SDK, Admin and server adapters in `apps/web/src/lib/backend`
 - **API Keys** — create, list and revoke
 
 ### Server-only surfaces

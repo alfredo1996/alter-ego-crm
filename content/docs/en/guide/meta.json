@@ -2,6 +2,14 @@
   "title": "User Guide",
   "pages": [
     "overview",
+    "dashboard",
+    "accounts",
+    "transactions",
+    "categories",
+    "budgets",
+    "goals",
+    "recurring",
+    "reports",
     "settings"
   ]
 }

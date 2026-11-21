@@ -25,6 +25,26 @@ test.describe("Navigation", () => {
     }
   })
 
+  // Personal Finance leads the sidebar. Only the current page's group is open, so each link is revealed first.
+  test("Personal Finance's links open its pages", async ({ page, isMobile }) => {
+    test.skip(!!isMobile, "Sidebar is hidden on mobile")
+
+    for (const [name, url] of [
+      ["Dashboard", "/dashboard"],
+      ["Accounts", "/accounts"],
+      ["Transactions", "/transactions"],
+      ["Categories", "/categories"],
+      ["Budgets", "/budgets"],
+      ["Goals", "/goals"],
+      ["Recurring", "/recurring"],
+      ["Reports", "/reports"],
+    ] as const) {
+      await (await revealLink(page.locator("aside"), name, true)).click()
+      await expect(page).toHaveURL(url)
+      await expect(page.getByRole("heading", { name, level: 1 })).toBeVisible()
+    }
+  })
+
   test("only the current page's group is open, and a heading opens the other in place", async ({ page, isMobile }) => {
     test.skip(!!isMobile, "The sheet's headings are covered in mobile.spec.ts")
 
@@ -42,7 +62,7 @@ test.describe("Navigation", () => {
     await expect(page).toHaveURL("/invoices")
     await expect(nav.getByRole("button", { name: "Accounting" })).toHaveAttribute("aria-expanded", "true")
 
-    // Three groups, one open: Rent is a heading after Accounting, and opening it closes Accounting's.
+    // Four groups, one open: Rent is a heading after Accounting, and opening it closes Accounting's.
     await expect(nav.getByRole("button", { name: "Rent" })).toHaveAttribute("aria-expanded", "false")
     await nav.getByRole("button", { name: "Rent" }).click()
     await expect(nav.getByRole("link", { name: "Rent", exact: true })).toBeVisible()
@@ -75,5 +95,12 @@ test.describe("Navigation", () => {
 
     await navigateTo(page, "Clients", "/clients")
     await expect(page).toHaveURL("/clients")
+  })
+
+  test("mobile nav opens a Personal Finance page", async ({ page, isMobile }) => {
+    test.skip(!isMobile, "Mobile nav only visible on mobile")
+
+    await navigateTo(page, "Accounts", "/accounts")
+    await expect(page.getByRole("heading", { name: "Accounts", level: 1 })).toBeVisible()
   })
 })

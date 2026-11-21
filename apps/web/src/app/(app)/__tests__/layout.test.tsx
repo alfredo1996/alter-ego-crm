@@ -5,6 +5,9 @@ vi.mock("@/components/auth/auth-guard", () => ({ AuthGuard: ({ children }: { chi
 vi.mock("@/components/route-guard", () => ({ RouteGuard: ({ children }: { children: React.ReactNode }) => children }))
 vi.mock("@/components/app-sidebar", () => ({ AppSidebar: () => <nav aria-label="Main" /> }))
 vi.mock("@/components/mobile-nav", () => ({ MobileNav: () => <header aria-label="Mobile" /> }))
+vi.mock("@alter-ego/finance/overlays", () => ({ FinanceOverlays: () => <button>New Transaction</button> }))
+const modules = vi.hoisted(() => ({ finance: false }))
+vi.mock("@/modules", () => ({ isModuleOn: (id: string) => id === "finance" && modules.finance }))
 const nav = vi.hoisted(() => ({ search: "", path: "/solutions/s1" }))
 vi.mock("next/navigation", () => ({ useSearchParams: () => new URLSearchParams(nav.search), usePathname: () => nav.path }))
 
@@ -44,5 +47,20 @@ describe("app layout", () => {
   it("leaves no bottom padding for a floating button: the app has none", () => {
     render(<AppLayout>page</AppLayout>)
     expect(screen.getByRole("main").className).not.toMatch(/pb-24/)
+  })
+
+  it("shows Personal Finance's New Transaction button only when finance is on, and hides it while presenting", () => {
+    nav.search = ""
+    const { unmount } = render(<AppLayout>page</AppLayout>)
+    expect(screen.queryByRole("button", { name: "New Transaction" })).not.toBeInTheDocument()
+    unmount()
+    modules.finance = true
+    const on = render(<AppLayout>page</AppLayout>)
+    expect(screen.getByRole("button", { name: "New Transaction" })).toBeInTheDocument()
+    on.unmount()
+    nav.search = "?present=1"
+    render(<AppLayout>page</AppLayout>)
+    expect(screen.queryByRole("button", { name: "New Transaction" })).not.toBeInTheDocument()
+    modules.finance = false
   })
 })

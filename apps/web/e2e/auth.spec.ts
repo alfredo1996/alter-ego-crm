@@ -16,7 +16,8 @@ test.describe("Authentication", () => {
     await page.getByLabel("Email").fill("test@example.com")
     await page.getByLabel("Password", { exact: true }).fill("password123")
     await page.getByRole("button", { name: "Sign In" }).click()
-    await expect(page).toHaveURL("/pipeline")
+    // The first group lists the Dashboard: this build lists Personal Finance, so it is the first page.
+    await expect(page).toHaveURL("/dashboard")
   })
 
   test("should sign in and go on to the page it was asked for", async ({ page }) => {

@@ -19,6 +19,8 @@ process.env.TZ ||= "Europe/Rome"
 // Fake Firebase config injected before any module loads — emulator accepts any non-empty values
 const firebaseEnv = {
   NEXT_PUBLIC_BACKEND: "firebase",
+  // Every plugin on: Personal Finance is opt-in, and its MCP tools exist only when it is listed.
+  NEXT_PUBLIC_PLUGINS: "finance,consulting,accounting,rent",
   NEXT_PUBLIC_FIREBASE_API_KEY: "demo-api-key",
   NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: "demo-alter-ego.firebaseapp.com",
   NEXT_PUBLIC_FIREBASE_PROJECT_ID: "demo-alter-ego",
@@ -42,10 +44,13 @@ export default defineConfig({
     include: [
       "src/lib/backend/__tests__/firebase.adapter.test.ts",
       "src/lib/backend/__tests__/firebase.freshness.test.ts",
+      "src/lib/backend/__tests__/firebase.budgets.test.ts",
+      "src/lib/backend/__tests__/firebase.dashboard.test.ts",
       "src/lib/backend/__tests__/firebase.files.test.ts",
       "src/lib/backend/__tests__/firebaseadmin.adapter.test.ts",
       "src/lib/backend/__tests__/firebase.api-keys.test.ts",
       "src/lib/backend/__tests__/firestore-rules.test.ts",
+      "src/lib/backend/__tests__/firestore-rules-finance.test.ts",
       "src/lib/backend/__tests__/firestore-rules-owner.test.ts",
       "src/lib/backend/__tests__/storage-rules.test.ts",
       "src/lib/oauth/__tests__/flow.emulator.test.ts",
@@ -56,6 +61,8 @@ export default defineConfig({
       "src/lib/mcp/__tests__/solutions.emulator.test.ts",
       "src/lib/mcp/__tests__/collaborators.emulator.test.ts",
       "src/lib/mcp/__tests__/rent.emulator.test.ts",
+      "src/lib/mcp/__tests__/finance-read.emulator.test.ts",
+      "src/lib/mcp/__tests__/finance-write.emulator.test.ts",
       "src/lib/mcp/__tests__/invoice-files.emulator.test.ts",
     ],
     // Connects the SDK to emulators after env vars are set

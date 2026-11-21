@@ -30,6 +30,10 @@ const EMPTY_STATES = [
   "No active contracts",
   "Client not found.",
   "No contracts yet",
+  "No transactions yet",
+  "Account not found.",
+  "No accounts yet",
+  "No data for this period",
   "Unknown",
 ]
 
@@ -139,6 +143,46 @@ test.describe("Loading states", () => {
 
     await visitCold(page, "Pipeline", "/pipeline")
     await expect(page.getByText(title).first()).toBeVisible()
+
+    expect(await emptyStatesSeen(page)).toEqual([])
+  })
+
+  // Personal Finance's pages, listed first in the sidebar.
+  test("finance pages never show an empty state before their data", async ({ page }) => {
+    const accountName = uniqueName("Loading Account")
+    await navigateTo(page, "Accounts", "/accounts")
+    await page.getByRole("button", { name: /new account/i }).click()
+    await page.getByLabel("Name").fill(accountName)
+    await page.getByRole("button", { name: /create account/i }).click()
+    await expect(page.getByText(accountName).first()).toBeVisible()
+
+    const description = uniqueName("Loading Coffee")
+    await navigateTo(page, "Transactions", "/transactions")
+    await page.getByRole("button", { name: /new transaction/i }).click()
+    await page.getByLabel("Description").fill(description)
+    await page.getByLabel("Amount").fill("5")
+    await page.getByRole("button", { name: /add transaction/i }).click()
+    await expect(page.getByRole("dialog")).not.toBeVisible()
+
+    await slowDownAndWatch(page)
+
+    await visitCold(page, "Dashboard", "/dashboard")
+    await expect(page.getByText(description).locator("visible=true").first()).toBeVisible()
+
+    await visitCold(page, "Accounts", "/accounts")
+    const account = page.getByText(accountName).first()
+    // Clearing mid-load would cancel the list's own fetch: wait for it first.
+    await expect(account).toBeVisible()
+    await clearQueryCache(page)
+    await account.click()
+    await expect(page).toHaveURL(/\/accounts\/.+/)
+    await expect(page.getByText(description).locator("visible=true").first()).toBeVisible()
+
+    await visitCold(page, "Reports", "/reports")
+    await expect(page.getByRole("heading", { name: "Reports" })).toBeVisible()
+
+    await visitCold(page, "Transactions", "/transactions")
+    await expect(page.getByText(description).locator("visible=true").first()).toBeVisible()
 
     expect(await emptyStatesSeen(page)).toEqual([])
   })

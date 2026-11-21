@@ -10,7 +10,7 @@
  *  - Clearing all emulator data before the test run
  */
 import { createUserWithEmailAndPassword, deleteUser } from "firebase/auth"
-import { addDoc, collection } from "firebase/firestore"
+import { addDoc, collection, doc, getDocs, setDoc, Timestamp } from "firebase/firestore"
 import { describe, expect, it } from "vitest"
 
 import { createFirebaseAdapter } from "@/lib/backend/firebase"
@@ -47,6 +47,22 @@ describeAdapterContract("firebase", async () => {
           dueDate: null, paidDate: null, createdAt: new Date(), updatedAt: new Date(),
         })
       ).id,
+    legacyBalanceSnapshots: {
+      seed: async () => {
+        await addDoc(collection(getFirebaseDb(), `users/${user.uid}/account_balance_snapshots`), {
+          userId: user.uid, accountId: "gone", balance: 100, date: new Date(), createdAt: new Date(),
+        })
+      },
+      count: async () =>
+        (await getDocs(collection(getFirebaseDb(), `users/${user.uid}/account_balance_snapshots`))).size,
+    },
+    seedNetWorthSnapshot: async (date, netWorth) => {
+      const id = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`
+      await setDoc(doc(getFirebaseDb(), `users/${user.uid}/net_worth_snapshots/${id}`), {
+        userId: user.uid, date: Timestamp.fromDate(new Date(date.getFullYear(), date.getMonth(), date.getDate())),
+        totalAssets: netWorth, totalLiabilities: 0, netWorth,
+      })
+    },
     cleanup: async () => {
       // Delete the test user — Firestore subcollection docs are cleaned by
       // the globalSetup teardown at the end of the full run

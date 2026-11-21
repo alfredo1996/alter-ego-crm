@@ -70,6 +70,8 @@ service cloud.firestore {
         && incoming().keys().hasAll(required);
     }
 
+    // @@ROOT_COLLECTIONS@@
+
     // ── User data — scoped to owner ───────────────────────────────────────────
 
     match /users/{userId} {

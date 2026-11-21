@@ -1,3 +1,4 @@
+import { describeFinanceContract } from "@alter-ego/finance/contract"
 import { describeRentContract } from "@alter-ego/rent/contract"
 import { describe, it, expect, beforeAll, afterAll } from "vitest"
 
@@ -21,6 +22,10 @@ export interface ContractSetup {
      * a contract, no clientId: 2027-01, €1,000 + €220 VAT — and returns its id.
      */
     seedLegacyInvoice: (engagementId: string, number: string) => Promise<string>
+    /** Firebase only: the daily balance snapshots v0.9.0 and older stored, still in production. */
+    legacyBalanceSnapshots?: { seed: () => Promise<void>; count: () => Promise<number> }
+    /** Firebase only: stores a net-worth snapshot dated `date` (a local day) worth `netWorth`. */
+    seedNetWorthSnapshot?: (date: Date, netWorth: number) => Promise<void>
     cleanup: () => Promise<void>
   }>
 }
@@ -33,6 +38,8 @@ export function describeAdapterContract(name: string, setup: ContractSetup) {
     let otherUserId: string
     let seedLegacyTask: (engagementId: string, title: string) => Promise<string>
     let seedLegacyInvoice: (engagementId: string, number: string) => Promise<string>
+    let legacyBalanceSnapshots: Awaited<ReturnType<ContractSetup>>["legacyBalanceSnapshots"]
+    let seedNetWorthSnapshot: Awaited<ReturnType<ContractSetup>>["seedNetWorthSnapshot"]
     let cleanupFn: () => Promise<void>
 
     beforeAll(async () => {
@@ -43,6 +50,8 @@ export function describeAdapterContract(name: string, setup: ContractSetup) {
       otherUserId = result.otherUserId
       seedLegacyTask = result.seedLegacyTask
       seedLegacyInvoice = result.seedLegacyInvoice
+      legacyBalanceSnapshots = result.legacyBalanceSnapshots
+      seedNetWorthSnapshot = result.seedNetWorthSnapshot
       cleanupFn = result.cleanup
     })
 
@@ -2388,5 +2397,8 @@ export function describeAdapterContract(name: string, setup: ContractSetup) {
     })
 
     describeRentContract(() => ({ db, userId, otherUserId }))
+
+    // Personal Finance: every case is the package's own, run against this app's composed adapter.
+    describeFinanceContract(() => ({ db, userId, otherUserId, legacyBalanceSnapshots, seedNetWorthSnapshot }))
   })
 }

@@ -3,14 +3,6 @@ import { test, expect } from "@playwright/test"
 import { signIn, navigateTo } from "./helpers/test-utils"
 
 import type { BackendAdapter } from "@/lib/backend"
-import type { FinanceAdapter } from "@alter-ego/finance/adapter"
-
-// Parked spec (issue 30): this app's DatabaseAdapter has no accounting half until issue 31 wires finance's
-// adapter, so the two seed calls are typed here. Issue 31 deletes this type and reads BackendAdapter again.
-type SeedBackend = {
-  auth: BackendAdapter["auth"]
-  db: Pick<FinanceAdapter, "createAccount" | "createTransaction">
-}
 
 test.describe("Reports", () => {
   test.beforeEach(async ({ page }) => {
@@ -72,7 +64,7 @@ test.describe("Reports", () => {
 
   test("Compare shows its figures, and on a phone a removable chip", async ({ page }) => {
     await page.evaluate(async () => {
-      const backend = (window as unknown as { __mockBackend: SeedBackend }).__mockBackend
+      const backend = (window as unknown as { __mockBackend: BackendAdapter }).__mockBackend
       const u = (await backend.auth.getCurrentUser())!.id
       const account = await backend.db.createAccount(u, { name: "Checking", type: "checking", currency: "EUR", balance: 0 })
       const now = new Date()
@@ -103,7 +95,7 @@ test.describe("Reports", () => {
 
   test("In and Out sets the month against the three before it, as a chart or a table, and Top Expenses lists the largest", async ({ page }) => {
     await page.evaluate(async () => {
-      const backend = (window as unknown as { __mockBackend: SeedBackend }).__mockBackend
+      const backend = (window as unknown as { __mockBackend: BackendAdapter }).__mockBackend
       const u = (await backend.auth.getCurrentUser())!.id
       const account = await backend.db.createAccount(u, { name: "Checking", type: "checking", currency: "EUR", balance: 0 })
       const now = new Date()
@@ -141,7 +133,7 @@ test.describe("Reports", () => {
     const iso = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`
     await expect(page).toHaveURL(new RegExp(`/transactions\\?dateFrom=${iso(new Date(t.getFullYear(), t.getMonth(), 1))}&dateTo=${iso(new Date(t.getFullYear(), t.getMonth() + 1, 0))}$`))
     await expect(page.getByRole("button", { name: /^Remove filter: Dates / })).toBeVisible()
-    await expect(page.locator("button:visible", { hasText: "Rent" })).toHaveCount(1)
+    await expect(page.getByRole("main").locator("button:visible", { hasText: "Rent" })).toHaveCount(1)
     await expect(page.getByText("Groceries")).toHaveCount(0)
   })
 })

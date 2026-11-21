@@ -35,6 +35,11 @@ on:
       - "apps/web/src/lib/backend/__tests__/firestore-rules-owner.test.ts"
       - "apps/web/src/lib/backend/__tests__/storage-rules.test.ts"
       - "apps/web/src/lib/backend/__tests__/adapter-contract.ts"
+      - "apps/web/src/lib/backend/__tests__/firebase.budgets.test.ts"
+      - "apps/web/src/lib/backend/__tests__/firebase.dashboard.test.ts"
+      - "apps/web/src/lib/backend/__tests__/firestore-rules-finance.test.ts"
+      - "apps/web/src/lib/backend/__tests__/monthly-totals-paths.ts"
+      - "scripts/build-firestore-rules.mjs"
       # The fragments firestore.rules is built from (pnpm rules:build).
       - "firestore/**"
       - "firestore.rules"
@@ -73,6 +78,11 @@ on:
       - "apps/web/src/lib/backend/__tests__/firestore-rules-owner.test.ts"
       - "apps/web/src/lib/backend/__tests__/storage-rules.test.ts"
       - "apps/web/src/lib/backend/__tests__/adapter-contract.ts"
+      - "apps/web/src/lib/backend/__tests__/firebase.budgets.test.ts"
+      - "apps/web/src/lib/backend/__tests__/firebase.dashboard.test.ts"
+      - "apps/web/src/lib/backend/__tests__/firestore-rules-finance.test.ts"
+      - "apps/web/src/lib/backend/__tests__/monthly-totals-paths.ts"
+      - "scripts/build-firestore-rules.mjs"
       # The fragments firestore.rules is built from (pnpm rules:build).
       - "firestore/**"
       - "firestore.rules"

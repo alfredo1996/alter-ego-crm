@@ -1,6 +1,6 @@
 # Alter Ego CRM
 
-> Run a small Italian SRL from one codebase: pipeline, contracts, time, invoices, the cash book.
+> Run a small Italian SRL from one codebase: pipeline, contracts, time, invoices, the cash book, and optionally your own money.
 
 ## Overview
 
@@ -15,6 +15,8 @@ one owner), built on Next.js 16. It covers:
   book over the company accounts (with the workbook import), costs, cost centres,
   the Month End close, and the runway and quarters on the Plan.
 - **Rent** — tenants and yearly leases, with payments linked to the month they cover.
+- **Personal Finance** (opt-in) — accounts, transactions, categories, budgets, savings goals, recurring
+  transactions, reports and a dashboard, for one person's own money.
 
 Each area is a **plugin**, and a deployment lists the ones it runs in
 `NEXT_PUBLIC_PLUGINS`: a plugin that is not listed has no pages, links or connector
@@ -97,9 +99,9 @@ Copy `apps/web/.env.example` to `apps/web/.env.local` and set these:
 | `NEXT_PUBLIC_USE_EMULATOR`                 | Point the SDK at the emulator | No              | `false` |
 
 `NEXT_PUBLIC_PLUGINS` is a comma-separated list of the plugins a deployment
-runs: `consulting`, `accounting`, `rent`. `accounting` needs `consulting`, and
+runs: `finance` (Personal Finance), `consulting`, `accounting`, `rent`. `finance` needs no other plugin. `accounting` needs `consulting`, and
 `rent` needs `accounting`: an unknown id, or a plugin whose requirement is not
-listed, stops the build. When it is unset, `consulting`, `accounting` and `rent` run; a plugin added later is never on until it is listed. A plugin that is not
+listed, stops the build. When it is unset, `consulting`, `accounting` and `rent` run; `finance`, like a plugin added later, is never on until it is listed. A plugin that is not
 listed disappears from the sidebar, its pages and the connector, and its data is
 not touched.
 
@@ -110,8 +112,8 @@ server, which uses the Admin SDK and bypasses Firestore rules:
 
 ## MCP server
 
-- 68 tools over the company data, for Claude or any MCP client; a plugin
-  that is left out serves none of its tools
+- 79 tools: 68 over the company data and 11 over Personal Finance, for Claude or any
+  MCP client; a plugin that is left out serves none of its tools
 - Remote over HTTP at `/api/mcp` with OAuth 2.1 + PKCE (scopes `data:read` and
   `data:write`) or an API key, or local over stdio with no auth at all
 - `/file-work`: a Claude Code skill in [skills/file-work/](skills/file-work/SKILL.md) that
@@ -121,12 +123,14 @@ server, which uses the Admin SDK and bypasses Firestore rules:
 ## Project Structure
 
 ```
-apps/web/src/   (kernel: packages/kernel; UI kit: packages/ui; Rent: packages/modules/rent)
+apps/web/src/   (kernel: packages/kernel; UI kit: packages/ui; Rent: packages/modules/rent; Personal Finance: packages/modules/finance)
 ├── app/
 │   ├── (auth)/              # /login, /register (sign-up is closed)
 │   ├── (app)/               # /pipeline, /clients, /contracts, /collaborators,
 │   │                        #   /solutions, /invoices, /cash-book, /rent, /month-end,
-│   │                        #   /tasks, /plan, /deadlines, /costs, /settings
+│   │                        #   /tasks, /plan, /deadlines, /costs, /settings, and
+│   │                        #   Personal Finance's /dashboard, /accounts, /transactions,
+│   │                        #   /categories, /budgets, /goals, /recurring, /reports
 │   ├── api/                 # MCP server, OAuth endpoints, API keys
 │   └── [lang]/docs/         # Fumadocs pages
 ├── components/              # crm, plan, deadlines, company-expenses, cash-book,
@@ -134,7 +138,7 @@ apps/web/src/   (kernel: packages/kernel; UI kit: packages/ui; Rent: packages/mo
 ├── hooks/                   # TanStack Query hooks (use-clients, use-invoices, …)
 ├── lib/
 │   ├── backend/             # Adapter: types.ts, mock.ts, firebase.ts, firebase-admin.ts
-│   ├── mcp/                 # MCP tools (crm-*, rent, shared helpers)
+│   ├── mcp/                 # MCP tools (crm-*, rent, finance-*, shared helpers)
 │   ├── oauth/               # OAuth 2.1 authorization server for the MCP endpoint
 │   ├── projection.ts        # Month-by-month company projection
 │   ├── engagement-burndown.ts # Contract budget burn-down
@@ -181,12 +185,13 @@ Test files live in `__tests__/` directories next to the code they test. Coverage
 focuses on `apps/web/src/lib/**` (utilities, business logic, backend adapters).
 `firestore-rules-build.test.ts` fails when `firestore.rules` no longer matches its
 sources: the file is **generated** by `pnpm rules:build` from `firestore/base.rules`,
-`firestore/crm.rules` and the modules' rules (`packages/modules/rent/src/rent.rules`),
+`firestore/crm.rules` and the modules' rules (`packages/modules/rent/src/rent.rules`,
+`packages/modules/finance/src/finance.rules` and `packages/modules/finance/src/finance-root.rules`),
 so edit those, never the output. The registry tests prove a deployment can switch
-Accounting and Rent out, and that each plugin is wired end to end; `plugin-boundary.test.ts`
+Personal Finance, Accounting and Rent out, and that each plugin is wired end to end; `plugin-boundary.test.ts`
 keeps new imports between plugins out (a ratchet over `known-edges.ts`: a new import across plugins fails).
 
-### E2E Tests (Playwright) — 31 specs run, 10 parked
+### E2E Tests (Playwright) — 41 specs run
 
 ```bash
 pnpm test:e2e           # the whole suite, against a production mock build
@@ -195,7 +200,8 @@ pnpm test:e2e:modules   # a build that lists only Consulting
 
 Specs are in `apps/web/e2e/`: sign-in and sign-out, navigation, settings, the
 pipeline, clients and collaborators, invoices and invoice files, the cash book,
-Month End, Rent, the Plan, the phone layout and the loading states.
+Month End, Rent, Personal Finance (dashboard, accounts, transactions, categories, budgets, goals, recurring,
+reports), the Plan, the phone layout and the loading states.
 
 ### Contract Tests
 

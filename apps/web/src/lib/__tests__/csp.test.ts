@@ -122,6 +122,9 @@ describe("zod in the browser", () => {
     // the schema module's own import can have set it.
     vi.resetModules()
     const { globalConfig } = await import("zod/v4/core")
+    // zod is external to the module graph, so resetModules leaves its config alone: clear what the setup's
+    // finance host (it loads the backend, and with it the schemas) already set.
+    delete globalConfig.jitless
     expect(globalConfig.jitless).toBeFalsy()
     await import("@/types/schemas")
     expect(globalConfig.jitless).toBe(true)

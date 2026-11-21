@@ -4,20 +4,22 @@
 
 This repo ships the company app of an Italian SRL: pipeline, contracts, time and
 the plan, invoices and their files, the cash book, month-end close, solutions and
-rent. It was cut from the larger Alter Ego repository, which also held a
-personal-finance app; nothing of that side is left, and there is no build mode.
+rent, plus Personal Finance as an opt-in plugin (`finance`, off unless listed in
+`NEXT_PUBLIC_PLUGINS`). It was cut from the larger Alter Ego repository; there is
+no build mode.
 
 Some tests guard the structure, and working around one of them defeats the point:
 
-| Test                                                       | Enforces                                                                                                                                          |
-| ---------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `apps/web/src/lib/__tests__/firestore-rules-build.test.ts` | `firestore.rules` matches its sources                                                                                                             |
-| `apps/web/src/lib/mcp/__tests__/adapter-boundary.test.ts`  | The MCP layer never imports Firebase directly                                                                                                     |
-| `apps/web/src/modules/__tests__/registry.test.ts`          | Every MCP tool belongs to one module; a plugin can be left out; a plugin is wired end to end (one nav group, its pages, tools, rules and indexes) |
-| `apps/web/src/modules/__tests__/plugin-boundary.test.ts`   | No new import from one plugin into another; a listed one that is gone must leave `known-edges.ts`                                                 |
-| `packages/kernel/src/__tests__/boundary.test.ts`           | The kernel imports nothing app-side                                                                                                               |
-| `packages/ui/src/__tests__/boundary.test.ts`               | The UI kit imports only the kernel and its own dependencies                                                                                       |
-| `packages/modules/rent/src/__tests__/boundary.test.ts`     | A module package imports only the kernel, the UI kit and its own dependencies                                                                     |
+| Test                                                       | Enforces                                                                                                                                                 |
+| ---------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `apps/web/src/lib/__tests__/firestore-rules-build.test.ts` | `firestore.rules` matches its sources                                                                                                                    |
+| `apps/web/src/lib/mcp/__tests__/adapter-boundary.test.ts`  | The MCP layer never imports Firebase directly                                                                                                            |
+| `apps/web/src/modules/__tests__/registry.test.ts`          | Every MCP tool belongs to one module; a plugin can be left out; a plugin is wired end to end (one nav group, its pages, tools, rules and indexes)        |
+| `apps/web/src/modules/__tests__/plugin-boundary.test.ts`   | No new import from one plugin into another; a listed one that is gone must leave `known-edges.ts`; no file outside the host imports `@alter-ego/finance` |
+| `packages/kernel/src/__tests__/boundary.test.ts`           | The kernel imports nothing app-side                                                                                                                      |
+| `packages/ui/src/__tests__/boundary.test.ts`               | The UI kit imports only the kernel and its own dependencies                                                                                              |
+| `packages/modules/finance/src/__tests__/boundary.test.ts`  | Finance imports only the kernel, the UI kit and its own dependencies                                                                                     |
+| `packages/modules/rent/src/__tests__/boundary.test.ts`     | A module package imports only the kernel, the UI kit and its own dependencies                                                                            |
 
 **`firestore.rules` is generated.** Edit `firestore/base.rules` (the shared part:
 users, API keys, OAuth, `mcp_audit`), `firestore/crm.rules` or a module's
@@ -74,7 +76,7 @@ apps/web/                 # the Next.js app (@alter-ego/web); its own .env.local
 packages/
 ├── kernel/               # @alter-ego/kernel: money (currency), dates, the module contract.
 │                         # Imports nothing app-side
-├── modules/finance/      # @alter-ego/finance, copied from alter-ego at 68c19bd; not wired until issue 31
+├── modules/finance/      # @alter-ego/finance, Personal Finance, wired as the `finance` plugin; only the host imports it
 ├── modules/rent/         # @alter-ego/rent, the first module package: types, zod, pure lease logic, its
 │                         # adapter slice (mock + Firebase), its rules fragment, hooks, the page and dialogs.
 │                         # The app only composes it. See "The Module Registry" below
@@ -102,13 +104,13 @@ from the source. A new edge fails, and so does a listed edge that is gone: delet
 shrinks. A new file is host, and so unchecked, until a rule in `PATH_MAP` (`plugin-graph.ts`) places it: place
 it when you add it. Test files are not scanned. A file that serves two plugins (`crm-read.ts`, `crm-write.ts`) is host until
 it splits. A module package keeps its indexes in a `src/*.indexes.json` file (finance's is `src/firestore.indexes.json`); the registry test checks they are in
-the root `firestore.indexes.json`. `packages/modules/finance` is copied in but not wired: `NOT_YET_WIRED` in `plugin-checks.ts` exempts it from the rules and index checks until issue 31.
+the root `firestore.indexes.json`. `packages/modules/finance` is checked like every plugin (rules, indexes, Tailwind `@source`).
 
-The areas of the app are plugins (`consulting`, `accounting`, `rent`; the code says module), declared as data in
+The areas of the app are plugins (`finance`, `consulting`, `accounting`, `rent`; the code says module), declared as data in
 `apps/web/src/modules`, and each sidebar group is one plugin. `NEXT_PUBLIC_PLUGINS` (comma-separated ids, opt-in,
 consulting,accounting,rent when unset; a plugin added later is never on until listed) lists the ones a deployment runs: the others' nav group, routes and MCP tools go, their
 data is not touched. An unknown id, a plugin whose requirement is not listed (accounting needs consulting, rent
-needs accounting) and the retired variable that this one replaced fail the build, the retired one even when defined empty: `resolveModules`
+needs accounting; finance needs none and is off unless listed) and the retired variable that this one replaced fail the build, the retired one even when defined empty: `resolveModules`
 (`modules/resolve.ts`, called by `next.config.ts` and by the registry) is the one place that decides;
 `isModuleOn` is what pages and tools ask. Anything that works with every plugin on has to keep working with
 one off.

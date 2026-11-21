@@ -8,6 +8,7 @@
  * with what the guard enforces.
  */
 
+import { FINANCE_NAV } from "@alter-ego/finance/nav"
 import {
   BookOpen,
   CalendarCheck,
@@ -43,6 +44,8 @@ export interface NavGroup {
 }
 
 export const NAV_GROUPS: NavGroup[] = [
+  // Personal Finance leads, so `/` opens its Dashboard when it is on (homeRoute reads the first visible group).
+  { ...FINANCE_NAV, module: "finance" },
   {
     label: "Consulting",
     module: "consulting",

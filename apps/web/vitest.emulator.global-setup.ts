@@ -2,10 +2,15 @@
  * Vitest globalSetup for Firebase emulator tests.
  * Runs once in the main process before any test workers start.
  *
- * Verifies emulators are reachable and clears all data.
+ * Verifies emulators are reachable, clears all data, then seeds the root /categories
+ * collection with Personal Finance's default categories (its contract needs them).
+ *
+ * Seeding uses `Authorization: Bearer owner` to bypass Firestore Security Rules —
+ * this is only valid for the local emulator, never production.
  */
 
 const { firestore: FIRESTORE_HOST, auth: AUTH_HOST, storage: STORAGE_HOST } = emulatorHosts()
+const FIRESTORE_BASE = firestoreRestBase(FIRESTORE_HOST)
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -52,11 +57,74 @@ async function clearStorageData(): Promise<void> {
   }
 }
 
+// ─── Default category seeds ───────────────────────────────────────────────────
+// Build a Firestore REST document body from plain JS values
+function firestoreDoc(fields: Record<string, unknown>): { fields: Record<string, unknown> } {
+  function encode(val: unknown): unknown {
+    if (val === null) return { nullValue: null }
+    if (typeof val === "boolean") return { booleanValue: val }
+    if (typeof val === "number") return Number.isInteger(val) ? { integerValue: String(val) } : { doubleValue: val }
+    if (typeof val === "string") return { stringValue: val }
+    if (val instanceof Date) return { timestampValue: val.toISOString() }
+    return { stringValue: String(val) }
+  }
+  return { fields: Object.fromEntries(Object.entries(fields).map(([k, v]) => [k, encode(v)])) }
+}
+
+async function adminPost(collection: string, data: Record<string, unknown>): Promise<void> {
+  const res = await fetch(`${FIRESTORE_BASE}/${collection}`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      // "Bearer owner" bypasses Security Rules on the local emulator
+      Authorization: "Bearer owner",
+    },
+    body: JSON.stringify(firestoreDoc(data)),
+  })
+  if (!res.ok) {
+    const body = await res.text()
+    throw new Error(`Firestore admin POST to /${collection} failed: ${res.status} ${body}`)
+  }
+}
+
+async function seedDefaultCategories(): Promise<void> {
+  const now = new Date()
+  for (const cat of defaultCategories) {
+    await adminPost("categories", {
+      name: cat.name,
+      group: cat.group,
+      icon: cat.icon,
+      color: cat.color,
+      parentId: null,
+      userId: null,
+      isDefault: true,
+      createdAt: now,
+      updatedAt: now,
+    })
+    for (const child of cat.children ?? []) {
+      await adminPost("categories", {
+        name: child.name,
+        group: cat.group,
+        icon: child.icon,
+        color: child.color,
+        parentId: null,
+        userId: null,
+        isDefault: true,
+        createdAt: now,
+        updatedAt: now,
+      })
+    }
+  }
+}
+
 // globalSetup runs in the main Node process (no Vite). @/ aliases won't work,
 // but relative TypeScript imports are transformed by vitest's esbuild runner.
+import { defaultCategories } from "@alter-ego/finance/lib/categories"
+
 import {
   assertThrowawayEmulator,
   emulatorHosts,
+  firestoreRestBase,
   listStorageObjects,
   storageObjectsBase,
   TEST_PROJECT_ID as PROJECT_ID,
@@ -87,6 +155,9 @@ export async function setup(): Promise<void> {
   // The suite signs up random uids; production admits one (rules-source.ts).
   await loadRules(FIRESTORE_HOST, PROJECT_ID, testRules())
 
+  console.log("   Seeding default categories…")
+  await seedDefaultCategories()
+  console.log(`   ✓ Seeded ${defaultCategories.length} default categories`)
   console.log("   ✓ Ready\n")
 }
 

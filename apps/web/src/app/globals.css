@@ -3,6 +3,7 @@
 @import "@alter-ego/ui/tokens.css";
 /* Tailwind scans the app on its own; the kit sits outside it. */
 @source "../../../../packages/ui/src";
+@source "../../../../packages/modules/finance/src";
 @source "../../../../packages/modules/rent/src";
 
 /* The invoice view prints on A4 (its toolbar and the toasts are print:hidden). */

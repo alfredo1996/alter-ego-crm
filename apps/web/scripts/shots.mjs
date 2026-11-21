@@ -4,6 +4,8 @@
  * 390x844, light and dark, full page.
  *
  *   NEXT_PUBLIC_BACKEND=mock pnpm build && pnpm start --port 3001   # or: pnpm dev
+ *   (add NEXT_PUBLIC_PLUGINS=finance,consulting,accounting,rent to the build to shoot Personal Finance's pages too:
+ *   a build without it has none, and they are skipped)
  *   pnpm shots --base http://localhost:3001 [--out .shots] [--prefix before-] [/login /clients '/clients/[id]' '/cash-book?tab=summary' ...]
  *
  * Writes <out>/<prefix><page>-<desktop|phone>-<light|dark>.png. The server must
@@ -69,14 +71,17 @@ async function capture(device, scheme) {
   await page.getByLabel("Email").fill("test@example.com")
   await page.getByLabel("Password").fill("password123")
   await page.getByRole("button", { name: "Sign In" }).click()
-  await page.waitForURL("/pipeline")
+  // The first page of the deployment: Personal Finance's Dashboard when it is listed, Pipeline otherwise.
+  await page.waitForURL(/\/(dashboard|pipeline)$/)
+  const finance = new URL(page.url()).pathname === "/dashboard"
   if (wanted("/pipeline-empty")) {
+    if (finance) await openDemoPage(page, { path: "/pipeline", nav: "Pipeline" })
     await waitForPage(page)
     await shoot("/pipeline-empty")
   }
   if (!pages.length) return
   await seedDemo(page)
-  for (const demo of pages) {
+  for (const demo of pages.filter((p) => finance || !p.plugin)) {
     await openDemoPage(page, demo)
     await shoot(demo.path)
   }

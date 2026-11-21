@@ -2,7 +2,7 @@
  * The steps that make a plugin whole, as one pure check over plain facts (registry.test.ts). The real
  * facts come from collectFacts(); the tests feed the check a fake plugin that skips one step at a time.
  */
-import { existsSync, globSync, readFileSync } from "node:fs"
+import { existsSync, globSync, readdirSync, readFileSync } from "node:fs"
 import path from "node:path"
 
 import { PLUGIN_REGISTERS, REGISTERS, WRITE_TOOL_NAMES } from "@/lib/mcp/plugins"
@@ -22,6 +22,9 @@ export interface Facts {
   builtRules: string
   indexFiles: { name: string; indexes: unknown[] }[]
   rootIndexes: unknown[]
+  /** The directories under packages/modules, and app/globals.css: Tailwind generates only the classes of the sources it scans. */
+  modulePackages: string[]
+  globalsCss: string
 }
 
 const canon = (v: unknown): string =>
@@ -81,18 +84,15 @@ export function problems(f: Facts): string[] {
       if (!root.has(canon(index))) out.push(`Index file ${file.name} holds an index that firestore.indexes.json does not: ${JSON.stringify(index)}. Add it to the root file.`)
     }
   }
+  for (const pkg of f.modulePackages) {
+    if (!f.globalsCss.includes(`packages/modules/${pkg}/src"`)) {
+      out.push(`Package packages/modules/${pkg} is not a Tailwind @source in app/globals.css, so the classes only it uses are never generated. Add the @source line.`)
+    }
+  }
   return out
 }
 
 const repo = (...p: string[]) => path.join("..", "..", ...p)
-
-/**
- * Packages that are copied in but not wired yet: their rules fragments are not spliced into firestore.rules and
- * their index file is not in the root file. Named one by one, never a pattern, so every other package stays
- * checked. Issue 31 wires finance and deletes this list.
- */
-export const NOT_YET_WIRED = ["finance"]
-const wired = (file: string) => !NOT_YET_WIRED.includes(path.basename(path.dirname(path.dirname(file))))
 
 /** The facts of the repository as it stands. Tests run from apps/web. */
 export function collectFacts(): Facts {
@@ -104,7 +104,7 @@ export function collectFacts(): Facts {
   }
   const groups = (id: string) => NAV_GROUPS.filter((g) => g.module === id)
   const hrefs = (id: string) => groups(id).flatMap((g) => g.items.map((i) => i.href))
-  const rulesFiles = [repo("firestore", "crm.rules"), ...globSync(repo("packages", "modules", "*", "src", "*.rules")).filter(wired)]
+  const rulesFiles = [repo("firestore", "crm.rules"), ...globSync(repo("packages", "modules", "*", "src", "*.rules"))]
   return {
     plugins: MODULES.map((m) => ({
       id: m.id,
@@ -119,10 +119,12 @@ export function collectFacts(): Facts {
     fragments: rulesFiles.map((file) => ({ name: path.basename(file), text: readFileSync(file, "utf8") })),
     builtRules: readFileSync(repo("firestore.rules"), "utf8"),
     // A module package keeps its own indexes in a src/*.indexes.json file (finance's is src/firestore.indexes.json), same shape as the root file.
-    indexFiles: globSync(repo("packages", "modules", "*", "src", "*.indexes.json")).filter(wired).map((file) => ({
-      name: path.basename(file),
+    indexFiles: globSync(repo("packages", "modules", "*", "src", "*.indexes.json")).map((file) => ({
+      name: path.relative(repo(), file),
       indexes: JSON.parse(readFileSync(file, "utf8")).indexes ?? [],
     })),
     rootIndexes: JSON.parse(readFileSync(repo("firestore.indexes.json"), "utf8")).indexes,
+    modulePackages: readdirSync(repo("packages", "modules"), { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => d.name),
+    globalsCss: readFileSync(path.join("src", "app", "globals.css"), "utf8"),
   }
 }

@@ -15,9 +15,10 @@ env:
     value: firebase
 
   # ─── Plugins ───────────────────────────────────────────────────────────────
-  # The plugins this deployment runs, comma-separated (consulting, accounting,
-  # rent). Inlined at build time, so each backend builds its own bundle: this is
-  # not a runtime toggle. A plugin needs the one before it in that list.
+  # The plugins this deployment runs, comma-separated (finance, consulting,
+  # accounting, rent). Inlined at build time, so each backend builds its own
+  # bundle: this is not a runtime toggle. Finance needs no other plugin and is
+  # off unless listed; accounting needs consulting, and rent needs accounting.
   - variable: NEXT_PUBLIC_PLUGINS
     value: consulting,accounting,rent
 

@@ -110,6 +110,23 @@ export function crossEdges(files: Record<string, string>, exists: (rel: string) 
   return [...edges].sort()
 }
 
+export const FINANCE_RULE =
+  "Finance is imported only by the host: its routes, nav, settings, layout, providers, adapters and MCP wiring. " +
+  "A plugin's file never imports @alter-ego/finance."
+
+const FINANCE_PACKAGE = /^@alter-ego\/finance(\/|$)/
+
+/** `plugin:file -> specifier` for each import of the Finance package by a file that is not the host's; a test file is not scanned. */
+export function financeImporters(files: Record<string, string>): string[] {
+  const found = new Set<string>()
+  for (const [rel, source] of Object.entries(files)) {
+    const from = pluginOf(rel)
+    if (from === "host" || isTestFile(rel)) continue
+    for (const spec of specifiers(source)) if (FINANCE_PACKAGE.test(spec)) found.add(`${from}:${rel} -> ${spec}`)
+  }
+  return [...found].sort()
+}
+
 export function diffEdges(found: string[], known: string[]): { added: string[]; gone: string[] } {
   return { added: found.filter((e) => !known.includes(e)), gone: known.filter((e) => !found.includes(e)) }
 }

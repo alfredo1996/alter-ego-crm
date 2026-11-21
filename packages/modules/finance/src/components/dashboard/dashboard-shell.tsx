@@ -30,7 +30,6 @@ import { useRecurring } from "../../hooks/use-recurring"
 import { useSavingsGoalsWithProgress } from "../../hooks/use-savings-goals"
 import { useAuth } from "../../host"
 import { getBudgetStatus } from "../../lib/budgets"
-import { features } from "../../lib/features"
 import { NewAccountDialog } from "../accounts/new-account-dialog"
 import { PullToRefresh } from "../pull-to-refresh"
 import { NewTransactionDialog } from "../transactions/new-transaction-dialog"
@@ -68,9 +67,9 @@ export function DashboardShell() {
   const { user } = useAuth()
   const { data, isPending, isError, error, refetch } = useDashboard(user?.id)
   const { format } = useCurrency()
-  const { data: budgets, isPending: budgetsPending } = useBudgetsWithSpending(features.budgets ? user?.id : undefined)
-  const { data: goals, isPending: goalsPending } = useSavingsGoalsWithProgress(features.savingsGoals ? user?.id : undefined)
-  const { data: recurringRules, isPending: recurringPending } = useRecurring(features.recurring ? user?.id : undefined)
+  const { data: budgets, isPending: budgetsPending } = useBudgetsWithSpending(user?.id)
+  const { data: goals, isPending: goalsPending } = useSavingsGoalsWithProgress(user?.id)
+  const { data: recurringRules, isPending: recurringPending } = useRecurring(user?.id)
   // After the dashboard: it hands both lists to these hooks, which then read nothing.
   const { data: accounts, isPending: accountsPending } = useAccounts(data ? user?.id : undefined)
   const { data: categories, isPending: categoriesPending } = useCategories(data ? user?.id : undefined)
@@ -84,14 +83,13 @@ export function DashboardShell() {
   const { data: lastMonthNetWorth } = useNetWorthAt(user?.id, lastMonthEnd)
 
   // The page waits for the dashboard alone (it carries the accounts and categories). Budgets,
-  // goals and bills fill a slot of their own below, so nothing above them moves. Their queries are
-  // disabled while the flag is off, and a disabled query stays pending, hence the flag.
+  // goals and bills fill a slot of their own below, so nothing above them moves.
   // `!!data` keeps the error card reachable (the two hooks stay disabled, so pending, without data);
   // the seed makes the two extra terms false at once.
   const loading = isPending || (!!data && (accountsPending || categoriesPending))
-  const budgetsLoading = features.budgets && budgetsPending
-  const billsLoading = features.recurring && recurringPending
-  const goalsLoading = features.savingsGoals && goalsPending
+  const budgetsLoading = budgetsPending
+  const billsLoading = recurringPending
+  const goalsLoading = goalsPending
 
   // Take the net worth snapshot once per day, after the dashboard is in so it never competes with it
   const loaded = !!data
@@ -111,7 +109,7 @@ export function DashboardShell() {
 
   // Fire budget alert toasts once per day
   useEffect(() => {
-    if (!features.budgets || !budgets || budgets.length === 0) return
+    if (!budgets || budgets.length === 0) return
     const today = isoDate(new Date())
     const storageKey = `alter-ego-budget-alert-${today}`
     if (localStorage.getItem(storageKey)) return
@@ -175,9 +173,9 @@ export function DashboardShell() {
   const now = new Date()
   const greeting = `${user?.displayName ? `Welcome back, ${user.displayName}` : "Welcome back"} · ${formatMonthYear(now)}`
   const uncategorized = data?.recentTransactions.filter((t) => t.categoryId === null && t.type !== "transfer").length ?? 0
-  const hasBudgets = features.budgets && !!budgets && budgets.length > 0
-  const hasBills = features.recurring && !!recurringRules && recurringRules.length > 0
-  const hasGoals = features.savingsGoals && !!goals && goals.some((g) => !g.isCompleted)
+  const hasBudgets = !!budgets && budgets.length > 0
+  const hasBills = !!recurringRules && recurringRules.length > 0
+  const hasGoals = !!goals && goals.some((g) => !g.isCompleted)
 
   return (
     <PullToRefresh onRefresh={async () => { await refetch() }}>

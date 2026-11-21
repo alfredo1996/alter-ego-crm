@@ -13,6 +13,7 @@ import * as firebaseAdmin from "@/lib/backend/firebase-admin"
 import { env } from "@/lib/env"
 
 import type { AuditAdapter, CrmServerAdapter, DatabaseAdapter, FilesAdapter } from "./types"
+import type { Account } from "@alter-ego/finance/types"
 
 /**
  * Common subset of DatabaseAdapter methods exposed by both the mock adapter
@@ -23,6 +24,8 @@ export type ServerDb = AuditAdapter &
   CrmServerAdapter & {
     /** Server-only (#342): the key is valid only while its visible document exists. */
     validateApiKey(keyHash: string): Promise<string | null>
+    /** Personal Finance: close or reopen only (#312). The Admin SDK bypasses the rules, so it takes no wider write. */
+    updateAccount(userId: string, accountId: string, input: { isArchived: boolean }): Promise<Account>
   } &
   Pick<
     DatabaseAdapter,
@@ -91,6 +94,21 @@ export type ServerDb = AuditAdapter &
     | "getLeases"
     | "createLease"
     | "updateLease"
+    // Personal Finance: what its MCP tools read and write (the package's FinanceMcpDb).
+    | "getAccounts"
+    | "getAccount"
+    | "createAccount"
+    | "getBudgets"
+    | "getTags"
+    | "getRecurringTransactions"
+    | "getCategories"
+    | "getTransactions"
+    | "getTransaction"
+    | "getMonthlyTotals"
+    | "createTransaction"
+    | "updateTransaction"
+    | "deleteTransaction"
+    | "getReportData"
   >
 
 /** The invoice files on the server: Admin Storage on Firebase (it makes storage.rules' checks itself), the mock's otherwise. */

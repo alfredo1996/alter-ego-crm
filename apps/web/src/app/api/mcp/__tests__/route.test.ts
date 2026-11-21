@@ -79,7 +79,7 @@ describe("POST /api/mcp scope gate", () => {
 })
 
 describe("tools/list", () => {
-  it("serves the connector's tools and none of a finance app's", async () => {
+  it("serves the connector's tools and none of Finance's while Finance is not listed", async () => {
     authenticate.mockResolvedValue(readOnly)
     const res = await rpc({ jsonrpc: "2.0", id: 1, method: "tools/list" })
     const text = await res.text()
@@ -94,6 +94,61 @@ describe("tools/list", () => {
 })
 
 // The registry is read once at load, so a deployment that leaves a plugin out is a fresh import of the route.
+describe("a deployment that lists Finance", () => {
+  const call = (route: { POST: typeof POST }, body: unknown) =>
+    route.POST(
+      new Request("http://localhost/api/mcp", {
+        method: "POST",
+        headers: { "content-type": "application/json", accept: "application/json, text/event-stream" },
+        body: JSON.stringify(body),
+      })
+    )
+  const load = async (plugins: string) => {
+    vi.stubEnv("NEXT_PUBLIC_PLUGINS", plugins)
+    vi.resetModules()
+    return import("../route")
+  }
+  const toolNames = async (route: { POST: typeof POST }) => {
+    const text = await (await call(route, { jsonrpc: "2.0", id: 1, method: "tools/list" })).text()
+    const payload = text.startsWith("{") ? text : text.split("\n").find((l) => l.startsWith("data:"))!.slice(5)
+    return (JSON.parse(payload).result.tools as { name: string }[]).map((t) => t.name).sort()
+  }
+  const tool = (name: string) => ({ jsonrpc: "2.0", id: 3, method: "tools/call", params: { name, arguments: {} } })
+  const READS = ["get_budget_status", "get_spending", "list_accounts", "list_categories", "list_tags", "list_transactions"]
+  const WRITES = ["add_transaction", "archive_account", "create_account", "delete_transaction", "update_transaction"]
+
+  beforeEach(() => authenticate.mockResolvedValue(readOnly))
+  afterEach(() => {
+    vi.unstubAllEnvs()
+    vi.resetModules()
+  })
+
+  it("serves exactly ping and Finance's eleven tools when Finance is the only plugin", async () => {
+    expect(await toolNames(await load("finance"))).toEqual(["ping", ...READS, ...WRITES].sort())
+  })
+
+  it("serves Finance's tools beside the others when all four are listed", async () => {
+    const names = await toolNames(await load("finance,consulting,accounting,rent"))
+    expect([...READS, ...WRITES, "list_clients", "list_invoices", "get_rent"].filter((t) => !names.includes(t))).toEqual([])
+  })
+
+  it.each(WRITES)("holds %s behind the write scope", async (name) => {
+    const route = await load("finance")
+    expect((await call(route, tool(name))).status).toBe(403)
+  })
+
+  it("does not gate a read, and does not hold a Finance write when Finance is not listed", async () => {
+    expect((await call(await load("finance"), tool("list_accounts"))).status).toBe(200)
+    // Not served, so not a write: the same call is "unknown tool", not a 403.
+    expect((await call(await load("consulting"), tool("add_transaction"))).status).toBe(200)
+  })
+
+  it("serves none of Finance's tools to a deployment that lists only Consulting", async () => {
+    const names = await toolNames(await load("consulting"))
+    expect([...READS, ...WRITES].filter((t) => names.includes(t))).toEqual([])
+  })
+})
+
 describe("a deployment that does not list Accounting", () => {
   const call = (route: { POST: typeof POST }, body: unknown) =>
     route.POST(
