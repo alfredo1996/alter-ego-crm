@@ -23,7 +23,7 @@ Sign-up is closed in the app: production admits one uid (the allowlist,
 account works. Create one with `pnpm seed:demo`, or in the Auth emulator UI on
 http://localhost:4000. To run your own deployment, run `pnpm setup:owner <uid>` with your
 uid before deploying (it writes the three places that hold it and rebuilds `firestore.rules`); a copy without it
-lets nobody write. Stop with:
+lets nobody write (commit the changed files to the branch your host builds, in your own copy). Stop with:
 
 ```bash
 pnpm local:stop      # exports data on the way out
@@ -48,8 +48,9 @@ no invoices, only your accounts, transactions, budgets, goals, recurring bills a
    with the variables read from `apps/web/.env.local`.
 5. **Name the owner.** Sign-up is closed, so create your user in the Firebase console (Authentication), run
    `pnpm setup:owner <uid>` with its uid. It writes the uid into `firestore/base.rules`, `storage.rules` (a finance-only
-   deployment never deploys that one) and `apps/web/src/lib/owner-uid.ts`, and rebuilds `firestore.rules`. Run it before
-   you deploy: a copy without it lets nobody write. Then deploy the rules again.
+   deployment never deploys that one) and `apps/web/src/lib/owner-uid.ts`, and rebuilds `firestore.rules`. A copy without
+   it lets nobody write. Deploy the rules again (step 3), and commit the changed files to the branch your host builds, in
+   your own copy, so the server build carries the uid too.
 
 ## Invoice files
 

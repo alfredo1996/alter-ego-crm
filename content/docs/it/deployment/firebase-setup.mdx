@@ -20,7 +20,7 @@ pnpm rules:build
 firebase deploy --only firestore:rules,firestore:indexes,storage --project IL_TUO_PROJECT_ID
 ```
 
-La registrazione è chiusa. Prima del deploy esegui `pnpm setup:owner <uid>` con l'uid del tuo utente: scrive l'uid in `firestore/base.rules`, `storage.rules` e `apps/web/src/lib/owner-uid.ts` e ricostruisce `firestore.rules`. Una copia senza questo passo non lascia scrivere nessuno.
+La registrazione è chiusa. Prima del deploy esegui `pnpm setup:owner <uid>` con l'uid del tuo utente: scrive l'uid in `firestore/base.rules`, `storage.rules` e `apps/web/src/lib/owner-uid.ts` e ricostruisce `firestore.rules`. Una copia senza questo passo non lascia scrivere nessuno. Fai il commit dei quattro file modificati sul branch che App Hosting compila, nella tua copia del repository, prima del rollout: il server legge `owner-uid.ts` da quella build.
 
 ## Variabili d'Ambiente
 

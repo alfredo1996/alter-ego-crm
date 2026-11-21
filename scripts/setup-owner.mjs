@@ -10,8 +10,9 @@
  * is anchored on the definition, not on the value, because the placeholder is also named by the
  * explicit refusal next to it. Re-runnable: it matches whatever is there now.
  */
-import { readFileSync, writeFileSync } from "node:fs"
+import { readFileSync, realpathSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
+import { pathToFileURL } from "node:url"
 
 import { buildRulesAt } from "./build-firestore-rules.mjs"
 
@@ -56,18 +57,16 @@ export function setOwner(root, uid) {
     return { file: s.file, text, out: text.replace(s.pattern, (_, a, __, c) => `${a}${uid}${c}`) }
   })
   const changed = next.filter((n) => n.out !== n.text)
-  for (const n of changed) writeFileSync(join(root, n.file), n.out)
-  // The rules are built from the base just written, and only rewritten when they differ.
+  // Build the rules from the new base first: if that throws, nothing has been written.
   const rulesFile = join(root, "firestore.rules")
-  const rules = buildRulesAt(root).rules
-  if (rules !== readFileSync(rulesFile, "utf8")) {
-    writeFileSync(rulesFile, rules)
-    return { changed: [...changed.map((n) => n.file), "firestore.rules"] }
-  }
-  return { changed: changed.map((n) => n.file) }
+  const rules = buildRulesAt(root, next.find((n) => n.file === SOURCES[0].file)?.out).rules
+  const rulesChanged = rules !== readFileSync(rulesFile, "utf8")
+  for (const n of changed) writeFileSync(join(root, n.file), n.out)
+  if (rulesChanged) writeFileSync(rulesFile, rules)
+  return { changed: [...changed.map((n) => n.file), ...(rulesChanged ? ["firestore.rules"] : [])] }
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (process.argv[1] && import.meta.url === pathToFileURL(realpathSync(process.argv[1])).href) {
   try {
     const uid = process.argv[2]
     if (!uid || process.argv.length > 3) throw new Error("Usage: pnpm setup:owner <uid>")

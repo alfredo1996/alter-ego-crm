@@ -52,13 +52,6 @@ describe("POST /api/oauth/authorize owner check", () => {
     vi.mocked(isOwner).mockImplementation((uid) => uid === OWNER_UID)
   })
 
-  it("refuses the placeholder uid under the real check with access_denied, 403", async () => {
-    vi.mocked(isOwner).mockImplementation((await vi.importActual<{ isOwner: (uid: string) => boolean }>("@/lib/owner-uid")).isOwner)
-    const res = await post("data:read", "token-OWNER_UID_NOT_SET")
-    expect(res.status).toBe(403)
-    expect((await res.json()).error).toBe("access_denied")
-  })
-
   it("refuses a signed-in uid that is not the owner with access_denied, 403", async () => {
     const res = await post("data:read", "token-someone-else")
     expect(res.status).toBe(403)

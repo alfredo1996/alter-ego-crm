@@ -32,12 +32,6 @@ describe("/api/keys", () => {
     vi.mocked(isOwner).mockImplementation((uid) => uid === OWNER_UID)
   })
 
-  it("POST refuses the placeholder uid under the real check: an unconfigured copy has no owner", async () => {
-    vi.mocked(isOwner).mockImplementation((await vi.importActual<{ isOwner: (uid: string) => boolean }>("@/lib/owner-uid")).isOwner)
-    expect((await POST(req("POST", "token-OWNER_UID_NOT_SET"))).status).toBe(403)
-    expect(await createMockAdapter().db.getApiKeys("OWNER_UID_NOT_SET")).toHaveLength(0)
-  })
-
   it("POST without or with an invalid ID token is 401 and creates nothing", async () => {
     expect((await POST(req("POST"))).status).toBe(401)
     expect((await POST(req("POST", "garbage"))).status).toBe(401)

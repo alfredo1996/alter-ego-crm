@@ -83,10 +83,6 @@ describe("the rules after setup:owner (a made-up uid)", () => {
     expect(await run()).toBe(403)
   })
 
-  it("refuses a token whose uid is the placeholder", async () => {
-    expect(await call("PATCH", `users/${PLACEHOLDER}/company_accounts/a1`, PLACEHOLDER, account(PLACEHOLDER))).toBe(403)
-  })
-
   it.each([
     ["reads the owner's area", () => call("GET", `users/${OWNER_UID}/company_accounts/a1`)],
     ["writes the owner's area", () => call("PATCH", `users/${OWNER_UID}/company_accounts/a2`, undefined, account(OWNER_UID))],

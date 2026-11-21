@@ -128,8 +128,8 @@ describe("the rules as committed (placeholder: nobody)", () => {
 
   it("refuses a token whose uid is the placeholder, in its own folder", async () => {
     await signInWithEmailAndPassword(getFirebaseAuth(), EMAIL, PASSWORD)
-    await expect(put(placeholderPath, "<a/>", "application/xml")).rejects.toThrow()
-    await expect(getBytes(at(placeholderPath))).rejects.toThrow()
+    await expect(put(placeholderPath, "<a/>", "application/xml")).rejects.toMatchObject({ code: "storage/unauthorized" })
+    await expect(getBytes(at(placeholderPath))).rejects.toMatchObject({ code: "storage/unauthorized" })
   })
 
   it("refuses a random signed-in uid in its own folder", async () => {
@@ -139,7 +139,7 @@ describe("the rules as committed (placeholder: nobody)", () => {
 
   it("refuses a signed-out visitor", async () => {
     await getFirebaseAuth().signOut()
-    await expect(put(placeholderPath, "<a/>", "application/xml")).rejects.toThrow()
+    await expect(put(placeholderPath, "<a/>", "application/xml")).rejects.toMatchObject({ code: "storage/unauthorized" })
   })
 })
 
@@ -167,7 +167,7 @@ describe("the rules after setup:owner (a made-up uid)", () => {
 
   it("refuses a signed-out visitor", async () => {
     await getFirebaseAuth().signOut()
-    await expect(put(ownerPath, "<a/>", "application/xml")).rejects.toThrow()
-    await expect(getBytes(at(ownerPath))).rejects.toThrow()
+    await expect(put(ownerPath, "<a/>", "application/xml")).rejects.toMatchObject({ code: "storage/unauthorized" })
+    await expect(getBytes(at(ownerPath))).rejects.toMatchObject({ code: "storage/unauthorized" })
   })
 })

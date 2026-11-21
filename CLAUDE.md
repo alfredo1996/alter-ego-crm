@@ -29,7 +29,7 @@ the change on the next build.
 **The owner uid is a placeholder in the committed code** (`OWNER_UID_NOT_SET`, refused
 outright, so a copy nobody set up admits nobody). `pnpm setup:owner <uid>` is the only
 thing that writes it: into `apps/web/src/lib/owner-uid.ts`, `firestore/base.rules` and
-`storage.rules`, then it rebuilds `firestore.rules`. Never commit a real uid; tests use a
+`storage.rules`, then it rebuilds `firestore.rules`. Never commit a real uid to this repository (a fork commits its own to the branch it deploys); tests use a
 made-up one (`setup-owner.test.ts` checks the three agree).
 
 **The test gate is one run**: `pnpm test --run`.

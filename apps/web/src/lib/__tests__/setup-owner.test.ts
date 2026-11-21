@@ -2,7 +2,9 @@
  * `pnpm setup:owner <uid>` (#32): writes the owner uid into the three places that hold it and
  * rebuilds firestore.rules. Every case runs on a temporary copy of the files, never on the repo.
  */
-import { readFileSync, rmSync, writeFileSync } from "node:fs"
+import { spawnSync } from "node:child_process"
+import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
+import { tmpdir } from "node:os"
 import { join } from "node:path"
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest"
@@ -93,5 +95,41 @@ describe("setOwner", () => {
     const before = snapshot()
     expect(() => setOwner(root, UID)).toThrow(new RegExp(`${file.replace(/\./g, "\\.")}.*found 2`))
     expect(snapshot()).toEqual(before)
+  })
+
+  it("writes nothing and names the file when the rules cannot be built", () => {
+    const gone = "packages/modules/finance/src/finance-root.rules"
+    rmSync(join(root, gone))
+    const kept = OWNER_FILES.filter((f) => f !== gone)
+    const before = kept.map((f) => read(f))
+    expect(() => setOwner(root, UID)).toThrow(/finance-root\.rules/)
+    expect(kept.map((f) => read(f))).toEqual(before)
+  })
+})
+
+// The command people run, from a clone whose path has a space (import.meta.url percent-encodes it).
+describe("pnpm setup:owner, the command line", () => {
+  let spaced: string
+  beforeEach(() => {
+    spaced = mkdtempSync(join(tmpdir(), "owner cli-"))
+    for (const f of [...OWNER_FILES, "scripts/setup-owner.mjs", "scripts/build-firestore-rules.mjs"]) {
+      mkdirSync(join(spaced, f, ".."), { recursive: true })
+      cpSync(join(REPO, f), join(spaced, f))
+    }
+  })
+  afterEach(() => rmSync(spaced, { recursive: true, force: true }))
+  const run = (...args: string[]) => spawnSync(process.execPath, ["scripts/setup-owner.mjs", ...args], { cwd: spaced, encoding: "utf8" })
+
+  it("sets the owner and exits 0 for a good uid", () => {
+    const r = run(UID)
+    expect([r.status, r.stdout]).toEqual([0, expect.stringContaining(`Owner set to ${UID}`)])
+    expect(readOwners(spaced)).toEqual({ ts: UID, firestore: UID, storage: UID })
+  })
+
+  it.each([[[]], [[""]], [["a", "b"]], [["a'b"]], [[PLACEHOLDER]]])("exits 1 with a message and writes nothing for %j", (args) => {
+    const before = OWNER_FILES.map((f) => read(f, spaced))
+    const r = run(...args)
+    expect([r.status, r.stderr.length > 0]).toEqual([1, true])
+    expect(OWNER_FILES.map((f) => read(f, spaced))).toEqual(before)
   })
 })

@@ -49,7 +49,10 @@ Sign-up is closed: the rules admit one user id, `isAllowedUser` in `firestore/ba
 (and `storage.rules`), mirrored in `apps/web/src/lib/owner-uid.ts`. The code carries a placeholder
 (`OWNER_UID_NOT_SET`) that admits nobody. Create your user in the Firebase console (Authentication),
 then run `pnpm setup:owner <uid>` with its uid before you deploy: it writes the uid into all three places
-and rebuilds `firestore.rules`. A copy without it lets nobody write.
+and rebuilds `firestore.rules`. A copy without it lets nobody write. Commit the four changed files
+(`owner-uid.ts`, `firestore/base.rules`, `storage.rules`, `firestore.rules`) to the branch App Hosting builds, in your own
+copy of this repository, before the rollout: the server reads `owner-uid.ts` from that build, and without it creating API
+keys and approving the MCP connector are refused.
 
 ## Notes
 

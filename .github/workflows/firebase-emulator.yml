@@ -40,6 +40,9 @@ on:
       - "apps/web/src/lib/backend/__tests__/firestore-rules-finance.test.ts"
       - "apps/web/src/lib/backend/__tests__/monthly-totals-paths.ts"
       - "scripts/build-firestore-rules.mjs"
+      - "scripts/setup-owner.mjs"
+      - "apps/web/src/lib/backend/__tests__/owner-copy.ts"
+      - "apps/web/src/lib/backend/__tests__/rules-source.ts"
       # The fragments firestore.rules is built from (pnpm rules:build).
       - "firestore/**"
       - "firestore.rules"
@@ -83,6 +86,9 @@ on:
       - "apps/web/src/lib/backend/__tests__/firestore-rules-finance.test.ts"
       - "apps/web/src/lib/backend/__tests__/monthly-totals-paths.ts"
       - "scripts/build-firestore-rules.mjs"
+      - "scripts/setup-owner.mjs"
+      - "apps/web/src/lib/backend/__tests__/owner-copy.ts"
+      - "apps/web/src/lib/backend/__tests__/rules-source.ts"
       # The fragments firestore.rules is built from (pnpm rules:build).
       - "firestore/**"
       - "firestore.rules"

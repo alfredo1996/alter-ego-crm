@@ -14,8 +14,9 @@
  * collection with no matching rule is denied by default, so removal is safe
  * rather than permissive. Finance needs no company side, so its two fragments are required.
  */
-import { readFileSync, writeFileSync, existsSync } from "node:fs"
+import { readFileSync, writeFileSync, existsSync, realpathSync } from "node:fs"
 import { join } from "node:path"
+import { pathToFileURL } from "node:url"
 
 const MARKER = "      // @@CRM_COLLECTIONS@@"
 const ROOT_MARKER = "    // @@ROOT_COLLECTIONS@@"
@@ -43,11 +44,12 @@ export function buildRules({ base, crm, rent = null, finance, financeRoot }) {
 /**
  * Reads the fragments under `root` and builds the rules (the CRM and Rent fragments are optional).
  * @param {string} root
+ * @param {string} [baseText] base.rules content to use instead of reading it (setup:owner builds before it writes)
  * @returns {{ rules: string, withCrm: boolean }}
  */
-export function buildRulesAt(root = ".") {
+export function buildRulesAt(root = ".", baseText) {
   const at = (/** @type {string} */ p) => join(root, p)
-  const base = readFileSync(at("firestore/base.rules"), "utf8")
+  const base = baseText ?? readFileSync(at("firestore/base.rules"), "utf8")
   const crm = existsSync(at("firestore/crm.rules")) ? readFileSync(at("firestore/crm.rules"), "utf8") : null
   const rentPath = at("packages/modules/rent/src/rent.rules")
   const rent = crm && existsSync(rentPath) ? readFileSync(rentPath, "utf8") : null
@@ -56,7 +58,7 @@ export function buildRulesAt(root = ".") {
   return { rules: buildRules({ base, crm, rent, finance, financeRoot }), withCrm: crm !== null }
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (process.argv[1] && import.meta.url === pathToFileURL(realpathSync(process.argv[1])).href) {
   const { rules, withCrm } = buildRulesAt()
   writeFileSync("firestore.rules", rules)
   console.log(`firestore.rules written (${withCrm ? "with" : "without"} CRM collections)`)
