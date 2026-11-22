@@ -1,6 +1,7 @@
 import { Geist, Geist_Mono } from "next/font/google"
 
 import { Providers } from "@/components/providers"
+import { appDescription } from "@/lib/app-description"
 
 import type { Metadata, Viewport } from "next"
 import "./globals.css"
@@ -25,7 +26,7 @@ export const viewport: Viewport = {
 
 export const metadata: Metadata = {
   title: "Alter Ego",
-  description: "Pipeline, contracts, invoices and the cash book of a small Italian SRL",
+  description: appDescription(),
   applicationName: "Alter Ego",
   manifest: "/manifest.webmanifest",
   appleWebApp: {
