@@ -129,7 +129,7 @@ import {
   storageObjectsBase,
   TEST_PROJECT_ID as PROJECT_ID,
 } from "./src/lib/backend/__tests__/emulator-hosts"
-import { loadRules, testRules } from "./src/lib/backend/__tests__/rules-source"
+import { loadRules, loadStorageRules, testRules, testStorageRules } from "./src/lib/backend/__tests__/rules-source"
 
 // ─── Lifecycle ────────────────────────────────────────────────────────────────
 
@@ -154,6 +154,8 @@ export async function setup(): Promise<void> {
 
   // The suite signs up random uids; production admits one (rules-source.ts).
   await loadRules(FIRESTORE_HOST, PROJECT_ID, testRules())
+  // Same for Storage: no file may depend on storage-rules.test.ts having run first to open it.
+  await loadStorageRules(STORAGE_HOST, testStorageRules())
 
   console.log("   Seeding default categories…")
   await seedDefaultCategories()

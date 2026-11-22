@@ -66,6 +66,7 @@ docker rm -f "$NAME"
 ```
 
 - If the image is missing, or predates Storage (the `:latest` tag must include it: a container from an older image has no Storage and the suite fails at setup): `docker build -t alter-ego-crm-firebase-emulator:latest -f docker/firebase-emulator/Dockerfile .`.
+- The files run in parallel, except the ones that swap the Storage rules of the whole emulator (`storage-rules.test.ts`): they run alone, after the rest, in a second project of `vitest.emulator.ts` (the lists are in `vitest.emulator.files.ts`; add a file there, and to the exclude list in `apps/web/vitest.config.ts`; a file that calls `loadStorageRules` goes in the alone list, which runs one file at a time).
 - After `pnpm rules:build`, recreate the container: a single-file bind mount may not pick up the new file.
 - Remove only the container you created, by name. Never `docker rm` in bulk, never `docker system prune`: this machine hosts long-lived containers.
 
