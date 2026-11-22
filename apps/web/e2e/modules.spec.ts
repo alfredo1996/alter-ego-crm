@@ -29,6 +29,16 @@ test.describe("a deployment that lists only Consulting", () => {
     }
   })
 
+  // The manifest and the page's meta description are read from the build, not written for every build.
+  test("offers only the shortcuts and the description this build has", async ({ page, request }) => {
+    const res = await request.get("/manifest.webmanifest")
+    expect(res.ok()).toBe(true)
+    const manifest = await res.json()
+    expect(manifest.shortcuts.map((s: { url: string }) => s.url)).toEqual(["/pipeline"])
+    expect(manifest.description).toBe("Pipeline, clients and contracts")
+    await expect(page.locator('meta[name="description"]')).toHaveAttribute("content", manifest.description)
+  })
+
   // Personal Finance is opt-in: a deployment that does not list it has no group, no link and no page of it.
   test("has no Personal Finance group or link", async ({ page }) => {
     const sidebar = page.getByRole("navigation", { name: "Main" })
