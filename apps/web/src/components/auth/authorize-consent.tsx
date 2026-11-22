@@ -7,12 +7,15 @@ import { useEffect, useState } from "react"
 
 import { AuthAlert, AuthCard } from "@/components/auth/auth-shell"
 import { useAuth } from "@/hooks/use-auth"
+import { enabledDataPhrase } from "@/lib/app-description"
 import { parseScopes } from "@/lib/oauth/scopes"
 
-const SCOPE_LABELS: Record<string, string> = {
-  "data:read": "Read your clients, contracts, invoices, costs and cash book",
+// Built at render: it reads what this build runs, so the screen cannot name data the build lacks.
+// "Alter Ego data" is only the guard for an empty plugin set, which resolveModules never yields.
+const scopeLabels = (): Record<string, string> => ({
+  "data:read": `Read your ${enabledDataPhrase() || "Alter Ego data"}`,
   "data:write": "Create, update and delete that same data on your behalf",
-}
+})
 
 /** Appends parameters to the client's redirect_uri and leaves the app. */
 function redirectBack(base: string, params: Record<string, string>) {
@@ -40,6 +43,7 @@ export function AuthorizeConsent() {
   const responseType = params.get("response_type")
   // What the server will grant, so the list cannot disagree with it.
   const scopes = parseScopes(params.get("scope"))
+  const labels = scopeLabels()
 
   useEffect(() => {
     if (loading || user) return
@@ -133,7 +137,7 @@ export function AuthorizeConsent() {
             {scopes.map((s) => (
               <li key={s} className="flex gap-2">
                 <span aria-hidden="true">•</span>
-                <span>{SCOPE_LABELS[s] ?? s}</span>
+                <span>{labels[s] ?? s}</span>
               </li>
             ))}
           </ul>
