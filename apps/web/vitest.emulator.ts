@@ -63,7 +63,7 @@ export default defineConfig({
       { ...shared, test: { ...shared.test, name: "firebase-emulator", include: parallelFiles } },
       // ponytail: the alone group adds its own wall time after the parallel one; one Storage emulator per file
       // would let it run in parallel if the suite outgrows this.
-      { ...shared, test: { ...shared.test, name: "firebase-emulator-alone", include: aloneFiles, sequence: { groupOrder: 1 } } },
+      { ...shared, test: { ...shared.test, name: "firebase-emulator-alone", include: aloneFiles, sequence: { groupOrder: 1 }, fileParallelism: false } },
     ],
   },
 })
