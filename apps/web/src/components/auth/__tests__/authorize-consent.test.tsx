@@ -13,9 +13,9 @@ vi.mock("next/navigation", () => ({
       "client_id=c1&redirect_uri=https%3A%2F%2Fclaude.ai%2Fcb&response_type=code&code_challenge=x&code_challenge_method=S256",
     ),
 }))
-vi.mock("@/hooks/use-auth", () => ({
-  useAuth: () => ({ user: { id: "u1", email: "marta@nordwind.example" }, loading: false, getIdToken: vi.fn() }),
-}))
+// One stable object: a fresh `user` each render would re-run the lookup effect.
+const auth = vi.hoisted(() => ({ user: { id: "u1", email: "marta@nordwind.example" }, loading: false, getIdToken: vi.fn() }))
+vi.mock("@/hooks/use-auth", () => ({ useAuth: () => auth }))
 
 import { AuthorizeConsent } from "../authorize-consent"
 

@@ -109,10 +109,7 @@ test("a deployment that lists only Consulting: the consent screen names only Con
   const consent =
     "/oauth/authorize?client_id=c1&response_type=code&code_challenge=abc&code_challenge_method=S256&scope=data%3Aread" +
     `&redirect_uri=${encodeURIComponent("https://claude.ai/cb")}`
-  await page.goto(`/login?next=${encodeURIComponent(consent)}`)
-  await page.getByLabel("Email").fill("test@example.com")
-  await page.getByLabel("Password", { exact: true }).fill("password123")
-  await page.getByRole("button", { name: "Sign In" }).click()
+  await signIn(page, consent)
 
   const scopes = page.getByRole("main").getByRole("listitem")
   await expect(scopes).toHaveText([/^•Read your pipeline, clients and contracts$/])
