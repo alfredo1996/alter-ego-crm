@@ -12,13 +12,18 @@ const PHRASES: Record<ModuleId, string> = {
 }
 
 /**
- * What this build runs, in words: one phrase per plugin that is on, in MODULES order. The manifest and
- * the page's meta description both read it, so neither names a page the build does not have.
- * resolveModules never yields an empty set (an unset list means the defaults), so "Alter Ego" is a guard.
+ * What this build runs, in words, lower-case: one phrase per plugin that is on, in MODULES order.
+ * The manifest, the page's meta description and the OAuth consent screen all read it, so none names
+ * data the build does not have. Empty only if no plugin is on, which resolveModules never yields.
  */
-export function appDescription(): string {
-  const text = MODULES.filter((m) => isModuleOn(m.id))
+export function enabledDataPhrase(): string {
+  return MODULES.filter((m) => isModuleOn(m.id))
     .map((m) => PHRASES[m.id])
     .join("; ")
+}
+
+/** The same phrase with a capital, or "Alter Ego" as the guard for an empty set. */
+export function appDescription(): string {
+  const text = enabledDataPhrase()
   return text ? text[0]!.toUpperCase() + text.slice(1) : "Alter Ego"
 }

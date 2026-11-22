@@ -137,7 +137,7 @@ describe("the OAuth consent", () => {
     await screen.findByRole("button", { name: "Approve" })
     const items = screen.getAllByRole("listitem")
     expect(items).toHaveLength(1)
-    expect(items[0]).toHaveTextContent(/^•Read your clients/)
+    expect(items[0]).toHaveTextContent(/^•Read your pipeline, clients and contracts; invoices/)
   })
 
   it("lists both scopes when none is asked for", async () => {

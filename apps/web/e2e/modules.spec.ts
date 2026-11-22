@@ -101,3 +101,17 @@ test.describe("a deployment that lists only Consulting", () => {
     await expect(plugins.getByText("On", { exact: true })).toHaveCount(1)
   })
 })
+
+// A hard load wipes the mock backend, so the screen is reached through the sign-in's `next`, as oauth-consent.spec.ts does.
+// The mock build registers no client, so the browser's answer is stubbed: the app is untouched.
+test("a deployment that lists only Consulting: the consent screen names only Consulting's data", async ({ page }) => {
+  await page.route("**/api/oauth/client*", (r) => r.fulfill({ json: { valid: true, clientName: "Claude" } }))
+  const consent =
+    "/oauth/authorize?client_id=c1&response_type=code&code_challenge=abc&code_challenge_method=S256&scope=data%3Aread" +
+    `&redirect_uri=${encodeURIComponent("https://claude.ai/cb")}`
+  await signIn(page, consent)
+
+  const scopes = page.getByRole("main").getByRole("listitem")
+  await expect(scopes).toHaveText([/^•Read your pipeline, clients and contracts$/])
+  await expect(page.getByRole("main").getByText(/invoices|cash book/i)).toHaveCount(0)
+})
