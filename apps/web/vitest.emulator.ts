@@ -6,11 +6,16 @@
  *
  * Requires the Firebase emulators to be running:
  *   firebase emulators:start --only auth,firestore,storage
+ *
+ * Two projects share this config. The Storage emulator has one ruleset for every file, so the file that
+ * swaps it (storage-rules.test.ts) runs alone, after the parallel ones (vitest.emulator.files.ts).
  */
 import { fileURLToPath } from "node:url"
 
 import tsconfigPaths from "vite-tsconfig-paths"
 import { defineConfig } from "vitest/config"
+
+import { aloneFiles, parallelFiles } from "./vitest.emulator.files"
 
 // Same pin as vitest.config.ts: "today" and every local-midnight date mean Rome time,
 // as they do on the server (pinServerTimeZone). Override with TZ=... to check other zones.
@@ -29,48 +34,36 @@ const firebaseEnv = {
   NEXT_PUBLIC_FIREBASE_APP_ID: "1:000000000000:web:0000000000000000",
 }
 
-export default defineConfig({
+// Everything the two projects share. globalSetup is NOT here: it wipes the emulators and refuses a
+// non-empty one, so it must run once per command, from the root config below.
+const shared = {
   plugins: [tsconfigPaths()],
   resolve: {
     alias: [{ find: /^@\/lib\/owner-uid$/, replacement: fileURLToPath(new URL("./src/lib/backend/__tests__/owner-uid-open.ts", import.meta.url)) }],
   },
   test: {
-    name: "firebase-emulator",
     // Firebase SDK requires a real Node environment (network, crypto, etc.)
-    environment: "node",
+    environment: "node" as const,
     // Inject env vars before any module is imported (avoids env.ts singleton issue)
     env: firebaseEnv,
-    // Firebase emulator integration tests: adapter contract, rules, OAuth flow
-    include: [
-      "src/lib/backend/__tests__/firebase.adapter.test.ts",
-      "src/lib/backend/__tests__/firebase.freshness.test.ts",
-      "src/lib/backend/__tests__/firebase.budgets.test.ts",
-      "src/lib/backend/__tests__/firebase.dashboard.test.ts",
-      "src/lib/backend/__tests__/firebase.files.test.ts",
-      "src/lib/backend/__tests__/firebaseadmin.adapter.test.ts",
-      "src/lib/backend/__tests__/firebase.api-keys.test.ts",
-      "src/lib/backend/__tests__/firestore-rules.test.ts",
-      "src/lib/backend/__tests__/firestore-rules-finance.test.ts",
-      "src/lib/backend/__tests__/firestore-rules-owner.test.ts",
-      "src/lib/backend/__tests__/storage-rules.test.ts",
-      "src/lib/oauth/__tests__/flow.emulator.test.ts",
-      "src/lib/backend/__tests__/firebaseadmin.crm.test.ts",
-      "src/lib/mcp/__tests__/tools-read.emulator.test.ts",
-      "src/lib/mcp/__tests__/tools-write.emulator.test.ts",
-      "src/lib/mcp/__tests__/cash-book.emulator.test.ts",
-      "src/lib/mcp/__tests__/solutions.emulator.test.ts",
-      "src/lib/mcp/__tests__/collaborators.emulator.test.ts",
-      "src/lib/mcp/__tests__/rent.emulator.test.ts",
-      "src/lib/mcp/__tests__/finance-read.emulator.test.ts",
-      "src/lib/mcp/__tests__/finance-write.emulator.test.ts",
-      "src/lib/mcp/__tests__/invoice-files.emulator.test.ts",
-    ],
     // Connects the SDK to emulators after env vars are set
     setupFiles: ["./vitest.emulator.setup.ts"],
-    // Verifies emulators are live and clears data before the whole run
-    globalSetup: ["./vitest.emulator.global-setup.ts"],
     // Give emulator calls more time than the default 5s
     testTimeout: 30000,
     hookTimeout: 30000,
+  },
+}
+
+export default defineConfig({
+  test: {
+    // Verifies emulators are live and clears data before the whole run
+    globalSetup: ["./vitest.emulator.global-setup.ts"],
+    projects: [
+      // Firebase emulator integration tests: adapter contract, rules, OAuth flow
+      { ...shared, test: { ...shared.test, name: "firebase-emulator", include: parallelFiles } },
+      // ponytail: the alone group adds its own wall time after the parallel one; one Storage emulator per file
+      // would let it run in parallel if the suite outgrows this.
+      { ...shared, test: { ...shared.test, name: "firebase-emulator-alone", include: aloneFiles, sequence: { groupOrder: 1 } } },
+    ],
   },
 })

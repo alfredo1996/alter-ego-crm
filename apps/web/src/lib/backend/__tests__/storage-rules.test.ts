@@ -37,9 +37,8 @@ const put = (path: string, body: BlobPart | Uint8Array, contentType: string) =>
 let n = 0
 const fresh = (ext: string) => `r${Date.now()}-${++n}.${ext}`
 
-// The suite signs up random users; production admits one uid (rules-source.ts).
+// The global setup opens the Storage rules for random users; each describe below swaps them and restores that.
 beforeAll(async () => {
-  await loadStorageRules(STORAGE_HOST, testStorageRules())
   uids.a = (await createUserWithEmailAndPassword(getFirebaseAuth(), emails.a, PASSWORD)).user.uid
   uids.b = (await createUserWithEmailAndPassword(getFirebaseAuth(), emails.b, PASSWORD)).user.uid
   await signInAs("a")
