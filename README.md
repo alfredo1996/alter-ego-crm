@@ -64,8 +64,8 @@ Data lives in the browser tab and is gone on reload — fine for a look around,
 not for real use.
 
 On a real backend, any Auth account can sign in, but the Firestore rules admit
-one user id (set in `apps/web/src/lib/owner-uid.ts` and in the rules) and deny
-the rest; see [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
+one user id and deny the rest. A copy carries a placeholder there, so nobody can write
+until you run `pnpm setup:owner <uid>` with your Firebase uid; see [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
 
 ### Self-hosted, with data that persists
 

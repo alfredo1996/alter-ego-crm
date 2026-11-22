@@ -28,7 +28,7 @@ Invoice files live in Storage under `users/{userId}/company-files/`.
 
 ## Security Rules
 
-`firestore.rules` is generated: edit `firestore/base.rules`, `firestore/crm.rules` or a module's rules, then run `pnpm rules:build`. Every collection has a closed schema, and one user id (`isAllowedUser`) is admitted. `storage.rules` guards the invoice files.
+`firestore.rules` is generated: edit `firestore/base.rules`, `firestore/crm.rules` or a module's rules, then run `pnpm rules:build`. Every collection has a closed schema, and one user id (`isAllowedUser`) is admitted: `pnpm setup:owner <uid>` writes it, and a copy without it lets nobody write. `storage.rules` guards the invoice files.
 
 ## Server Access
 
