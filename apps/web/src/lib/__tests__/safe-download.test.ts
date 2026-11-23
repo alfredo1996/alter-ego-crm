@@ -1,7 +1,8 @@
 // @vitest-environment node
+import dns from "node:dns"
 import http, { createServer } from "node:http"
 
-import { afterAll, beforeAll, describe, expect, it } from "vitest"
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest"
 
 import { downloadPublicFile, guardedLookup, isPublicAddress } from "@/lib/safe-download"
 
@@ -12,6 +13,7 @@ describe("isPublicAddress", () => {
   it.each([
     "0.0.0.0", "10.1.2.3", "100.64.0.1", "127.0.0.1", "169.254.169.254", "172.16.0.1", "172.31.255.255", "192.168.1.1", "192.0.0.8", "198.18.0.1", "224.0.0.1", "240.0.0.1", "255.255.255.255",
     "::", "::1", "fc00::1", "fd12:3456::1", "fe80::1", "ff02::1", "::ffff:127.0.0.1", "::ffff:10.0.0.1", "::ffff:a9fe:a9fe", "0:0:0:0:0:ffff:7f00:1", "64:ff9b::7f00:1",
+    "::7f00:1", "::127.0.0.1", "::ffff:0:7f00:1", "64:ff9b:1::a00:1",
   ])("%s is refused", (address) => {
     expect(isPublicAddress(address)).toBe(false)
   })
@@ -26,6 +28,34 @@ describe("isPublicAddress", () => {
 })
 
 describe("guardedLookup", () => {
+  const resolves = (list: dns.LookupAddress[]) =>
+    vi.spyOn(dns, "lookup").mockImplementation(((_h: string, _o: unknown, cb: (e: null, a: dns.LookupAddress[]) => void) => cb(null, list)) as unknown as typeof dns.lookup)
+  const lookup = (options: dns.LookupOptions) =>
+    new Promise<{ err: NodeJS.ErrnoException | null; address: unknown; family?: number }>((resolve) =>
+      guardedLookup("files.example.com", options, (err, address, family) => resolve({ err, address, family })),
+    )
+  const PUBLIC = { address: "93.184.216.34", family: 4 }
+
+  it.each([
+    ["a public then a private IPv4 address", [PUBLIC, { address: "10.0.0.5", family: 4 }]],
+    ["a private then a public address", [{ address: "10.0.0.5", family: 4 }, PUBLIC]],
+    ["a public IPv4 and a private IPv6 address", [PUBLIC, { address: "fd00::1", family: 6 }]],
+    ["a mapped private address", [{ address: "::ffff:10.0.0.1", family: 6 }]],
+  ])("refuses a name that resolves to %s", async (_l, list) => {
+    const spy = resolves(list)
+    expect((await lookup({ all: true })).err?.code).toBe("EBLOCKED")
+    expect((await lookup({})).err?.code).toBe("EBLOCKED")
+    spy.mockRestore()
+  })
+
+  it("lets a name through when every address is public: the list for all, the first address otherwise", async () => {
+    const other = { address: "2606:4700:4700::1111", family: 6 }
+    const spy = resolves([PUBLIC, other])
+    expect(await lookup({ all: true })).toEqual({ err: null, address: [PUBLIC, other], family: undefined })
+    expect(await lookup({})).toEqual({ err: null, address: "93.184.216.34", family: 4 })
+    spy.mockRestore()
+  })
+
   it("refuses a name that resolves to a loopback address", async () => {
     const err = await new Promise<NodeJS.ErrnoException | null>((resolve) => guardedLookup("localhost", { all: true }, (e) => resolve(e)))
     expect(err?.code).toBe("EBLOCKED")
@@ -57,6 +87,7 @@ describe("downloadPublicFile against a stub", () => {
     const url = new URL(req.url ?? "/", "http://stub").pathname
     if (url === "/file") return void res.end("<a/>")
     if (url === "/big") return void res.end(big)
+    if (url === "/huge") return void res.end(Buffer.alloc(10 * 1024 * 1024 + 1))
     if (url === "/slow") return void res.writeHead(200).write("x") // never ends
     if (url === "/hang") return // never answers
     if (url === "/missing") return void res.writeHead(404).end()
@@ -95,6 +126,10 @@ describe("downloadPublicFile against a stub", () => {
     asked.length = 0
     await expect(run("/hop/0")).rejects.toThrow(/redirected more than 3 times/)
     expect(asked).toEqual(["/hop/0", "/hop/1", "/hop/2", "/hop/3"])
+  })
+
+  it("caps at 10 MB when no maxBytes is given", async () => {
+    await expect(run("/huge")).rejects.toThrow(/over the 10 MB limit/)
   })
 
   it("holds the byte cap while streaming", async () => {

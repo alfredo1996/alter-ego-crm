@@ -1662,7 +1662,7 @@ export function registerCrmReadTools(server: McpServer): void {
         "again, and alsoOpen lists the earlier months still open with their steps to do. The steps, in the order to " +
         "work them: Hours, Invoices (every month up to this one), Waiting for Payment, Supplier Invoices Owed, " +
         "Recurring Costs, Invoice Files, Bank, To Chase, Deadlines. Hours, Invoices, Bank, To Chase and Deadlines block (todo); the " +
-        "other four are amber reminders (check) and never block. Invoice Files lists the month's one-off costs and issued invoices that have no file attached; no tool attaches one, the owner does it in the app. Bank: a matching check on the last day or later " +
+        "other four are amber reminders (check) and never block. Invoice Files lists the month's one-off costs and issued invoices that have no file attached; each item's next names attach_file (a small file or an https url) and create_upload_url + complete_upload (a larger one) with its target and id. Bank: a matching check on the last day or later " +
         "counts, a later one labelled 'after month end'. A step with nothing to check is na, and notNeeded says why. " +
         "Each open item carries next: the tool to call with the arguments the data holds (ask the owner for the " +
         "rest, and confirm an invoice number with them), or app where only the web app can fix it; two items with " +

@@ -100,6 +100,11 @@ describe("tool descriptions keep the owner's rules", () => {
     expect(crm.get_month_end.match(/«/g)).toHaveLength(3)
   })
 
+  it("get_month_end no longer says that no tool attaches a file", () => {
+    expect(crm.get_month_end).not.toContain("no tool attaches")
+    expect(crm.get_month_end).toContain("create_upload_url")
+  })
+
   // "Closed" is the Month End verdict only: a month that has ended is "ended".
   it("no description calls a month that has ended closed", () => {
     expect(Object.keys(crm).filter((tool) => /closed months?\b/.test(crm[tool]))).toEqual([])

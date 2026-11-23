@@ -27,7 +27,9 @@ export async function sweepUploads(userId: string, at: Date = new Date()): Promi
   const db = getServerDb()
   for (const u of await db.listUploads(userId)) {
     if (u.expiresAt > at) continue
-    if (u.status !== "completed" && u.file?.path.startsWith(`users/${userId}/company-files/`)) {
+    // A completing upload may already be the row's file (a crash or a failed final write leaves it there): its object is never swept.
+    // ponytail: a completing record that died before the row moved leaks its object; checking the row would reclaim it.
+    if (u.status !== "completed" && u.status !== "completing" && u.file?.path.startsWith(`users/${userId}/company-files/`)) {
       await getServerFiles().remove(u.file.path).catch((e) => console.error(`Could not delete ${u.file!.path}; it stays unreferenced`, e))
     }
     await db.deleteUpload(u.id)

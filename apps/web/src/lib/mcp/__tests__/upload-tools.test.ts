@@ -30,10 +30,11 @@ registerCrmWriteTools({
   registerTool: (name: string, config: { inputSchema: z.ZodType }, run: Run) => void registered.set(name, { schema: config.inputSchema, run }),
 } as unknown as McpServer)
 
-async function call(name: string, input: Record<string, unknown>, userId = USER) {
+/** `request: null` is a connection with no HTTP request (stdio). */
+async function call(name: string, input: Record<string, unknown>, userId = USER, request: Request | null = new Request(`${ORIGIN}/api/mcp`, { method: "POST" })) {
   const tool = registered.get(name)
   if (!tool) throw new Error(`${name} is not registered`)
-  const ctx = { http: { authInfo: { clientId: "test-client", extra: { userId } }, req: new Request(`${ORIGIN}/api/mcp`, { method: "POST" }) } }
+  const ctx = { http: { authInfo: { clientId: "test-client", extra: { userId } }, ...(request && { req: request }) } }
   const result = await tool.run(tool.schema.parse(input), ctx)
   return { isError: result.isError === true, body: JSON.parse(result.content[0].text) as Record<string, any> } // eslint-disable-line @typescript-eslint/no-explicit-any -- a tool's JSON reply, read field by field
 }
@@ -58,6 +59,8 @@ beforeEach(() => {
   vi.setSystemTime(new Date("2026-11-23T10:00:00.000Z"))
 })
 afterEach(() => {
+  vi.restoreAllMocks()
+  vi.unstubAllEnvs()
   vi.useRealTimers()
   vi.mocked(downloadPublicFile).mockReset()
 })
@@ -98,6 +101,23 @@ describe("create_upload_url", () => {
     expect(await getServerDb().listUploads(USER)).toEqual([])
   })
 
+  it("on a connection with no request, builds the link on MCP_PUBLIC_ORIGIN without a trailing slash", async () => {
+    vi.stubEnv("MCP_PUBLIC_ORIGIN", "https://x.example/")
+    const cost = await newCost()
+    const { isError, body } = await call("create_upload_url", { target: "cost", id: cost.id, name: "a.xml" }, USER, null)
+    expect(isError).toBe(false)
+    expect(body.uploadUrl).toMatch(/^https:\/\/x\.example\/api\/uploads\/[A-Za-z0-9_-]{43}$/)
+  })
+
+  it("on a connection with no request and no MCP_PUBLIC_ORIGIN, refuses and creates no record", async () => {
+    vi.stubEnv("MCP_PUBLIC_ORIGIN", "")
+    const cost = await newCost()
+    const { isError, body } = await call("create_upload_url", { target: "cost", id: cost.id, name: "a.xml" }, USER, null)
+    expect(isError).toBe(true)
+    expect(body.error).toBe("This connection has no public address to upload to: use attach_file.")
+    expect(await getServerDb().listUploads(USER)).toEqual([])
+  })
+
   it("refuses a recurring cost", async () => {
     const e = await getServerDb().createCompanyExpense(USER, { description: "Rent Estimate", category: "other", amount: 10, date: new Date(), isRecurring: true })
     const { isError, body } = await call("create_upload_url", { target: "cost", id: e.id, name: "a.xml" })
@@ -130,6 +150,38 @@ describe("create_upload_url", () => {
     expect((await getServerDb().listUploads(USER)).map((u) => u.id)).not.toContain(mine.uploadId)
     expect(await getServerDb().getUpload(theirs.uploadId)).not.toBeNull()
     expect(await (await getServerFiles().download(theirStored.file!)).text()).toBe("<b/>")
+  })
+})
+
+describe("the lazy sweep never takes the file a row points at", () => {
+  const LATER = new Date("2026-11-23T10:16:00.000Z")
+
+  it("spares a completed upload's object once its link has expired, and drops the record", async () => {
+    const cost = await newCost()
+    const link = (await call("create_upload_url", { target: "cost", id: cost.id, name: "a.xml" })).body
+    await put(link.uploadUrl, "<kept/>")
+    expect((await call("complete_upload", { uploadId: link.uploadId })).isError).toBe(false)
+
+    vi.setSystemTime(LATER)
+    await call("create_upload_url", { target: "cost", id: cost.id, name: "b.xml", replace: true })
+    expect(await getServerDb().getUpload(link.uploadId)).toBeNull()
+    expect(await (await getServerFiles().download((await rowFile(cost.id))!)).text()).toBe("<kept/>")
+  })
+
+  it("spares the object when the final 'completed' write failed and the record stayed 'completing'", async () => {
+    const cost = await newCost()
+    const link = (await call("create_upload_url", { target: "cost", id: cost.id, name: "a.xml" })).body
+    await put(link.uploadUrl, "<kept/>")
+    const db = getServerDb()
+    const move = db.moveUpload.bind(db)
+    vi.spyOn(db, "moveUpload").mockImplementation((id, from, to, extra) => (to === "completed" ? Promise.reject(new Error("write failed")) : move(id, from, to, extra)))
+    vi.spyOn(console, "error").mockImplementation(() => undefined)
+    expect((await call("complete_upload", { uploadId: link.uploadId })).isError).toBe(false)
+    expect((await db.getUpload(link.uploadId))!.status).toBe("completing")
+
+    vi.setSystemTime(LATER)
+    await call("create_upload_url", { target: "cost", id: cost.id, name: "b.xml", replace: true })
+    expect(await (await getServerFiles().download((await rowFile(cost.id))!)).text()).toBe("<kept/>")
   })
 })
 
@@ -228,6 +280,50 @@ describe("complete_upload", () => {
   })
 })
 
+describe("complete_upload and attach_file keep the old file when the row cannot be pointed at the new one", () => {
+  const breakRow = () => vi.spyOn(getServerDb(), "updateCompanyExpense").mockRejectedValueOnce(new Error("row write failed"))
+
+  it("complete_upload with replace: the old object still downloads, the row still names it, the new one is dropped", async () => {
+    const old = await getServerFiles().upload(USER, new Blob(["<old/>"]), "old.xml")
+    const cost = await newCost(USER, old)
+    const link = (await call("create_upload_url", { target: "cost", id: cost.id, name: "new.xml", replace: true })).body
+    await put(link.uploadUrl, "<new/>")
+    const stored = (await getServerDb().getUpload(link.uploadId))!.file!
+    breakRow()
+    expect((await call("complete_upload", { uploadId: link.uploadId })).isError).toBe(true)
+    expect(await rowFile(cost.id)).toEqual(old)
+    expect(await (await getServerFiles().download(old)).text()).toBe("<old/>")
+    await expect(getServerFiles().download(stored)).rejects.toThrow()
+  })
+
+  it("attach_file with replace: the same", async () => {
+    const old = await getServerFiles().upload(USER, new Blob(["<old/>"]), "old.xml")
+    const cost = await newCost(USER, old)
+    breakRow()
+    expect((await call("attach_file", { target: "cost", id: cost.id, name: "new.xml", content_base64: b64("<new/>"), replace: true })).isError).toBe(true)
+    expect(await rowFile(cost.id)).toEqual(old)
+    expect(await (await getServerFiles().download(old)).text()).toBe("<old/>")
+  })
+
+  it("two concurrent complete_upload calls: one attaches, the other is told it is being completed, and the old file goes once", async () => {
+    const old = await getServerFiles().upload(USER, new Blob(["<old/>"]), "old.xml")
+    const cost = await newCost(USER, old)
+    const link = (await call("create_upload_url", { target: "cost", id: cost.id, name: "new.xml", replace: true })).body
+    await put(link.uploadUrl, "<new/>")
+    const remove = vi.spyOn(getServerFiles(), "remove")
+    const results = await Promise.all([call("complete_upload", { uploadId: link.uploadId }), call("complete_upload", { uploadId: link.uploadId })])
+    expect(results.filter((r) => r.isError)).toHaveLength(1)
+    expect(results.find((r) => r.isError)!.body.error).toMatch(/already being completed/)
+    expect(remove.mock.calls.filter(([path]) => path === old.path)).toHaveLength(1)
+    expect((await rowFile(cost.id))!.name).toBe("new.xml")
+  })
+
+  it("complete_upload takes only the id create_upload_url returned", () => {
+    expect(registered.get("complete_upload")!.schema.safeParse({ uploadId: "a/b" }).success).toBe(false)
+    expect(registered.get("complete_upload")!.schema.safeParse({ uploadId: "x".repeat(43) }).success).toBe(true)
+  })
+})
+
 describe("attach_file", () => {
   it("with content_base64 returns what it returned before, plus the sha256", async () => {
     const cost = await newCost()
@@ -256,6 +352,15 @@ describe("attach_file", () => {
     expect(downloadPublicFile).toHaveBeenCalledWith("https://files.example.com/a.xml?sig=secret")
     expect(body.file).toEqual({ name: "a.xml", kind: "xml", size: 11, sha256: sha("<from-url/>") })
     expect(await (await getServerFiles().download((await rowFile(cost.id))!)).text()).toBe("<from-url/>")
+  })
+
+  it("refuses an empty download and leaves the row alone", async () => {
+    vi.mocked(downloadPublicFile).mockResolvedValue(Buffer.alloc(0))
+    const cost = await newCost()
+    const { isError, body } = await call("attach_file", { target: "cost", id: cost.id, name: "a.xml", url: "https://files.example.com/a.xml" })
+    expect(isError).toBe(true)
+    expect(body.error).toBe("The download was empty.")
+    expect(await rowFile(cost.id)).toBeNull()
   })
 
   it("audits the url without its query string", async () => {

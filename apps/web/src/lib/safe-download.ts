@@ -23,7 +23,7 @@ for (const [net, bits] of [
 ] as const) {
   blocked.addSubnet(net, bits, "ipv4")
 }
-for (const [net, bits] of [["::", 128], ["::1", 128], ["fc00::", 7], ["fe80::", 10], ["ff00::", 8], ["2001:db8::", 32], ["64:ff9b::", 96], ["2002::", 16]] as const) {
+for (const [net, bits] of [["::", 128], ["::1", 128], ["fc00::", 7], ["fe80::", 10], ["ff00::", 8], ["2001:db8::", 32], ["64:ff9b::", 96], ["64:ff9b:1::", 48], ["2002::", 16], ["2001::", 32], ["::", 96], ["::ffff:0:0:0", 96]] as const) {
   blocked.addSubnet(net, bits, "ipv6")
 }
 

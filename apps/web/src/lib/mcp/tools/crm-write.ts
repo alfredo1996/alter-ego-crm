@@ -4270,8 +4270,8 @@ export function registerCrmWriteTools(server: McpServer): void {
         "Finishes an upload made with create_upload_url: checks that the file arrived and that its size and sha256 match the " +
         "declared ones, then attaches it to the cost or invoice the link was made for, and returns what attach_file returns " +
         "(name, kind, size, sha256). Only now does the row change; with replace: true the old file is deleted at this point. " +
-        "Call it after the PUT answered 201: «allega questa fattura».",
-      inputSchema: z.object({ uploadId: z.string().min(1) }),
+        "Call it after the PUT answered 201.",
+      inputSchema: z.object({ uploadId: z.string().regex(/^[A-Za-z0-9_-]{43}$/, "uploadId is the one create_upload_url returned") }),
     },
     async (input, ctx) =>
       audited(ctx, "complete_upload", input, async (userId) => {

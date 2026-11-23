@@ -1262,7 +1262,7 @@ export function monthEndNext(checklist: MonthEnd, data: MonthEndData, today: str
     if (i.status !== "check") continue
     const args = { target: i.kind === "file_cost" ? "cost" : "invoice", id: i.ref }
     out.set(i, [
-      { tool: "attach_file", args, note: "A file under about 10 KB: add name and content_base64, or name and a url the server can download." },
+      { tool: "attach_file", args, note: "Add name and content_base64 for a file under about 10 KB, or name and an https url the server downloads (up to 10 MB)." },
       { tool: "create_upload_url", args, note: "A larger file: add name; PUT the file to the uploadUrl, then call complete_upload with the uploadId." },
     ])
   }
