@@ -8,15 +8,15 @@ import { useEffect, useState } from "react"
 import { AuthAlert, AuthCard } from "@/components/auth/auth-shell"
 import { useAuth } from "@/hooks/use-auth"
 import { enabledDataPhrase } from "@/lib/app-description"
-import { parseScopes } from "@/lib/oauth/scopes"
+import { parseScopes, SCOPE_READ, SCOPE_WRITE } from "@/lib/oauth/scopes"
 
 // Built at render: it reads what this build runs, so the screen cannot name data the build lacks.
 // "Alter Ego data" is only the guard for an empty plugin set, which resolveModules never yields.
 const scopeLabels = (): Record<string, string> => {
   const data = enabledDataPhrase() || "Alter Ego data"
   return {
-    "data:read": `Read your ${data}`,
-    "data:write": `Create, update and delete your ${data} on your behalf`,
+    [SCOPE_READ]: `Read your ${data}`,
+    [SCOPE_WRITE]: `Create, update and delete your ${data} on your behalf`,
   }
 }
 
@@ -48,7 +48,7 @@ export function AuthorizeConsent() {
   const scopes = parseScopes(params.get("scope"))
   // What the client will be able to do, which is wider than `scopes`: the server never checks
   // data:read, so a write-only token reads too. Shown only; never added to the grant.
-  const shown = scopes.includes("data:write") && !scopes.includes("data:read") ? ["data:read", ...scopes] : scopes
+  const shown = scopes.includes(SCOPE_WRITE) && !scopes.includes(SCOPE_READ) ? [SCOPE_READ, ...scopes] : scopes
   const labels = scopeLabels()
 
   useEffect(() => {
