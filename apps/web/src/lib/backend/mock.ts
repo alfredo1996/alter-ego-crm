@@ -27,6 +27,8 @@ import type {
   AuditAdapter,
   CrmServerAdapter,
   FilesAdapter,
+  UploadRecord,
+  UploadsAdapter,
 } from "./types"
 import type {
   CapacityDoc,
@@ -104,6 +106,7 @@ const allocations: Map<string, Allocation> = new Map()
 // design — firestore.rules closes both collections.
 const capacityDocs: Map<string, Map<string, CapacityDoc>> = new Map()
 const auditEntries: Map<string, McpAuditEntry[]> = new Map()
+const uploads: Map<string, UploadRecord> = new Map()
 const tasks: Map<string, Task> = new Map()
 // Keyed `${userId}/${id}`: the id is deterministic, so two users can share one.
 const timecards: Map<string, Timecard> = new Map()
@@ -338,7 +341,7 @@ const mockAuth: AuthAdapter = {
 
 const { rent: mockRent, clear: clearRent } = createMockRent(nextId)
 
-const mockDb: DatabaseAdapter & AuditAdapter & CrmServerAdapter & { validateApiKey(keyHash: string): Promise<string | null> } = {
+const mockDb: DatabaseAdapter & AuditAdapter & CrmServerAdapter & UploadsAdapter & { validateApiKey(keyHash: string): Promise<string | null> } = {
   ...mockFinance,
   ...mockRent,
 
@@ -1216,6 +1219,30 @@ const mockDb: DatabaseAdapter & AuditAdapter & CrmServerAdapter & { validateApiK
     auditEntries.set(userId, forUser)
   },
 
+  async createUpload(record: UploadRecord): Promise<void> {
+    uploads.set(record.id, { ...record })
+  },
+
+  async getUpload(id: string): Promise<UploadRecord | null> {
+    const u = uploads.get(id)
+    return u ? { ...u } : null
+  },
+
+  async listUploads(userId: string): Promise<UploadRecord[]> {
+    return [...uploads.values()].filter((u) => u.userId === userId).map((u) => ({ ...u }))
+  },
+
+  async moveUpload(id, from, to, patch) {
+    const u = uploads.get(id)
+    if (!u || u.status !== from) return false
+    uploads.set(id, { ...u, ...patch, status: to })
+    return true
+  },
+
+  async deleteUpload(id: string): Promise<void> {
+    uploads.delete(id)
+  },
+
   async getCapacityDocs(
     userId: string,
     filter: { from: string; to: string },
@@ -1316,6 +1343,7 @@ export function __resetMockState() {
   invoices.clear()
   companyDeadlines.clear()
   mockFiles.clear()
+  uploads.clear()
   authCallbacks = []
   mockUser = null
   idCounter = 0

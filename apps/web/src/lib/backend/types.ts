@@ -270,6 +270,47 @@ export interface AuditAdapter {
   addAuditEntry(userId: string, entry: McpAuditEntry): Promise<void>
 }
 
+export type UploadStatus = "pending" | "receiving" | "received" | "completing" | "completed" | "failed"
+
+/**
+ * One upload link (create_upload_url): who may attach what to which row, and, once the bytes arrive,
+ * the object stored for it. `id` is the SHA-256 of the link's secret, so the record is found from the
+ * link and the secret itself is never stored. The row is untouched until complete_upload.
+ */
+export interface UploadRecord {
+  id: string
+  userId: string
+  target: "cost" | "invoice"
+  rowId: string
+  name: string
+  kind: InvoiceFile["kind"]
+  declaredSize: number | null
+  /** Lower-case hex. */
+  declaredSha256: string | null
+  replace: boolean
+  status: UploadStatus
+  createdAt: Date
+  expiresAt: Date
+  /** The stored object, from the PUT on. */
+  file: InvoiceFile | null
+  /** Hex SHA-256 of the bytes the PUT stored. */
+  sha256: string | null
+}
+
+/**
+ * The upload links. Server-only like `mcp_audit`: a top-level `uploads` collection that no client
+ * rule opens (Firestore denies what no rule matches), reached through getServerDb().
+ */
+export interface UploadsAdapter {
+  createUpload(record: UploadRecord): Promise<void>
+  getUpload(id: string): Promise<UploadRecord | null>
+  listUploads(userId: string): Promise<UploadRecord[]>
+  /** Atomic: moves the status from `from` to `to` (merging `patch`) only while it is `from`; false when it was not. */
+  moveUpload(id: string, from: UploadStatus, to: UploadStatus, patch?: Partial<Pick<UploadRecord, "file" | "sha256">>): Promise<boolean>
+  /** Deleting a record that is already gone is not an error. */
+  deleteUpload(id: string): Promise<void>
+}
+
 /** The company side's server-only reads and writes. */
 export interface CrmServerAdapter {
   /** The (engagement, month) pair is unique, so this is an upsert lookup. */

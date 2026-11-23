@@ -112,7 +112,7 @@ server, which uses the Admin SDK and bypasses Firestore rules:
 
 ## MCP server
 
-- 79 tools: 68 over the company data and 11 over Personal Finance, for Claude or any
+- 81 tools: 70 over the company data and 11 over Personal Finance, for Claude or any
   MCP client; a plugin that is left out serves none of its tools
 - Remote over HTTP at `/api/mcp` with OAuth 2.1 + PKCE (scopes `data:read` and
   `data:write`) or an API key, or local over stdio with no auth at all

@@ -8,8 +8,9 @@
 import { beforeEach, describe, expect, it } from "vitest"
 
 import { createMockAdapter, __resetMockState } from "../mock"
+import { describeUploadsContract } from "./adapter-contract"
 
-import type { AuditAdapter, CrmServerAdapter, DatabaseAdapter } from "../types"
+import type { AuditAdapter, CrmServerAdapter, DatabaseAdapter, UploadsAdapter } from "../types"
 
 const db = () =>
   createMockAdapter().db as unknown as DatabaseAdapter & AuditAdapter & CrmServerAdapter
@@ -150,3 +151,5 @@ describe("settleInvoicePayment", () => {
     )
   })
 })
+
+describeUploadsContract("mock", () => createMockAdapter().db as unknown as UploadsAdapter)

@@ -10,6 +10,6 @@ export const accounting = defineModule({
   tools: [
     "get_cash_book", "get_month_end", "add_movement", "add_expense", "record_loan", "check_balance", "update_movement",
     "delete_movement", "update_expense", "delete_expense", "update_loan", "delete_loan",
-    "list_invoices", "get_unbilled", "create_invoice", "mark_invoice_paid", "update_invoice", "delete_invoice", "attach_file", "remove_file", "get_file",
+    "list_invoices", "get_unbilled", "create_invoice", "mark_invoice_paid", "update_invoice", "delete_invoice", "attach_file", "create_upload_url", "complete_upload", "remove_file", "get_file",
   ],
 })

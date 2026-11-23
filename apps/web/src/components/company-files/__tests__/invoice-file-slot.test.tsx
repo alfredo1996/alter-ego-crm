@@ -43,6 +43,13 @@ describe("InvoiceFileSlot", () => {
     expect(within(slot()).getByRole("button", { name: "Download file" })).toBeInTheDocument()
   })
 
+  // What an MCP upload link leaves on the row: the same record, whatever its size.
+  it("shows a 65 KB XML attached through an upload link like any other file", () => {
+    render(<Harness file={stored("IT01_65KB.xml", "xml", 65 * 1024)} viewHref="/costs/c1/file" />)
+    expect(within(slot()).getByText("IT01_65KB.xml")).toBeInTheDocument()
+    expect(within(slot()).getByText("FatturaPA XML · 65 KB · added 4 Sep")).toBeInTheDocument()
+  })
+
   it.each([
     ["XML", "IT01.xml", "xml"],
     ["signed XML", "IT01.xml.p7m", "p7m"],

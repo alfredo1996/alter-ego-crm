@@ -4,6 +4,7 @@
  *
  * Runs under the Firebase emulator (vitest.emulator.ts, Storage included).
  */
+import { createHash } from "node:crypto"
 import { readFileSync } from "node:fs"
 
 import { isoDate } from "@alter-ego/kernel/dates"
@@ -15,6 +16,7 @@ import { POST as mcp } from "@/app/api/mcp/route"
 import { POST as approve } from "@/app/api/oauth/authorize/route"
 import { POST as register } from "@/app/api/oauth/register/route"
 import { POST as token } from "@/app/api/oauth/token/route"
+import { PUT as upload } from "@/app/api/uploads/[token]/route"
 import * as admin from "@/lib/backend/firebase-admin"
 import { getAdminBucket, getAdminFirestore } from "@/lib/firebase-admin-client"
 import { getFirebaseAuth } from "@/lib/firebase-client"
@@ -31,6 +33,7 @@ const opened = isoDate(startOfMonth(subMonths(now, 1)))
 
 const standardXml = readFileSync("src/lib/__tests__/fixtures/fattura-pa/standard.xml")
 const b64 = (s: string | Buffer) => Buffer.from(s).toString("base64")
+const sha = (b: string | Buffer) => createHash("sha256").update(b).digest("hex")
 
 let userId = ""
 let writeBearer = ""
@@ -127,7 +130,7 @@ describe("attach_file", () => {
     expect(file).toMatchObject({ name: "IT01_00001.xml", kind: "xml", size: standardXml.length })
     expect(file.path).toMatch(new RegExp(`^users/${userId}/company-files/[\\w-]+\\.xml$`))
     expect(await bytesAt(file.path)).toEqual(standardXml)
-    expect(payload.file).toEqual({ name: "IT01_00001.xml", kind: "xml", size: standardXml.length })
+    expect(payload.file).toEqual({ name: "IT01_00001.xml", kind: "xml", size: standardXml.length, sha256: sha(standardXml) })
     expect(payload.summary).toBe('Attached IT01_00001.xml (FatturaPA XML, 4 KB) to the cost "Cloud hosting".')
   })
 
@@ -178,7 +181,7 @@ describe("attach_file", () => {
     const c = await cost("Wrapped")
     const wrapped = Buffer.alloc(10 * 1024 * 1024, 1).toString("base64").replace(/(.{76})/g, "$1\r\n")
     const { payload } = await callOk("attach_file", { target: "cost", id: c.id, name: "ten.pdf", content_base64: wrapped })
-    expect(payload.file).toEqual({ name: "ten.pdf", kind: "pdf", size: 10 * 1024 * 1024 })
+    expect(payload.file).toEqual({ name: "ten.pdf", kind: "pdf", size: 10 * 1024 * 1024, sha256: sha(Buffer.alloc(10 * 1024 * 1024, 1)) })
   })
 
   it("a cost the schema no longer accepts is refused with the schema's words, not 'Internal error', and its upload is dropped", async () => {
@@ -256,7 +259,7 @@ describe("get_file", () => {
     const { content, payload } = await callOk("get_file", { target: "cost", id: c.id })
     const resource = content.find((x) => x.type === "resource")!.resource!
     expect(resource).toEqual({ uri: `alter-ego://invoice-files/cost/${c.id}`, mimeType: "application/xml", text: standardXml.toString("utf8") })
-    expect(payload).toEqual({ summary: `IT01_00003.xml (FatturaPA XML, 4 KB) of the cost "Fetched XML".`, file: { name: "IT01_00003.xml", kind: "xml", size: standardXml.length } })
+    expect(payload).toEqual({ summary: `IT01_00003.xml (FatturaPA XML, 4 KB) of the cost "Fetched XML".`, file: { name: "IT01_00003.xml", kind: "xml", size: standardXml.length, sha256: sha(standardXml) } })
   })
 
   it("returns a PDF and a signed .p7m as a base64 blob with their content types", async () => {
@@ -320,5 +323,107 @@ describe("the reads show the file", () => {
     const { payload } = await callOk("get_cash_book", { period: ym, limit: 200 })
     const entry = (payload.otherEntries as Payload[]).find((r) => r.id === c.id)!
     expect(entry.file).toEqual({ name: "card.pdf", kind: "pdf", size: 6 })
+  })
+})
+
+// The three files the owner could not attach one call at a time: generated here, synthetic.
+const pdfBytes = (kb: number) => Buffer.concat([Buffer.from("%PDF-1.4\n"), Buffer.alloc(kb * 1024, 0x61), Buffer.from("\n%%EOF\n")])
+const fatturaWith = (embedded: Buffer) =>
+  Buffer.from(
+    `<?xml version="1.0" encoding="UTF-8"?><p:FatturaElettronica versione="FPR12"><FatturaElettronicaBody><Allegati><NomeAttachment>invoice.pdf</NomeAttachment>` +
+      `<Attachment>${embedded.toString("base64")}</Attachment></Allegati></FatturaElettronicaBody></p:FatturaElettronica>`,
+  )
+const files: [string, string, Buffer][] = [
+  ["a 65 KB XML with an embedded PDF", "IT01_65KB.xml", fatturaWith(pdfBytes(48))],
+  ["a 313 KB XML", "IT01_313KB.xml", Buffer.from(`<?xml version="1.0"?><Root>${"<Line>synthetic supplier line</Line>\n".repeat(9_600)}</Root>`)],
+  ["a PDF", "EU-1234.pdf", pdfBytes(20)],
+]
+
+describe("create_upload_url, PUT, complete_upload against Firestore and Storage", () => {
+  const link = async (args: Record<string, unknown>) => (await callOk("create_upload_url", args)).payload
+  const put = (uploadUrl: string, body: Buffer) =>
+    upload(new Request(uploadUrl, { method: "PUT", body: new Uint8Array(body) }), { params: Promise.resolve({ token: uploadUrl.split("/").pop()! }) })
+
+  it.each(files)("%s: stored with the size and sha256 of the original, and the row points at it", async (_what, name, bytes) => {
+    expect(bytes.length).toBeGreaterThan(name.includes("65") ? 60_000 : name.includes("313") ? 300_000 : 10_000)
+    const c = await cost(`Upload ${name}`)
+    const made = await link({ target: "cost", id: c.id, name, size: bytes.length, sha256: sha(bytes) })
+    expect(made).toMatchObject({ method: "PUT", headers: {}, maxBytes: bytes.length })
+    expect(made.uploadUrl).toMatch(new RegExp(`^${ORIGIN}/api/uploads/[\\w-]{43}$`))
+    expect((await storedCost(c.id)).file).toBeNull()
+
+    const res = await put(made.uploadUrl, bytes)
+    expect(res.status).toBe(201)
+    expect((await storedCost(c.id)).file).toBeNull() // arrived, not linked
+
+    const { payload } = await callOk("complete_upload", { uploadId: made.uploadId })
+    expect(payload.file).toEqual({ name, kind: name.endsWith(".pdf") ? "pdf" : "xml", size: bytes.length, sha256: sha(bytes) })
+    const file = (await storedCost(c.id)).file!
+    expect(file).toMatchObject({ name, size: bytes.length })
+    expect(await bytesAt(file.path)).toEqual(bytes)
+  })
+
+  it("an invoice takes a file the same way", async () => {
+    const i = await invoice("FT-UP/2026")
+    const made = await link({ target: "invoice", id: i.id, name: "out.pdf" })
+    expect((await put(made.uploadUrl, pdfBytes(3))).status).toBe(201)
+    await callOk("complete_upload", { uploadId: made.uploadId })
+    expect((await storedInvoice(i.id)).file).toMatchObject({ name: "out.pdf", kind: "pdf" })
+  })
+
+  it("refuses a row that has a file unless replace; with replace the old object goes only at complete_upload", async () => {
+    const c = await cost("Upload replace")
+    await callOk("attach_file", { target: "cost", id: c.id, name: "old.xml", content_base64: b64("<old/>") })
+    const old = (await storedCost(c.id)).file!
+    expect(await refusal("create_upload_url", { target: "cost", id: c.id, name: "new.xml" })).toContain("already has a file: old.xml")
+
+    const made = await link({ target: "cost", id: c.id, name: "new.xml", replace: true })
+    expect((await put(made.uploadUrl, Buffer.from("<new/>"))).status).toBe(201)
+    expect(await exists(old.path)).toBe(true)
+    expect((await storedCost(c.id)).file).toEqual(old)
+
+    await callOk("complete_upload", { uploadId: made.uploadId })
+    const next = (await storedCost(c.id)).file!
+    expect(await exists(old.path)).toBe(false)
+    expect(await bytesAt(next.path)).toEqual(Buffer.from("<new/>"))
+  })
+
+  it("a wrong sha256, a used link and a body over the declared size each leave the row and Storage unchanged", async () => {
+    const c = await cost("Upload refusals")
+    const before = await objectCount()
+
+    const wrong = await link({ target: "cost", id: c.id, name: "a.xml", sha256: sha("something else") })
+    expect((await put(wrong.uploadUrl, Buffer.from("<a/>"))).status).toBe(201)
+    expect(await refusal("complete_upload", { uploadId: wrong.uploadId })).toContain("sha256 of the file that arrived does not match")
+
+    const used = await link({ target: "cost", id: c.id, name: "b.xml" })
+    expect((await put(used.uploadUrl, Buffer.from("<b/>"))).status).toBe(201)
+    expect((await put(used.uploadUrl, Buffer.from("<b2/>"))).status).toBe(409)
+    await callOk("complete_upload", { uploadId: used.uploadId })
+    expect(await refusal("complete_upload", { uploadId: used.uploadId })).toBe("This upload was already completed.")
+    await callOk("remove_file", { target: "cost", id: c.id, confirm: true })
+
+    const small = await link({ target: "cost", id: c.id, name: "c.xml", size: 4 })
+    expect((await put(small.uploadUrl, Buffer.from("<too-long/>"))).status).toBe(413)
+
+    expect((await storedCost(c.id)).file).toBeNull()
+    expect(await objectCount()).toBe(before)
+  })
+
+  it("a read-only token cannot create or complete an upload", async () => {
+    for (const [tool, args] of [["create_upload_url", { target: "cost", id: "x", name: "a.pdf" }], ["complete_upload", { uploadId: "x" }]] as const) {
+      expect((await mcp(rpcRequest(readOnlyBearer, tool, args))).status).toBe(403)
+    }
+  })
+})
+
+describe("attach_file from a url", () => {
+  it("refuses an address inside the network, naming nothing but the rule, and writes nothing", async () => {
+    const c = await cost("Url refused")
+    expect(await refusal("attach_file", { target: "cost", id: c.id, name: "a.xml", url: "https://169.254.169.254/latest/meta-data" })).toBe(
+      "That address is private or internal, so it is not fetched.",
+    )
+    expect(await refusal("attach_file", { target: "cost", id: c.id, name: "a.xml", url: "http://files.example.com/a.xml" })).toBe("Only https addresses are accepted.")
+    expect((await storedCost(c.id)).file).toBeNull()
   })
 })

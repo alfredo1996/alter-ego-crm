@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto"
+
 import { eurShort } from "@alter-ego/kernel/currency"
 import { formatYearMonth, isoDate, isoDateInRome, weekdaysInMonth } from "@alter-ego/kernel/dates"
 import { format } from "date-fns"
@@ -50,7 +52,7 @@ import {
   timecardsAfterEnd,
   toContractUnit,
 } from "@/lib/engagements"
-import { checkInvoiceFile } from "@/lib/invoice-files"
+import { checkInvoiceFile, INVOICE_FILE_MAX_BYTES } from "@/lib/invoice-files"
 import {
   amendmentEffects,
   clientBilling,
@@ -64,6 +66,7 @@ import {
   openCredits,
   outstanding,
 } from "@/lib/invoices"
+import { publicOrigin } from "@/lib/mcp/config"
 import { monthInput, toolError, userIdOf } from "@/lib/mcp/tools/context"
 import {
   ToolInputError,
@@ -117,10 +120,12 @@ import { fileHolder, fileTargetInput, fileText, ownFolder } from "@/lib/mcp/tool
 import { healthByContract } from "@/lib/meetings"
 import { getClient as getOAuthClient } from "@/lib/oauth/store"
 import { isOpen, STAGE_LABELS, STAGE_PROBABILITY } from "@/lib/opportunities"
+import { downloadPublicFile } from "@/lib/safe-download"
 import { journalSource } from "@/lib/solution-journal"
 import { completeStep, nowStep, sectionsFor, solutionNameTaken, stepContract, stepIndex } from "@/lib/solutions"
 import { MAX_LABELS, statusOf, taskClientId, taskStatusUpdate } from "@/lib/tasks"
 import { cellLimits, HOURS_AHEAD_MONTHS, hoursRefusal, lastLoggableDay, limitMessage, limitRefusal, monthPlanDays, planWarning } from "@/lib/timecards"
+import { newUploadToken, sweepUploads, UPLOAD_TTL_MS, uploadIdOf } from "@/lib/uploads"
 import { z } from "@/lib/zod"
 import { isModuleOn } from "@/modules"
 import {
@@ -222,6 +227,8 @@ export const WRITE_TOOLS = new Set([
   "update_expense",
   "delete_expense",
   "attach_file",
+  "create_upload_url",
+  "complete_upload",
   "remove_file",
   "update_loan",
   "delete_loan",
@@ -944,6 +951,24 @@ async function dropObject(userId: string, file: InvoiceFile | null): Promise<voi
   if (!file || !ownFolder(userId, file.path)) return
   await getServerFiles().remove(file.path).catch((e) => console.error(`Could not delete ${file.path}; it stays unreferenced`, e))
 }
+
+const sha256Hex = (bytes: Uint8Array) => createHash("sha256").update(bytes).digest("hex")
+
+/** An address for the audit trail: no credentials, no query string (a signed link's secret lives there). */
+function urlForAudit(u: string): string {
+  try {
+    const x = new URL(u)
+    x.username = ""
+    x.password = ""
+    x.search = ""
+    x.hash = ""
+    return x.toString()
+  } catch {
+    return "<invalid url>"
+  }
+}
+
+const CURL = 'curl -X PUT --data-binary @file "<uploadUrl>"'
 
 export function registerCrmWriteTools(server: McpServer): void {
   const db = getServerDb
@@ -4104,50 +4129,200 @@ export function registerCrmWriteTools(server: McpServer): void {
         "Attaches an invoice file to a company (SRL) cost (the supplier's invoice) or to an issued invoice, as the Attach " +
         "File slot does on the web: the FatturaPA XML, the signed .xml.p7m, or a PDF where there is no XML, up to 10 MB. " +
         "target is cost or invoice; id is the one get_cash_book (a cost) or list_invoices (an invoice) lists; name is the " +
-        "file name with its extension (it decides the kind); content_base64 is the file's bytes, base64, read from disk " +
-        "by a client that can: «allega la fattura XML». Check the row's file in get_cash_book or list_invoices first: " +
-        "when it has none, send the bytes once and this writes at once, with no preview. When it has one, ask the owner " +
-        "whether to replace it, and only then send the bytes once, with replace: true, which swaps it and deletes the old " +
-        "one. Without replace: true a row that has a file is refused, naming it, and the bytes are wasted.",
+        "file name with its extension (it decides the kind). Give the file as exactly one of content_base64 or url. " +
+        "content_base64 is only for files under about 10 KB, since the model has to write every byte out: larger files go " +
+        "through create_upload_url then complete_upload. url is an https address the server downloads (10 MB at most, " +
+        "never a private or internal address): «allega la fattura XML». Check the row's file in get_cash_book or " +
+        "list_invoices first: when it has none, this writes at once, with no preview. When it has one, ask the owner " +
+        "whether to replace it, and only then call again with replace: true, which swaps it and deletes the old one. " +
+        "Without replace: true a row that has a file is refused, naming it. The reply carries the stored file's sha256.",
       inputSchema: z.object({
         target: fileTargetInput,
         id: z.string().min(1),
         name: z.string().min(1).max(255),
         // 10 MB is 13.98M base64 characters; the rest is room for line breaks. The real limit is checkInvoiceFile's, on the stripped string.
-        content_base64: z.string().min(1).max(14_500_000),
+        content_base64: z.string().min(1).max(14_500_000).optional(),
+        url: z.string().url().max(2048).optional(),
         replace: z.boolean().optional(),
       }),
     },
     async (input, ctx) =>
       // The audit keeps what was asked, not the file: its bytes would fill mcp_audit.
-      audited(ctx, "attach_file", { ...input, content_base64: `<${input.content_base64.length} base64 characters>` }, async (userId) => {
-        // Line breaks are not bytes: strip them before sizing.
-        const b64 = input.content_base64.replace(/\s/g, "")
-        const check = checkInvoiceFile({ name: input.name, size: base64Bytes(b64) })
+      audited(
+        ctx,
+        "attach_file",
+        {
+          ...input,
+          ...(input.content_base64 !== undefined && { content_base64: `<${input.content_base64.length} base64 characters>` }),
+          ...(input.url !== undefined && { url: urlForAudit(input.url) }),
+        },
+        async (userId) => {
+          if ((input.content_base64 === undefined) === (input.url === undefined)) throw new ToolInputError("Pass exactly one of content_base64 and url.")
+          let bytes: Buffer | null = null
+          if (input.content_base64 !== undefined) {
+            // Line breaks are not bytes: strip them before sizing.
+            const b64 = input.content_base64.replace(/\s/g, "")
+            const check = checkInvoiceFile({ name: input.name, size: base64Bytes(b64) })
+            if (!check.ok) throw new ToolInputError(check.reason)
+            if (b64.length % 4 !== 0 || !/^[A-Za-z0-9+/]*={0,2}$/.test(b64)) throw new ToolInputError("content_base64 is not valid base64.")
+            bytes = Buffer.from(b64, "base64")
+          } else {
+            const check = checkInvoiceFile({ name: input.name, size: 0 })
+            if (!check.ok) throw new ToolInputError(check.reason)
+          }
+          const holder = await fileHolder(userId, input.target, input.id)
+          if (holder.file && !input.replace) {
+            throw new ToolInputError(`This ${holder.noun} already has a file: ${fileText(holder.file)}. Ask the owner whether to replace it; if they agree, call again with replace: true.`)
+          }
+          if (!bytes) {
+            bytes = await downloadPublicFile(input.url!)
+            if (bytes.length === 0) throw new ToolInputError("The download was empty.")
+            const check = checkInvoiceFile({ name: input.name, size: bytes.length })
+            if (!check.ok) throw new ToolInputError(check.reason)
+          }
+          const files = getServerFiles()
+          // Upload first, point second: a failed upload never leaves a record naming a file that is not there.
+          const stored = await files.upload(userId, new Blob([new Uint8Array(bytes)]), input.name)
+          try {
+            await pointAt(userId, input.target, input.id, stored)
+          } catch (e) {
+            await dropObject(userId, stored)
+            throw e
+          }
+          await dropObject(userId, holder.file)
+          return {
+            payload: {
+              summary: holder.file
+                ? `Replaced ${holder.file.name} with ${fileText(stored)} on ${holder.label}.`
+                : `Attached ${fileText(stored)} to ${holder.label}.`,
+              file: fileSummary(stored, sha256Hex(bytes)),
+            },
+            documentIds: [input.id],
+          }
+        },
+      ),
+  )
+
+  server.registerTool(
+    "create_upload_url",
+    {
+      title: "Create Upload Link",
+      description:
+        "Makes a temporary link to upload a larger invoice file (an XML with an embedded PDF, a PDF: up to 10 MB) to a company " +
+        "(SRL) cost or an issued invoice without writing its bytes out: «allega questa fattura». target is cost or invoice; id " +
+        "is the one get_cash_book or list_invoices lists; name is the file name with its extension; size (bytes) and sha256 " +
+        "(hex) are optional and checked when the upload completes; replace: true is for a row that already has a file (ask " +
+        "the owner first). It runs attach_file's checks and returns uploadId, uploadUrl, method PUT, headers, expiresAt " +
+        `(15 minutes) and maxBytes. The link takes one file, once, with no key: upload with ${CURL}, then call complete_upload ` +
+        "with the uploadId. The row changes only at complete_upload; an upload never completed is deleted once the link expires.",
+      inputSchema: z.object({
+        target: fileTargetInput,
+        id: z.string().min(1),
+        name: z.string().min(1).max(255),
+        size: z.number().int().min(1).optional(),
+        sha256: z.string().regex(/^[0-9a-fA-F]{64}$/, "sha256 is 64 hex characters").optional(),
+        replace: z.boolean().optional(),
+      }),
+    },
+    async (input, ctx) =>
+      audited(ctx, "create_upload_url", input, async (userId) => {
+        await sweepUploads(userId)
+        const check = checkInvoiceFile({ name: input.name, size: input.size ?? 0 })
         if (!check.ok) throw new ToolInputError(check.reason)
-        if (b64.length % 4 !== 0 || !/^[A-Za-z0-9+/]*={0,2}$/.test(b64)) throw new ToolInputError("content_base64 is not valid base64.")
         const holder = await fileHolder(userId, input.target, input.id)
         if (holder.file && !input.replace) {
           throw new ToolInputError(`This ${holder.noun} already has a file: ${fileText(holder.file)}. Ask the owner whether to replace it; if they agree, call again with replace: true.`)
         }
-        const files = getServerFiles()
-        // Upload first, point second: a failed upload never leaves a record naming a file that is not there.
-        const stored = await files.upload(userId, new Blob([Buffer.from(b64, "base64")]), input.name)
-        try {
-          await pointAt(userId, input.target, input.id, stored)
-        } catch (e) {
-          await dropObject(userId, stored)
-          throw e
-        }
-        await dropObject(userId, holder.file)
+        const request = ctx.http?.req
+        const origin = request ? publicOrigin(request) : process.env.MCP_PUBLIC_ORIGIN?.replace(/\/+$/, "")
+        if (!origin) throw new ToolInputError("This connection has no public address to upload to: use attach_file.")
+        const token = newUploadToken()
+        const createdAt = new Date()
+        const expiresAt = new Date(createdAt.getTime() + UPLOAD_TTL_MS)
+        const uploadId = uploadIdOf(token)
+        await getServerDb().createUpload({
+          id: uploadId, userId, target: input.target, rowId: input.id, name: input.name, kind: check.kind,
+          declaredSize: input.size ?? null, declaredSha256: input.sha256?.toLowerCase() ?? null, replace: input.replace === true,
+          status: "pending", createdAt, expiresAt, file: null, sha256: null,
+        })
         return {
           payload: {
-            summary: holder.file
-              ? `Replaced ${holder.file.name} with ${fileText(stored)} on ${holder.label}.`
-              : `Attached ${fileText(stored)} to ${holder.label}.`,
-            file: fileSummary(stored),
+            summary:
+              `Upload link for ${input.name} on ${holder.label}, valid for 15 minutes. Upload the file with ${CURL}, then call complete_upload ` +
+              "with the uploadId: the row changes only then.",
+            uploadId,
+            uploadUrl: `${origin}/api/uploads/${token}`,
+            method: "PUT",
+            headers: {},
+            expiresAt: expiresAt.toISOString(),
+            maxBytes: Math.min(input.size ?? INVOICE_FILE_MAX_BYTES, INVOICE_FILE_MAX_BYTES),
           },
           documentIds: [input.id],
+        }
+      }),
+  )
+
+  server.registerTool(
+    "complete_upload",
+    {
+      title: "Complete Upload",
+      description:
+        "Finishes an upload made with create_upload_url: checks that the file arrived and that its size and sha256 match the " +
+        "declared ones, then attaches it to the cost or invoice the link was made for, and returns what attach_file returns " +
+        "(name, kind, size, sha256). Only now does the row change; with replace: true the old file is deleted at this point. " +
+        "Call it after the PUT answered 201: «allega questa fattura».",
+      inputSchema: z.object({ uploadId: z.string().min(1) }),
+    },
+    async (input, ctx) =>
+      audited(ctx, "complete_upload", input, async (userId) => {
+        const db = getServerDb()
+        const upload = await db.getUpload(input.uploadId)
+        if (!upload || upload.userId !== userId) throw new ToolInputError(`No upload with id "${input.uploadId}". create_upload_url makes one.`)
+        await sweepUploads(userId)
+        if (upload.status === "completed") throw new ToolInputError("This upload was already completed.")
+        if (upload.expiresAt <= new Date()) throw new ToolInputError("This upload link has expired and its file was discarded. Call create_upload_url again.")
+        if (upload.status === "pending") {
+          throw new ToolInputError(`The file has not arrived: upload it with ${CURL}, then call complete_upload again.`)
+        }
+        if (upload.status === "receiving") throw new ToolInputError("The file is still arriving: wait for the upload to finish, then call complete_upload again.")
+        if (upload.status === "completing") throw new ToolInputError("This upload is already being completed.")
+        if (upload.status === "failed" || !upload.file || !upload.sha256) {
+          throw new ToolInputError("That upload failed (an empty file, one over its size, or one already refused): call create_upload_url for a new link.")
+        }
+        const stored = upload.file
+        const sha256 = upload.sha256
+        if (!(await db.moveUpload(upload.id, "received", "completing"))) throw new ToolInputError("This upload is already being completed.")
+        try {
+          if (upload.declaredSize !== null && stored.size !== upload.declaredSize) {
+            throw new ToolInputError(
+              `The size of the file that arrived (${stored.size} bytes) does not match the declared size (${upload.declaredSize} bytes). Nothing was attached and the upload was discarded.`,
+            )
+          }
+          if (upload.declaredSha256 !== null && sha256 !== upload.declaredSha256) {
+            throw new ToolInputError("The sha256 of the file that arrived does not match the declared sha256. Nothing was attached and the upload was discarded.")
+          }
+          // The row may have changed since the link was made: look again.
+          const holder = await fileHolder(userId, upload.target, upload.rowId)
+          if (holder.file && !upload.replace) {
+            throw new ToolInputError(`This ${holder.noun} already has a file: ${fileText(holder.file)}. Nothing was attached; ask the owner whether to replace it, then start again with replace: true.`)
+          }
+          await pointAt(userId, upload.target, upload.rowId, stored)
+          // The row now names the new object: only now does the old one go.
+          await dropObject(userId, holder.file)
+          await db.moveUpload(upload.id, "completing", "completed").catch((e) => console.error("Could not mark the upload completed", e))
+          return {
+            payload: {
+              summary: holder.file
+                ? `Replaced ${holder.file.name} with ${fileText(stored)} on ${holder.label}.`
+                : `Attached ${fileText(stored)} to ${holder.label}.`,
+              file: fileSummary(stored, sha256),
+            },
+            documentIds: [upload.rowId],
+          }
+        } catch (e) {
+          await dropObject(userId, stored)
+          await db.moveUpload(upload.id, "completing", "failed").catch(() => undefined)
+          throw e
         }
       }),
   )

@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto"
+
 import { getServerDb, getServerFiles } from "@/lib/backend/server-db"
 import { formatFileSize, INVOICE_FILE_CONTENT_TYPE, INVOICE_FILE_KIND_LABEL } from "@/lib/invoice-files"
 import { toolError, userIdOf } from "@/lib/mcp/tools/context"
@@ -54,6 +56,7 @@ export function registerGetFile(server: McpServer): void {
         if (!file) throw new ToolInputError(`${holder.label[0].toUpperCase()}${holder.label.slice(1)} has no file.`)
         if (!ownFolder(userId, file.path)) throw new ToolInputError(`The file of this ${holder.noun} is not in your folder, so it is not served.`)
         const bytes = new Uint8Array(await (await getServerFiles().download(file)).arrayBuffer())
+        const sha256 = createHash("sha256").update(bytes).digest("hex")
         const mimeType = INVOICE_FILE_CONTENT_TYPE[file.kind]
         const uri = `alter-ego://invoice-files/${input.target}/${input.id}`
         // An XML goes back as the text it is (the model reads a FatturaPA itself); a PDF or a .p7m, and an XML that is not valid UTF-8, as a blob.
@@ -67,7 +70,7 @@ export function registerGetFile(server: McpServer): void {
         }
         return {
           content: [
-            { type: "text" as const, text: JSON.stringify({ summary: `${fileText(file)} of ${holder.label}.`, file: fileSummary(file) }) },
+            { type: "text" as const, text: JSON.stringify({ summary: `${fileText(file)} of ${holder.label}.`, file: fileSummary(file, sha256) }) },
             {
               type: "resource" as const,
               resource: text !== null ? { uri, mimeType, text } : { uri, mimeType, blob: Buffer.from(bytes).toString("base64") },
