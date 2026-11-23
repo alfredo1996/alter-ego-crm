@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "next dev --port 3000",
     "dev:emulator": "NEXT_PUBLIC_BACKEND=firebase NEXT_PUBLIC_USE_EMULATOR=true NEXT_PUBLIC_FIREBASE_API_KEY=demo-api-key NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=demo-alter-ego.firebaseapp.com NEXT_PUBLIC_FIREBASE_PROJECT_ID=demo-alter-ego NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=demo-alter-ego.appspot.com NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=000000000000 NEXT_PUBLIC_FIREBASE_APP_ID=1:000000000000:web:0000000000000000 next dev --port 3003",
-    "build": "next build",
+    "build": "fumadocs-mdx && next build",
     "start": "next start",
     "test": "vitest",
     "test:coverage": "vitest run --coverage",
