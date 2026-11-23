@@ -12,10 +12,13 @@ import { parseScopes } from "@/lib/oauth/scopes"
 
 // Built at render: it reads what this build runs, so the screen cannot name data the build lacks.
 // "Alter Ego data" is only the guard for an empty plugin set, which resolveModules never yields.
-const scopeLabels = (): Record<string, string> => ({
-  "data:read": `Read your ${enabledDataPhrase() || "Alter Ego data"}`,
-  "data:write": "Create, update and delete that same data on your behalf",
-})
+const scopeLabels = (): Record<string, string> => {
+  const data = enabledDataPhrase() || "Alter Ego data"
+  return {
+    "data:read": `Read your ${data}`,
+    "data:write": `Create, update and delete your ${data} on your behalf`,
+  }
+}
 
 /** Appends parameters to the client's redirect_uri and leaves the app. */
 function redirectBack(base: string, params: Record<string, string>) {
@@ -41,8 +44,11 @@ export function AuthorizeConsent() {
   const codeChallenge = params.get("code_challenge")
   const codeChallengeMethod = params.get("code_challenge_method")
   const responseType = params.get("response_type")
-  // What the server will grant, so the list cannot disagree with it.
+  // What the server will grant, and what the approval posts.
   const scopes = parseScopes(params.get("scope"))
+  // What the client will be able to do, which is wider than `scopes`: the server never checks
+  // data:read, so a write-only token reads too. Shown only; never added to the grant.
+  const shown = scopes.includes("data:write") && !scopes.includes("data:read") ? ["data:read", ...scopes] : scopes
   const labels = scopeLabels()
 
   useEffect(() => {
@@ -134,7 +140,7 @@ export function AuthorizeConsent() {
             An application is asking to connect to your Alter Ego data. It will be able to:
           </p>
           <ul className="space-y-2 text-sm">
-            {scopes.map((s) => (
+            {shown.map((s) => (
               <li key={s} className="flex gap-2">
                 <span aria-hidden="true">•</span>
                 <span>{labels[s] ?? s}</span>

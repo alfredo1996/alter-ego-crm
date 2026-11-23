@@ -115,3 +115,18 @@ test("a deployment that lists only Consulting: the consent screen names only Con
   await expect(scopes).toHaveText([/^•Read your pipeline, clients and contracts$/])
   await expect(page.getByRole("main").getByText(/invoices|cash book/i)).toHaveCount(0)
 })
+
+test("a write-only request in that deployment: the read line and the write line, both naming only Consulting's data", async ({ page }) => {
+  await page.route("**/api/oauth/client*", (r) => r.fulfill({ json: { valid: true, clientName: "Claude" } }))
+  const consent =
+    "/oauth/authorize?client_id=c1&response_type=code&code_challenge=abc&code_challenge_method=S256&scope=data%3Awrite" +
+    `&redirect_uri=${encodeURIComponent("https://claude.ai/cb")}`
+  await signIn(page, consent)
+
+  const scopes = page.getByRole("main").getByRole("listitem")
+  await expect(scopes).toHaveText([
+    /^•Read your pipeline, clients and contracts$/,
+    /^•Create, update and delete your pipeline, clients and contracts on your behalf$/,
+  ])
+  await expect(page.getByRole("main").getByText(/invoices|cash book/i)).toHaveCount(0)
+})
