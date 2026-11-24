@@ -80,7 +80,7 @@ describe("setOwner", () => {
   })
 
   it.each([BASE, STORAGE, TS])("refuses %s with no owner definition, names it, and writes nothing", (file) => {
-    write(file, read(file).replace(/OWNER_UID = "[^"]*"|uid in \['[^']*'\]|uid == '[^']*'/, "removed"))
+    write(file, read(file).replace(/OWNER_UID: string = "[^"]*"|uid in \['[^']*'\]|uid == '[^']*'/, "removed"))
     const before = snapshot()
     expect(() => setOwner(root, UID)).toThrow(new RegExp(`${file.replace(/\./g, "\\.")}.*found 0`))
     expect(snapshot()).toEqual(before)
@@ -89,7 +89,7 @@ describe("setOwner", () => {
   it.each([
     [BASE, /^.*uid in \[.*$/m],
     [STORAGE, /^.*uid == '.*$/m],
-    [TS, /^export const OWNER_UID = .*$/m],
+    [TS, /^export const OWNER_UID: string = .*$/m],
   ])("refuses %s with two owner definitions, names it, and writes nothing", (file, line) => {
     write(file, read(file).replace(line, (m) => `${m}\n${m}`))
     const before = snapshot()

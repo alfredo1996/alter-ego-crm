@@ -2,7 +2,7 @@
  * `pnpm setup:owner <uid>` (#32): writes the owner's Firebase uid into the three places that hold
  * it, then rebuilds firestore.rules. The public code carries the placeholder, which admits nobody.
  *
- *  - apps/web/src/lib/owner-uid.ts   `export const OWNER_UID = "<uid>"`  (the Admin SDK routes)
+ *  - apps/web/src/lib/owner-uid.ts   `export const OWNER_UID: string = "<uid>"`  (the Admin SDK routes)
  *  - firestore/base.rules            `request.auth.uid in ['<uid>']`
  *  - storage.rules                   `request.auth.uid == '<uid>'`
  *
@@ -23,7 +23,7 @@ const UID = /^[A-Za-z0-9_-]{1,128}$/
 const SOURCES = [
   { file: "firestore/base.rules", key: "firestore", pattern: /(request\.auth\.uid in \[')([^']*)('\])/g },
   { file: "storage.rules", key: "storage", pattern: /(request\.auth\.uid == ')([^']*)(')/g },
-  { file: "apps/web/src/lib/owner-uid.ts", key: "ts", pattern: /(export const OWNER_UID = ")([^"]*)(")/g },
+  { file: "apps/web/src/lib/owner-uid.ts", key: "ts", pattern: /(export const OWNER_UID: string = ")([^"]*)(")/g },
 ]
 
 /** @param {string} root @param {(typeof SOURCES)[number]} src */

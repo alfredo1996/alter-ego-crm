@@ -1,6 +1,13 @@
-import { describe, expect, it } from "vitest"
+import { describe, expect, expectTypeOf, it } from "vitest"
 
 import { isOwner, OWNER_UID, OWNER_UID_PLACEHOLDER } from "../owner-uid"
+
+describe("OWNER_UID", () => {
+  // A literal type would make `OWNER_UID !== OWNER_UID_PLACEHOLDER` a TS2367 once setup:owner writes a real uid.
+  it("is typed string, not the literal setup:owner rewrites", () => {
+    expectTypeOf<typeof OWNER_UID>().toEqualTypeOf<string>()
+  })
+})
 
 describe("isOwner", () => {
   it("refuses the placeholder itself, so a copy nobody configured has no owner", () => {
