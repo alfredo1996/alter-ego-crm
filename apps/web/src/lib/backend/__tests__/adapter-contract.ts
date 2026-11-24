@@ -2351,6 +2351,12 @@ export function describeAdapterContract(name: string, setup: ContractSetup) {
           expect((await db.getCompanyExpenses(userId)).find((e) => e.id === row.id)?.files).toEqual([a])
           await expect(db.changeFiles(userId, "cost", "no-such-row", (list) => list)).rejects.toThrow()
           await db.deleteCompanyExpense(userId, row.id)
+
+          const client = await db.createClient(userId, { name: "Cap Files" })
+          const inv = await db.createInvoice(userId, { clientId: client.id, number: "C1", yearMonth: "2027-01", amount: 100, vat: 22 })
+          await expect(db.changeFiles(userId, "invoice", inv.id, (list) => [...list, ...many, ...many])).rejects.toThrow()
+          expect((await db.getInvoices(userId)).find((i) => i.id === inv.id)!.files).toEqual([])
+          await db.deleteClient(userId, client.id)
         })
 
         it("folds the old single file in, and clears it", async () => {

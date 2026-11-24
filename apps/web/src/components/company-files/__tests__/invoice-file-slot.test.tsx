@@ -190,6 +190,16 @@ describe("InvoiceFileSlot", () => {
       expect(drafts.at(-1)?.removed).toEqual([])
     })
 
+    it("a file dropped after a cancelled Replace File… is an add, and does not mark the old file", async () => {
+      const drafts: FileDraft[] = []
+      render(<Harness files={three.slice(0, 2)} onDraft={(d) => drafts.push(d)} />)
+      fireEvent.click((await more("IT01_00118.xml"))[0])
+      const zone = within(slot()).getByText("Drop another file here, or").closest("div")!
+      fireEvent.drop(zone, { dataTransfer: { files: [new File(["<a/>"], "dropped.xml")] } })
+      expect(drafts.at(-1)?.removed).toEqual([])
+      expect(drafts.at(-1)?.picked.map((f) => f.name)).toEqual(["dropped.xml"])
+    })
+
     const full = Array.from({ length: INVOICE_FILES_MAX }, (_, i) => stored(`F${i}.xml`, "xml"))
 
     it.each([

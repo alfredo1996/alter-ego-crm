@@ -294,6 +294,7 @@ describe("complete_upload", () => {
     await getServerDb().updateCompanyExpense(USER, dup.cost.id, { files: [first] })
     const stored = (await getServerDb().getUpload(dup.link.uploadId))!.file!
     const refused = await call("complete_upload", { uploadId: dup.link.uploadId })
+    expect((await getServerDb().getUpload(dup.link.uploadId))!.status).toBe("failed")
     expect(refused.body.error).toBe('The cost "Office Chair" already holds IT01_0002.xml (FatturaPA XML, 1 KB). Nothing was attached and the upload was discarded.')
     await expect(getServerFiles().download(stored)).rejects.toThrow()
     expect(await rowFiles(dup.cost.id)).toEqual([first])
@@ -374,6 +375,16 @@ describe("complete_upload and attach_file keep the old file when the row cannot 
 })
 
 describe("attach_file", () => {
+  it("refuses a retry of a file the row holds as a retry, on a full row too, without uploading", async () => {
+    const stored = await Promise.all(Array.from({ length: INVOICE_FILES_MAX }, (_, n) => getServerFiles().upload(USER, new Blob([`<${n}/>`]), `f${n}.xml`)))
+    const cost = await getServerDb().createCompanyExpense(USER, { description: "Office Chair", category: "other", amount: 100, date: new Date(), files: stored })
+    const upload = vi.spyOn(getServerFiles(), "upload")
+    const { isError, body } = await call("attach_file", { target: "cost", id: cost.id, name: "f3.xml", content_base64: b64("<3/>") })
+    expect(isError).toBe(true)
+    expect(body.error).toBe('The cost "Office Chair" already holds f3.xml (FatturaPA XML, 1 KB). Nothing was attached.')
+    expect(upload).not.toHaveBeenCalled()
+  })
+
   it("with content_base64 returns what it returned before, plus the sha256", async () => {
     const cost = await newCost()
     const { isError, body } = await call("attach_file", { target: "cost", id: cost.id, name: "a.xml", content_base64: b64("<a/>") })
@@ -446,5 +457,7 @@ describe("attach_file", () => {
     }
     expect(descriptions.create_upload_url).toContain('curl -X PUT --data-binary @file "<uploadUrl>"')
     expect(descriptions.create_upload_url).toContain("changes only at complete_upload")
+    expect(descriptions.create_upload_url).toContain(`holds up to ${INVOICE_FILES_MAX} files`)
+    for (const d of Object.values(descriptions)) expect(d).not.toContain("${")
   })
 })

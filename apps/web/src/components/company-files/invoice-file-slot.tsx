@@ -64,9 +64,8 @@ export function InvoiceFileSlot({
   const full = count >= INVOICE_FILES_MAX
   const An = noun === "cost" ? "A cost" : "An invoice"
 
-  function pick(file: File | undefined) {
-    const replaced = replacing.current
-    replacing.current = null
+  /** `replaced` is the stored file Replace File… was chosen on; a drop never replaces. */
+  function pick(file: File | undefined, replaced: string | null) {
     if (!file) return
     const check = checkInvoiceFile(file)
     if (!check.ok) return setRefused(check.reason)
@@ -115,7 +114,9 @@ export function InvoiceFileSlot({
       accept=".xml,.p7m,.pdf,application/xml,text/xml,application/pdf"
       disabled={disabled}
       onChange={(e) => {
-        pick(e.target.files?.[0])
+        const replaced = replacing.current
+        replacing.current = null
+        pick(e.target.files?.[0], replaced)
         e.target.value = "" // The same file can be chosen again.
       }}
     />
@@ -136,7 +137,8 @@ export function InvoiceFileSlot({
     onDrop: (e: React.DragEvent) => {
       e.preventDefault()
       setDragging(false)
-      if (!disabled) pick(e.dataTransfer.files[0])
+      replacing.current = null
+      if (!disabled) pick(e.dataTransfer.files[0], null)
     },
   }
 

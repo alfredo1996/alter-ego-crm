@@ -48,6 +48,12 @@ describe("the invoice file page of a record", () => {
       expect(screen.getByText(/^Reading 00118.xml ·/)).toBeInTheDocument()
     })
 
+    it("with none named opens a signed XML that comes before the first plain one", () => {
+      costs.result = cost([f("p1", "scan.pdf", "pdf"), files[1], files[0]])
+      render(<CostInvoiceFile id="c1" />)
+      expect(screen.getByText(/^Reading 00121.xml.p7m ·/)).toBeInTheDocument()
+    })
+
     it("with none named and only a PDF shows today's no-file notice", () => {
       costs.result = cost([f("p1", "scan.pdf", "pdf")])
       render(<CostInvoiceFile id="c1" />)

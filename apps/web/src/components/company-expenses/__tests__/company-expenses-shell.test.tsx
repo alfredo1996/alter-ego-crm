@@ -875,7 +875,7 @@ describe("CompanyExpensesShell", () => {
       expect(within(dialog).queryByText(/removed when you save/)).not.toBeInTheDocument()
       fireEvent.click(within(dialog).getByRole("switch"))
       expect(within(dialog).queryByRole("group", { name: "Invoice Files" })).not.toBeInTheDocument()
-      expect(within(dialog).getByText("Its 2 invoice files are removed when you save.")).toBeInTheDocument()
+      expect(within(dialog).getByRole("status")).toHaveTextContent("Its 2 invoice files are removed when you save.")
       fireEvent.click(within(dialog).getByRole("button", { name: "Save Changes" }))
       await waitFor(() => expect(updateCompanyExpense).toHaveBeenCalledWith("u1", "host", expect.objectContaining({ isRecurring: true })))
       await waitFor(() => expect(changeFiles).toHaveBeenCalledTimes(1))

@@ -498,6 +498,7 @@ describe("create_upload_url, PUT, complete_upload against Firestore and Storage"
       'The cost "Complete refusals" already holds dup.xml (FatturaPA XML, 1 KB). Nothing was attached and the upload was discarded.',
     )
     expect(await objectCount()).toBe(before - 1)
+    expect((await admin.getUpload(dup.uploadId))!.status).toBe("failed")
     expect((await storedCost(c.id)).files).toEqual(row)
 
     const late = await link({ target: "cost", id: c.id, name: "late.xml" })

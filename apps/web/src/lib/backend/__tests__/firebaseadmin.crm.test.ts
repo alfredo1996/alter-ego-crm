@@ -853,6 +853,13 @@ describe("an invoice's files through the Admin adapter", () => {
     expect((await admin.updateInvoice(userId, i.id, { number: "19/2026" })).files).toEqual([file])
     expect((await admin.updateInvoice(userId, i.id, { files: [] })).files).toEqual([])
   })
+
+  it("gives up a legacy file when files are written", async () => {
+    const old = { path: `users/${userId}/company-files/legacy-inv.pdf`, name: "l.pdf", kind: "pdf" as const, size: 4, uploadedAt: new Date("2026-10-01T10:00:00Z") }
+    const doc = await userSub("invoices").add({ userId, clientId: "c1", number: "L1", yearMonth: "2026-09", amount: 100, vat: 22, file: old, createdAt: old.uploadedAt, updatedAt: old.uploadedAt })
+    await admin.updateInvoice(userId, doc.id, { files: [old] })
+    expect((await doc.get()).data()?.file).toBeNull()
+  })
 })
 
 // The admin adapter cannot run the whole adapter contract, so its several-file cases are here, on raw documents.
@@ -915,8 +922,10 @@ describe("several files through the Admin adapter", () => {
     it("keeps three parallel adds and a concurrent remove on an invoice", async () => {
       const [keep, a, b, c] = [ptr("par-k"), ptr("par-a"), ptr("par-b"), ptr("par-c")]
       const row = await rawInvoice({ files: [keep] })
-      await Promise.all([a, b, c].map((f) => admin.changeFiles(userId, "invoice", row.id, (list) => [...list, f])))
-      await admin.changeFiles(userId, "invoice", row.id, (list) => list.filter((f) => f.path !== keep.path))
+      await Promise.all([
+        ...[a, b, c].map((f) => admin.changeFiles(userId, "invoice", row.id, (list) => [...list, f])),
+        admin.changeFiles(userId, "invoice", row.id, (list) => list.filter((f) => f.path !== keep.path)),
+      ])
       expect((await admin.getInvoices(userId))[0].files.map((f) => f.name).sort()).toEqual([a.name, b.name, c.name])
     })
 
@@ -926,6 +935,9 @@ describe("several files through the Admin adapter", () => {
       const many = Array.from({ length: INVOICE_FILES_MAX }, (_, n) => ptr(`w-m${n}`))
       await expect(admin.changeFiles(userId, "cost", row.id, (list) => [...list, ...many])).rejects.toThrow("A cost or an invoice holds up to 4 files.")
       expect((await admin.getCompanyExpenses(userId))[0].files).toEqual([ptr("w-a")])
+      const inv = await rawInvoice({ files: [ptr("w-i")] })
+      await expect(admin.changeFiles(userId, "invoice", inv.id, (list) => [...list, ...many])).rejects.toThrow("A cost or an invoice holds up to 4 files.")
+      expect((await admin.getInvoices(userId)).find((i) => i.id === inv.id)!.files).toEqual([ptr("w-i")])
       await expect(admin.changeFiles(userId, "cost", "nope", (list) => list)).rejects.toThrow("Company expense not found")
       await expect(admin.changeFiles(userId, "invoice", "nope", (list) => list)).rejects.toThrow("Invoice nope not found")
     })

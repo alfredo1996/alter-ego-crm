@@ -4182,6 +4182,9 @@ export function registerCrmWriteTools(server: McpServer): void {
             if (!check.ok) throw new ToolInputError(check.reason)
           }
           const holder = await fileHolder(userId, input.target, input.id)
+          // A retry of a file the row already holds is a retry, even on a full row: its size is known before any download.
+          const retried = bytes && !input.replace ? duplicateOf(holder.files, { name: input.name, size: bytes.length }) : undefined
+          if (retried) throw new ToolInputError(`${holder.label[0].toUpperCase()}${holder.label.slice(1)} already holds ${fileText(retried)}. Nothing was attached.`)
           const refused = refuseBeforeAdding(holder, input.replace === true, "Nothing was attached; remove one with remove_file first.")
           if (refused) throw new ToolInputError(refused)
           if (!bytes) {
@@ -4219,7 +4222,7 @@ export function registerCrmWriteTools(server: McpServer): void {
         "Makes a temporary link to upload a larger invoice file (an XML with an embedded PDF, a PDF: up to 10 MB) to a company " +
         "(SRL) cost or an issued invoice without writing its bytes out: «allega questa fattura». target is cost or invoice; id " +
         "is the one get_cash_book or list_invoices lists; name is the file name with its extension; size (bytes) and sha256 " +
-        "(hex) are optional and checked when the upload completes. A row holds up to ${INVOICE_FILES_MAX} files and each link adds one, " +
+        `(hex) are optional and checked when the upload completes. A row holds up to ${INVOICE_FILES_MAX} files and each link adds one, ` +
         "so make one link per file; links for the same row can be completed in any order. replace: true swaps the file of a row " +
         "that holds exactly one (ask the owner first). It runs attach_file's checks and returns uploadId, uploadUrl, method PUT, headers, expiresAt " +
         `(15 minutes) and maxBytes. The link takes one file, once, with no key: upload with ${CURL}, then call complete_upload ` +

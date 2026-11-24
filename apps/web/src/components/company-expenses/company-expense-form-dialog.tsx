@@ -849,7 +849,7 @@ function CostForm({
                     <FormLabel>Recurring Estimate</FormLabel>
                     <FormDescription>The Plan counts it every period, until a payment stands for it.</FormDescription>
                     {v.isRecurring && editing && editing.files.length > 0 && (
-                      <p className="text-xs text-muted-foreground">
+                      <p role="status" className="text-xs text-warning-soft-foreground">
                         Its {editing.files.length} invoice {editing.files.length === 1 ? "file is" : "files are"} removed when you save.
                       </p>
                     )}

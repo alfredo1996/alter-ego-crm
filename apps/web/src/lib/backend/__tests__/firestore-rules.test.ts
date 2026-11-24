@@ -1659,6 +1659,14 @@ describe("the invoice files on a cost and an invoice", () => {
     }
   })
 
+  it.each(kinds)("$col: refuses a bad element at every position, each slot being checked by hand", async ({ make, col }) => {
+    for (let i = 0; i < INVOICE_FILES_MAX; i++) {
+      for (const [why, bad] of badFiles.filter(([w]) => w === "another user's path" || w === "over 10 MB")) {
+        await expect(setDoc(mine(col), make({ files: files(INVOICE_FILES_MAX).with(i, bad as never) })), `element ${i} with ${why}`).rejects.toThrow()
+      }
+    }
+  })
+
   it.each(kinds)("$col: a document saved with only the old file stays readable and editable, and converts on a files write", async ({ make, col }) => {
     const ref = mine(col)
     await getAdminFirestore().doc(ref.path).set({ ...make({}), createdAt: new Date(), updatedAt: new Date(), file: file() })
