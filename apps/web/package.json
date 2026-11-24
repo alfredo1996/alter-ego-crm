@@ -56,7 +56,7 @@
     "@types/react-dom": "^19",
     "@vitest/coverage-v8": "^4.0.18",
     "autoprefixer": "^10.4.27",
-    "happy-dom": "^20.7.0",
+    "happy-dom": "^21.0.4",
     "tailwindcss": "^4",
     "tailwindcss-animate": "^1.0.7",
     "tsx": "^4.21.0",
