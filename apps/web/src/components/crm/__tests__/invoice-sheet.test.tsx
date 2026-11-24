@@ -41,7 +41,7 @@ const hours = (engagementId: string, date: string, h: number) => (
 )
 const invoice = (o: Partial<Invoice> & Pick<Invoice, "id" | "number" | "yearMonth" | "amount" | "vat">): Invoice => ({
   userId: "u1", clientId: "c1", engagementId: null, fromMonth: null, dueDate: null, paidDate: null, paidAccountId: null,
-  createdAt: at, updatedAt: at, ...o,
+  files: [], createdAt: at, updatedAt: at, ...o,
 })
 
 const I17 = invoice({
@@ -80,7 +80,12 @@ const ORIGINAL_INVOICES = DATA.getInvoices
 const createInvoice = vi.fn()
 const updateInvoice = vi.fn()
 const deleteInvoice = vi.fn()
-const WRITES: Record<string, unknown> = { createInvoice, updateInvoice, deleteInvoice }
+// The row's files change as the row is: the change function runs on the files of the stored invoice.
+const changeFiles = vi.fn(async (_u: string, _target: string, id: string, change: (f: unknown[]) => unknown[]) => {
+  const before = ((DATA.getInvoices as { id: string; files: unknown[] }[]).find((i) => i.id === id)?.files ?? []) as unknown[]
+  return { before, after: change(before) }
+})
+const WRITES: Record<string, unknown> = { createInvoice, updateInvoice, deleteInvoice, changeFiles }
 const upload = vi.fn()
 const removeFile = vi.fn()
 
@@ -101,6 +106,7 @@ beforeEach(() => {
   createInvoice.mockReset().mockResolvedValue({ id: "new1" })
   updateInvoice.mockReset().mockResolvedValue(undefined)
   deleteInvoice.mockReset().mockResolvedValue(undefined)
+  changeFiles.mockClear()
   upload.mockReset()
   removeFile.mockReset().mockResolvedValue(undefined)
 })
@@ -535,11 +541,11 @@ describe("InvoiceSheet: the invoice file", () => {
   it("is its own group under Payment", async () => {
     const sheet = await open({ kind: "edit", invoiceId: "i17" }, "Invoice 17/2026")
     const headings = within(sheet).getAllByRole("heading", { level: 3 }).map((h) => h.textContent)
-    expect(headings.indexOf("Invoice File")).toBe(headings.indexOf("Payment") + 1)
-    expect(within(sheet).getByRole("group", { name: "Invoice File" })).toHaveTextContent("Choose File")
+    expect(headings.indexOf("Invoice Files")).toBe(headings.indexOf("Payment") + 1)
+    expect(within(sheet).getByRole("group", { name: "Invoice Files" })).toHaveTextContent("Choose File")
   })
 
-  it("uploads a picked file when the invoice is saved, and writes it with only the file changed", async () => {
+  it("uploads a picked file when the invoice is saved, and changes only the invoice's files", async () => {
     const next = pointer("IT09876543210_00017.xml")
     upload.mockResolvedValue(next)
     const sheet = await open({ kind: "edit", invoiceId: "i17" }, "Invoice 17/2026")
@@ -547,7 +553,9 @@ describe("InvoiceSheet: the invoice file", () => {
     expect(within(sheet).getByText("FatturaPA XML · 1 KB · saved with the invoice")).toBeInTheDocument()
     expect(upload).not.toHaveBeenCalled()
     fireEvent.click(within(sheet).getByRole("button", { name: "Save Changes" }))
-    await waitFor(() => expect(updateInvoice).toHaveBeenCalledWith("u1", "i17", { file: next }))
+    await waitFor(() => expect(changeFiles).toHaveBeenCalledWith("u1", "invoice", "i17", expect.any(Function)))
+    expect((await changeFiles.mock.results[0].value).after).toEqual([next])
+    expect(updateInvoice).not.toHaveBeenCalled() // no field changed: only the files did
     expect(upload).toHaveBeenCalledWith("u1", expect.any(File), "IT09876543210_00017.xml")
   })
 
@@ -566,7 +574,7 @@ describe("InvoiceSheet: the invoice file", () => {
     const sheet = await open({ kind: "record", clientId: "c1" }, "Record Invoice")
     choose(sheet, xml())
     fireEvent.click(within(sheet).getByRole("button", { name: "Record Invoice" }))
-    await waitFor(() => expect(createInvoice).toHaveBeenCalledWith("u1", expect.objectContaining({ clientId: "c1", number: "18/2026", file: next })))
+    await waitFor(() => expect(createInvoice).toHaveBeenCalledWith("u1", expect.objectContaining({ clientId: "c1", number: "18/2026", files: [next] })))
   })
 
   it("saves nothing when the upload fails, and says why", async () => {
@@ -580,34 +588,49 @@ describe("InvoiceSheet: the invoice file", () => {
 
   describe("on an invoice that keeps one", () => {
     const KEPT = pointer("IT09876543210_00014.xml", "users/u1/company-files/kept.xml")
+    const SECOND = pointer("IT09876543210_00015.xml", "users/u1/company-files/second.xml")
     const withFile = async () => {
-      DATA.getInvoices = [{ ...I17, file: KEPT }]
+      DATA.getInvoices = [{ ...I17, files: [KEPT, SECOND] }]
       return open({ kind: "edit", invoiceId: "i17" }, "Invoice 17/2026")
     }
     afterEach(() => {
       DATA.getInvoices = ORIGINAL_INVOICES
     })
 
-    it("shows it, and removes it on Save with the object deleted after the write", async () => {
+    it("shows each, and removes one on Save with its object deleted after the write, the other kept", async () => {
       const sheet = await withFile()
-      expect(within(sheet).getByText("FatturaPA XML · 7 KB · added 1 Oct")).toBeInTheDocument()
-      fireEvent.keyDown(within(sheet).getByRole("button", { name: "More file actions" }), { key: "Enter" })
+      expect(within(sheet).getAllByText("FatturaPA XML · 7 KB · added 1 Oct")).toHaveLength(2)
+      fireEvent.keyDown(within(sheet).getByRole("button", { name: `More actions for ${KEPT.name}` }), { key: "Enter" })
       fireEvent.click(await screen.findByRole("menuitem", { name: "Remove File" }))
       expect(removeFile).not.toHaveBeenCalled()
       fireEvent.click(within(sheet).getByRole("button", { name: "Save Changes" }))
-      await waitFor(() => expect(updateInvoice).toHaveBeenCalledWith("u1", "i17", { file: null }))
+      await waitFor(() => expect(changeFiles).toHaveBeenCalledTimes(1))
+      expect((await changeFiles.mock.results[0].value).after).toEqual([SECOND])
       await waitFor(() => expect(removeFile).toHaveBeenCalledWith(KEPT.path))
+      expect(removeFile).toHaveBeenCalledTimes(1)
+    })
+
+    it("a save with an edited number and a removed file writes the fields and changes the files, separately", async () => {
+      const sheet = await withFile()
+      fireEvent.change(within(sheet).getByLabelText("Invoice number"), { target: { value: "17b/2026" } })
+      fireEvent.keyDown(within(sheet).getByRole("button", { name: `More actions for ${SECOND.name}` }), { key: "Enter" })
+      fireEvent.click(await screen.findByRole("menuitem", { name: "Remove File" }))
+      fireEvent.click(within(sheet).getByRole("button", { name: "Save Changes" }))
+      await waitFor(() => expect(updateInvoice).toHaveBeenCalledWith("u1", "i17", expect.objectContaining({ number: "17b/2026" })))
+      expect(updateInvoice.mock.calls[0][2]).not.toHaveProperty("files")
+      await waitFor(() => expect(changeFiles).toHaveBeenCalledTimes(1))
     })
 
     it("replaces it: the new object first, the old one gone once the invoice points at the new", async () => {
       const next = pointer("new.xml")
       upload.mockResolvedValue(next)
       const sheet = await withFile()
-      fireEvent.keyDown(within(sheet).getByRole("button", { name: "More file actions" }), { key: "Enter" })
+      fireEvent.keyDown(within(sheet).getByRole("button", { name: `More actions for ${KEPT.name}` }), { key: "Enter" })
       fireEvent.click(await screen.findByRole("menuitem", { name: "Replace File…" }))
       choose(sheet, xml())
       fireEvent.click(within(sheet).getByRole("button", { name: "Save Changes" }))
-      await waitFor(() => expect(updateInvoice).toHaveBeenCalledWith("u1", "i17", { file: next }))
+      await waitFor(() => expect(changeFiles).toHaveBeenCalledTimes(1))
+      expect((await changeFiles.mock.results[0].value).after).toEqual([SECOND, next])
       await waitFor(() => expect(removeFile).toHaveBeenCalledWith(KEPT.path))
       expect(removeFile).toHaveBeenCalledTimes(1)
     })

@@ -35,8 +35,8 @@ async function countUploads(page: Page) {
   return () => page.evaluate(() => (window as MockWindow).__uploads)
 }
 
-async function downloaded(page: Page, slot: ReturnType<Page["getByRole"]>) {
-  const [download] = await Promise.all([page.waitForEvent("download"), slot.getByRole("button", { name: "Download file" }).click()])
+async function downloaded(page: Page, slot: ReturnType<Page["getByRole"]>, name: string) {
+  const [download] = await Promise.all([page.waitForEvent("download"), slot.getByRole("button", { name: `Download ${name}` }).click()])
   return { name: download.suggestedFilename(), bytes: await bytesOf(download) }
 }
 
@@ -60,8 +60,8 @@ async function pathOf(page: Page, record: { cost: string } | { invoice: string }
     const user = await backend.auth.getCurrentUser()
     const file =
       "cost" in r
-        ? (await backend.db.getCompanyExpenses(user!.id)).find((e) => e.description === r.cost)?.file
-        : (await backend.db.getInvoices(user!.id)).find((i) => i.number === r.invoice)?.file
+        ? (await backend.db.getCompanyExpenses(user!.id)).find((e) => e.description === r.cost)?.files[0]
+        : (await backend.db.getInvoices(user!.id)).find((i) => i.number === r.invoice)?.files[0]
     return file?.path ?? null
   }, record)
 }
@@ -73,8 +73,8 @@ const objectGone = (page: Page, path: string) =>
     path,
   )
 
-async function chooseMore(page: Page, slot: ReturnType<Page["getByRole"]>, item: string) {
-  await slot.getByRole("button", { name: "More file actions" }).click()
+async function chooseMore(page: Page, slot: ReturnType<Page["getByRole"]>, item: string, file: string) {
+  await slot.getByRole("button", { name: `More actions for ${file}` }).click()
   await page.getByRole("menuitem", { name: item }).click()
 }
 
@@ -102,7 +102,7 @@ test.describe("the invoice file on a cost", () => {
       await page.getByRole("button", { name: `Edit ${description}` }).click()
     }
     const dialog = page.getByRole("dialog", { name: "Edit Cost" })
-    return { dialog, slot: dialog.getByRole("group", { name: "Invoice File" }) }
+    return { dialog, slot: dialog.getByRole("group", { name: "Invoice Files" }) }
   }
 
   test("View opens a signed XML as the readable invoice, Print leaves the toolbar out, and Back returns to the cost", async ({ page, isMobile }) => {
@@ -119,11 +119,12 @@ test.describe("the invoice file on a cost", () => {
     const { dialog: edit, slot } = await editCost(page, description, isMobile)
     // View reads the saved record: an edit in the form makes it wait for Save.
     await edit.getByLabel("Description").fill(`${description} changed`)
-    await expect(slot.getByRole("link", { name: "View" })).toHaveCount(0)
-    await expect(slot.getByRole("button", { name: "View" })).toBeDisabled()
+    await expect(slot.getByRole("link", { name: `View ${real.name}` })).toHaveCount(0)
+    await expect(slot.getByRole("button", { name: `View ${real.name}` })).toBeDisabled()
     await expect(slot.getByText("Save first to view the invoice.")).toBeVisible()
     await edit.getByLabel("Description").fill(description)
-    await slot.getByRole("link", { name: "View" }).click()
+    await slot.getByRole("link", { name: `View ${real.name}` }).click()
+    await expect(page).toHaveURL(/\/file\?file=/)
     await expect(page.getByRole("heading", { level: 1, name: "Invoice 112/2026 · Studio Esempio S.r.l." })).toBeVisible()
     // A description in a CDATA section reads as the text it holds.
     await expect(page.getByText("Consulenza straordinaria & <revisione>")).toBeVisible()
@@ -157,7 +158,7 @@ test.describe("the invoice file on a cost", () => {
     await expect(dialog).toBeHidden()
 
     const { slot } = await editCost(page, description, isMobile)
-    await slot.getByRole("link", { name: "View" }).click()
+    await slot.getByRole("link", { name: `View ${stated.name}` }).click()
     await expect(page.getByRole("heading", { level: 2, name: "Credit Note" })).toBeVisible()
     await expect(page.getByText("Invoice 112/2026 of 30 Sep 2026")).toBeVisible()
     await expect(page.getByText("Stamp Duty")).toBeVisible()
@@ -190,13 +191,13 @@ test.describe("the invoice file on a cost", () => {
     const { slot } = await editCost(page, description, isMobile)
     await expect(slot.getByText(SIGNED.name)).toBeVisible()
     await expect(slot.getByText(/^Signed FatturaPA XML · 1 KB · added /)).toBeVisible()
-    await expect(slot.getByRole("link", { name: "View" })).toBeVisible()
+    await expect(slot.getByRole("link", { name: `View ${SIGNED.name}` })).toBeVisible()
     if (isMobile) {
-      await bigEnough(slot.getByRole("button", { name: "Download file" }))
-      await bigEnough(slot.getByRole("button", { name: "More file actions" }))
+      await bigEnough(slot.getByRole("button", { name: `Download ${SIGNED.name}` }))
+      await bigEnough(slot.getByRole("button", { name: `More actions for ${SIGNED.name}` }))
       await noSideScroll(page)
     }
-    expect(await downloaded(page, slot)).toEqual({ name: SIGNED.name, bytes: SIGNED.buffer })
+    expect(await downloaded(page, slot, SIGNED.name)).toEqual({ name: SIGNED.name, bytes: SIGNED.buffer })
   })
 
   test("Cancel leaves nothing behind", async ({ page }) => {
@@ -230,7 +231,7 @@ test.describe("the invoice file on a cost", () => {
     expect(await objectGone(page, plainPath)).toBe(false)
     const first = await editCost(page, description, isMobile)
     await expect(first.slot.getByText(PLAIN.name)).toBeVisible()
-    await chooseMore(page, first.slot, "Replace File…")
+    await chooseMore(page, first.slot, "Replace File…", PLAIN.name)
     await first.dialog.getByLabel("Choose invoice file").setInputFiles(PDF)
     await expect(first.slot.getByText("saved with the cost")).toBeVisible()
     await first.dialog.getByRole("button", { name: "Save Changes" }).click()
@@ -240,10 +241,10 @@ test.describe("the invoice file on a cost", () => {
     const second = await editCost(page, description, isMobile)
     await expect(second.slot.getByText(PDF.name)).toBeVisible()
     await expect(second.slot.getByText(PLAIN.name)).toHaveCount(0)
-    await expect(second.slot.getByRole("button", { name: "View" })).toBeVisible()
-    expect(await downloaded(page, second.slot)).toEqual({ name: PDF.name, bytes: PDF.buffer })
+    await expect(second.slot.getByRole("button", { name: `View ${PDF.name}` })).toBeVisible()
+    expect(await downloaded(page, second.slot, PDF.name)).toEqual({ name: PDF.name, bytes: PDF.buffer })
 
-    await chooseMore(page, second.slot, "Remove File")
+    await chooseMore(page, second.slot, "Remove File", PDF.name)
     await expect(second.slot.getByText(`${PDF.name} is removed when you save.`)).toBeVisible()
     const pdfPath = (await pathOf(page, { cost: description }))!
     await second.dialog.getByRole("button", { name: "Save Changes" }).click()
@@ -274,7 +275,7 @@ test.describe("the invoice file on an invoice", () => {
     await navigateTo(page, "Invoices", "/invoices")
     await page.locator("#invoices").getByRole("button", { name: number, exact: true }).first().click()
     const sheet = page.getByRole("dialog", { name: `Invoice ${number}` })
-    return { sheet, slot: sheet.getByRole("group", { name: "Invoice File" }) }
+    return { sheet, slot: sheet.getByRole("group", { name: "Invoice Files" }) }
   }
 
   test("attach on save, download the same bytes, replace, then remove", async ({ page }) => {
@@ -282,7 +283,7 @@ test.describe("the invoice file on an invoice", () => {
     await seedInvoice(page, number)
 
     const opened = await openInvoice(page, number)
-    await expect(opened.sheet.getByRole("heading", { name: "Invoice File", level: 3 })).toBeVisible()
+    await expect(opened.sheet.getByRole("heading", { name: "Invoice Files", level: 3 })).toBeVisible()
     await opened.sheet.getByLabel("Choose invoice file").setInputFiles(PLAIN)
     await expect(opened.slot.getByText("saved with the invoice")).toBeVisible()
     await opened.sheet.getByRole("button", { name: "Save Changes" }).click()
@@ -291,10 +292,10 @@ test.describe("the invoice file on an invoice", () => {
     await navigateTo(page, "Pipeline", "/pipeline")
     const again = await openInvoice(page, number)
     await expect(again.slot.getByText(/^FatturaPA XML · 1 KB · added /)).toBeVisible()
-    expect(await downloaded(page, again.slot)).toEqual({ name: PLAIN.name, bytes: PLAIN.buffer })
+    expect(await downloaded(page, again.slot, PLAIN.name)).toEqual({ name: PLAIN.name, bytes: PLAIN.buffer })
 
     const plainPath = (await pathOf(page, { invoice: number }))!
-    await chooseMore(page, again.slot, "Replace File…")
+    await chooseMore(page, again.slot, "Replace File…", PLAIN.name)
     await again.sheet.getByLabel("Choose invoice file").setInputFiles(PDF)
     await again.sheet.getByRole("button", { name: "Save Changes" }).click()
     await expect(again.sheet).toBeHidden()
@@ -304,7 +305,7 @@ test.describe("the invoice file on an invoice", () => {
     await expect(replaced.slot.getByText(PDF.name)).toBeVisible()
     await expect(replaced.slot.getByText(PLAIN.name)).toHaveCount(0)
     const pdfPath = (await pathOf(page, { invoice: number }))!
-    await chooseMore(page, replaced.slot, "Remove File")
+    await chooseMore(page, replaced.slot, "Remove File", PDF.name)
     await replaced.sheet.getByRole("button", { name: "Save Changes" }).click()
     await expect(replaced.sheet).toBeHidden()
     expect(await objectGone(page, pdfPath)).toBe(true)
@@ -323,12 +324,12 @@ test.describe("the invoice file on an invoice", () => {
     }
     const opened = await openInvoice(page, number)
     await opened.sheet.getByLabel("Choose invoice file").setInputFiles(signed)
-    await expect(opened.slot.getByRole("button", { name: "View" })).toHaveCount(0)
+    await expect(opened.slot.getByRole("button", { name: `View ${signed.name}` })).toHaveCount(0)
     await opened.sheet.getByRole("button", { name: "Save Changes" }).click()
     await expect(opened.sheet).toBeHidden()
 
     const again = await openInvoice(page, number)
-    await again.slot.getByRole("link", { name: "View" }).click()
+    await again.slot.getByRole("link", { name: `View ${signed.name}` }).click()
     await expect(page.getByRole("heading", { level: 1, name: "Invoice 112/2026 · Studio Esempio S.r.l." })).toBeVisible()
     await page.getByRole("link", { name: "Back" }).click()
     await expect(page).toHaveURL(/\/invoices$/)

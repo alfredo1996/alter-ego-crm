@@ -9,7 +9,7 @@ const d = (day: string) => new Date(`${day}T00:00:00`)
 const cost = (o: Partial<CompanyExpense> & Pick<CompanyExpense, "id">): CompanyExpense => ({
   userId: "u1", description: "Cost", category: "other", amount: 100, date: d("2026-05-12"), isRecurring: false, recurrenceMonths: null,
   notes: null, accountId: null, paidByOwner: false, vat: 0, documentRef: null, project: null, recurringExpenseId: null,
-  dateEstimated: false, importRef: null, collaboratorId: null, engagementId: null, forMonth: null, createdAt: at, updatedAt: at, ...o,
+  dateEstimated: false, importRef: null, collaboratorId: null, engagementId: null, forMonth: null, files: [], createdAt: at, updatedAt: at, ...o,
 })
 const today = d("2026-10-15")
 

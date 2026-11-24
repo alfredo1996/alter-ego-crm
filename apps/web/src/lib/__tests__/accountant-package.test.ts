@@ -16,7 +16,7 @@ const file = (name: string) => ({ path: `f/${name}`, name, kind: "xml" as const,
 const expense = (o: Partial<CompanyExpense> & Pick<CompanyExpense, "id" | "amount">): CompanyExpense => ({
   userId: "u", description: "Hosting", category: "bank_fees", date: d("2026-08-03"), isRecurring: false, recurrenceMonths: null, notes: null,
   accountId: "main", paidByOwner: false, vat: null, documentRef: null, project: null, recurringExpenseId: null, dateEstimated: false,
-  importRef: null, collaboratorId: null, engagementId: null, forMonth: null, createdAt: at, updatedAt: at, ...o,
+  importRef: null, collaboratorId: null, engagementId: null, forMonth: null, files: [], createdAt: at, updatedAt: at, ...o,
 })
 const movement = (o: Partial<CompanyMovement> & Pick<CompanyMovement, "id" | "kind" | "direction" | "amount">): CompanyMovement => ({
   userId: "u", date: d("2026-08-10"), accountId: "main", toAccountId: null, expenseId: null, description: "Row", documentRef: null,
@@ -24,14 +24,14 @@ const movement = (o: Partial<CompanyMovement> & Pick<CompanyMovement, "id" | "ki
 })
 const invoice = (o: Partial<Invoice> & Pick<Invoice, "id" | "number">): Invoice => ({
   userId: "u", clientId: "c1", engagementId: null, fromMonth: null, yearMonth: "2026-08", amount: 100, vat: 0, dueDate: null,
-  paidDate: null, paidAccountId: null, createdAt: at, updatedAt: at, ...o,
+  paidDate: null, paidAccountId: null, files: [], createdAt: at, updatedAt: at, ...o,
 })
 
 const base = {
   expenses: [
-    expense({ id: "e1", amount: 100, vat: 22, documentRef: "INV-1", description: "Hosting", file: file("e1.xml") }),
+    expense({ id: "e1", amount: 100, vat: 22, documentRef: "INV-1", description: "Hosting", files: [file("e1.xml")] }),
     expense({ id: "e2", amount: 5, description: "Bank fee", date: d("2026-09-30") }),
-    expense({ id: "bill", amount: 1000, accountId: null, documentRef: "41/26", description: "Chairs", date: d("2026-07-15"), file: file("bill.xml") }),
+    expense({ id: "bill", amount: 1000, accountId: null, documentRef: "41/26", description: "Chairs", date: d("2026-07-15"), files: [file("bill.xml")] }),
     expense({ id: "old", amount: 9, description: "June cost", date: d("2026-06-30") }),
   ],
   movements: [
@@ -40,7 +40,7 @@ const base = {
     movement({ id: "sp", kind: "supplier_payment", direction: "out", amount: 400, expenseId: "bill", counterparty: "Rossi", description: "Chairs, first part", date: d("2026-07-20") }),
     movement({ id: "in", kind: "income", direction: "in", amount: 70, description: "Refund in" }),
   ],
-  invoices: [invoice({ id: "i1", number: "7" }), invoice({ id: "i2", number: "8", yearMonth: "2026-07", file: file("i2.xml") })],
+  invoices: [invoice({ id: "i1", number: "7" }), invoice({ id: "i2", number: "8", yearMonth: "2026-07", files: [file("i2.xml")] })],
   loans: [],
   clients: [],
   engagements: [],
@@ -77,7 +77,7 @@ describe("paymentsCsv documents", () => {
     const rows = body({
       expenses: [expense({ id: "refund", amount: -50, description: "Returned chair" })],
       movements: [],
-      invoices: [invoice({ id: "cn", number: "9", amount: -100, vat: -22, paidDate: d("2026-08-12"), paidAccountId: "main", file: file("cn.xml") })],
+      invoices: [invoice({ id: "cn", number: "9", amount: -100, vat: -22, paidDate: d("2026-08-12"), paidAccountId: "main", files: [file("cn.xml")] })],
     })
     expect(rows).toEqual(["12/08/2026;Main Bank;;Credit note 9;122,00;22,00;Credit note 9;Yes"])
   })
@@ -85,7 +85,7 @@ describe("paymentsCsv documents", () => {
     const rows = body({
       expenses: [
         expense({ id: "fee", amount: 300, description: "Fee", collaboratorId: "c1", date: d("2026-08-05") }),
-        expense({ id: "june", amount: 80, accountId: null, documentRef: "9/26", description: "June bill", date: d("2026-06-20"), file: file("june.xml") }),
+        expense({ id: "june", amount: 80, accountId: null, documentRef: "9/26", description: "June bill", date: d("2026-06-20"), files: [file("june.xml")] }),
       ],
       movements: [movement({ id: "sp2", kind: "supplier_payment", direction: "out", amount: 80, expenseId: "june", date: d("2026-07-05"), description: "June bill paid" })],
       invoices: [],
@@ -121,7 +121,7 @@ describe("buildPackage", () => {
   it("zips the CSVs and the files of a quarter spanning months, even when names clash", async () => {
     const clash = {
       ...data,
-      expenses: [...data.expenses, expense({ id: "e3", amount: 1, description: "Hosting", documentRef: "INV-1", file: file("e3.xml") })],
+      expenses: [...data.expenses, expense({ id: "e3", amount: 1, description: "Hosting", documentRef: "INV-1", files: [file("e3.xml")] })],
     }
     const out = await buildPackage(clash, q3, () => "Acme", load)
     const zip = unzipSync(out.bytes)
@@ -136,6 +136,21 @@ describe("buildPackage", () => {
     expect(strFromU8(zip["payments-2026-Q3.csv"])).toBe(paymentsCsv(clash, q3).csv.replace("\uFEFF", ""))
     expect(strFromU8(zip["prima-nota-2026-Q3.csv"])).toBe(exportCsv(clash, { ...q3, costCentre: null }).csv.replace("\uFEFF", ""))
     expect([out.name, out.files, out.missing]).toEqual(["2026-Q3-accountant-package.zip", 4, 2])
+  })
+  it("zips every file of a cost, counts them, and keeps payments.csv's File at Yes", async () => {
+    const more = { ...base, expenses: [...base.expenses, expense({ id: "e4", amount: 2, description: "Print run", documentRef: "118-26", files: [file("p1.xml"), file("p2.xml")] })] }
+    const two = { accounts: ACCOUNTS, ...more, ...bookRows({ accounts: ACCOUNTS, ...more }) }
+    const out = await buildPackage(two, q3, () => "Acme", load)
+    const names = Object.keys(unzipSync(out.bytes))
+    expect(names).toContain("costs/2026-08-03 Print run (118-26) (file 1 of 2).xml")
+    expect(names).toContain("costs/2026-08-03 Print run (118-26) (file 2 of 2).xml")
+    expect(out.files).toBe(5)
+    const rows = paymentsCsv(two, q3).csv.trim().split("\r\n")
+    expect(rows.filter((r) => r.includes(";Print run;")).map((r) => r.split(";").at(-1))).toEqual(["Yes"])
+  })
+  it("counts files, not records, for the status line", () => {
+    const two = { ...data, expenses: [...data.expenses, expense({ id: "e4", amount: 2, description: "Print run", files: [file("p1.xml"), file("p2.xml")] })] }
+    expect(packageSummary(two, q3, () => "Acme")).toMatchObject({ files: 5, costsWithout: 1, invoicesWithout: 1 })
   })
   it("counts for the status line", () => {
     expect(packageSummary(data, q3, () => "Acme")).toMatchObject({ rows: exportCsv(data, { ...q3, costCentre: null }).rows, payments: 4, files: 3, costsWithout: 1, invoicesWithout: 1 })

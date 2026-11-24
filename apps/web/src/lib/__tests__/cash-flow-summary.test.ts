@@ -27,14 +27,14 @@ const movement = (o: Partial<CompanyMovement> & Pick<CompanyMovement, "kind" | "
 const expense = (o: Partial<CompanyExpense> & Pick<CompanyExpense, "id" | "amount" | "date" | "description">): CompanyExpense => ({
   userId: "u", category: "software", isRecurring: false, recurrenceMonths: null, notes: null, accountId: null,
   paidByOwner: false, vat: null, documentRef: null, project: null, recurringExpenseId: null, dateEstimated: false,
-  importRef: null, collaboratorId: null, engagementId: null, forMonth: null, createdAt: at, updatedAt: at, ...o,
+  importRef: null, collaboratorId: null, engagementId: null, forMonth: null, files: [], createdAt: at, updatedAt: at, ...o,
 })
 
 const accounts = [account({ id: "main", name: "Main Bank", openingBalance: 1000 }), account({ id: "second", name: "Second Bank" })]
 const invoices: Invoice[] = [
   {
     id: "i15", userId: "u", clientId: "c1", engagementId: null, fromMonth: null, yearMonth: "2026-09", number: "15/2026",
-    amount: 1000, vat: 220, dueDate: null, paidDate: d("2026-09-20"), paidAccountId: "main", createdAt: at, updatedAt: at,
+    amount: 1000, vat: 220, dueDate: null, paidDate: d("2026-09-20"), paidAccountId: "main", files: [], createdAt: at, updatedAt: at,
   },
 ]
 const expenses: CompanyExpense[] = [

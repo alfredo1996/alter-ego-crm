@@ -41,7 +41,7 @@ function invoice(o: Partial<Invoice> = {}): Invoice {
     id: "i1", userId: "u1", clientId: null, engagementId: "e1", number: "2026/14",
     fromMonth: null, yearMonth: "2026-04", amount: 5000, vat: 1100,
     dueDate: new Date("2026-05-31"), paidDate: null, paidAccountId: null,
-    createdAt: NOW, updatedAt: NOW, ...o,
+    files: [], createdAt: NOW, updatedAt: NOW, ...o,
   }
 }
 

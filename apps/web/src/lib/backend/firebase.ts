@@ -23,6 +23,7 @@ import {
   where,
   orderBy,
   limit,
+  runTransaction,
   serverTimestamp,
   writeBatch,
   Timestamp,
@@ -42,11 +43,12 @@ import { byActiveThenName } from "@/lib/collaborators"
 import { CONTRACT_HAS_HOURS } from "@/lib/engagements"
 import { normalizeAmendments } from "@/lib/engagements"
 import { getFirebaseAuth, getFirebaseDb, getFirebaseStorage } from "@/lib/firebase-client"
-import { checkInvoiceFile, INVOICE_FILE_CONTENT_TYPE } from "@/lib/invoice-files"
+import { checkInvoiceFile, INVOICE_FILE_CONTENT_TYPE, storedFiles } from "@/lib/invoice-files"
 import { normalizeLabels } from "@/lib/tasks"
 import {
   assignmentFields,
   collaboratorFields,
+  invoiceFilesSchema,
   normalizeMonthDays,
   normalizeCollaboratorFee,
   normalizePriceChanges,
@@ -165,8 +167,18 @@ function mapFile(f: unknown): InvoiceFile | null {
   return { path: d.path as string, name: d.name as string, kind: d.kind as InvoiceFile["kind"], size: Number(d.size), uploadedAt: toDate(d.uploadedAt) }
 }
 
-function fileDoc(f: InvoiceFile | null): Record<string, unknown> | null {
-  return f && { path: f.path, name: f.name, kind: f.kind, size: f.size, uploadedAt: Timestamp.fromDate(f.uploadedAt) }
+/** A row's files: the old single `file` first, then `files` (see storedFiles). */
+function mapFiles(d: DocumentData): InvoiceFile[] {
+  return storedFiles(d.files, d.file).map(mapFile).filter((f): f is InvoiceFile => f !== null)
+}
+
+function fileDoc(f: InvoiceFile): Record<string, unknown> {
+  return { path: f.path, name: f.name, kind: f.kind, size: f.size, uploadedAt: Timestamp.fromDate(f.uploadedAt) }
+}
+
+/** What a write of `files` stores: the list, and the old single key cleared so it is not read twice. */
+function filesFields(files: InvoiceFile[]): { files: Record<string, unknown>[]; file: null } {
+  return { files: files.map(fileDoc), file: null }
 }
 
 async function removeObject(path: string): Promise<void> {
@@ -315,7 +327,7 @@ function mapCompanyExpense(d: DocumentData & { id: string }): CompanyExpense {
     endMonth: (d.endMonth as string | null | undefined) ?? null,
     priceChanges: normalizePriceChanges(d.priceChanges),
     countedWhenPaid: d.countedWhenPaid === true,
-    file: mapFile(d.file),
+    files: mapFiles(d),
     createdAt: toDate(d.createdAt),
     updatedAt: toDate(d.updatedAt),
   }
@@ -525,7 +537,7 @@ function mapInvoice(d:DocumentData & { id: string }): Invoice {
     paidDate: d.paidDate != null ? toDate(d.paidDate) : null,
     // Absent on documents written before the cash book.
     paidAccountId: (d.paidAccountId as string | null | undefined) ?? null,
-    file: mapFile(d.file),
+    files: mapFiles(d),
     createdAt: toDate(d.createdAt),
     updatedAt: toDate(d.updatedAt),
   }
@@ -741,7 +753,7 @@ function createFirebaseDbAdapter(): DatabaseAdapter {
         endMonth: input.endMonth ?? null,
         priceChanges: input.priceChanges ?? [],
         countedWhenPaid: input.countedWhenPaid ?? false,
-        file: fileDoc(input.file ?? null),
+        ...filesFields(input.files ?? []),
         createdAt: now(),
         updatedAt: now(),
       })
@@ -762,7 +774,7 @@ function createFirebaseDbAdapter(): DatabaseAdapter {
       // together; the import folds changes into the amount when it moves a start). The mock and the admin adapter also
       // check the merge; here that would cost a read per update, and the rules cannot compare a list with a date.
       for (const key of EXPENSE_FIELDS) if (input[key] !== undefined) updates[key] = input[key]
-      if (input.file !== undefined) updates.file = fileDoc(input.file)
+      if (input.files !== undefined) Object.assign(updates, filesFields(input.files))
       await updateDoc(ref, updates)
       const snap = await readBack(ref)
       return mapCompanyExpense(docData(snap))
@@ -772,9 +784,21 @@ function createFirebaseDbAdapter(): DatabaseAdapter {
       const payments = await getDocs(query(col(userId, "company_movements"), where("expenseId", "==", expenseId), limit(1)))
       if (!payments.empty) throw new Error(BILL_HAS_PAYMENTS)
       const ref = docRef(userId, "company_expenses", expenseId)
-      const file = (await getDoc(ref)).data()?.file
+      const gone = (await getDoc(ref)).data()
       await deleteDoc(ref)
-      await removeObjectsOf([file])
+      await removeObjectsOf(storedFiles(gone?.files, gone?.file))
+    },
+
+    async changeFiles(userId, target, id, change) {
+      const ref = docRef(userId, target === "cost" ? "company_expenses" : "invoices", id)
+      return runTransaction(getFirebaseDb(), async (tx) => {
+        const snap = await tx.get(ref)
+        if (!snap.exists()) throw new Error(target === "cost" ? "Company expense not found" : "Invoice not found")
+        const before = mapFiles(snap.data())
+        const after = invoiceFilesSchema.parse(change(before))
+        tx.update(ref, { ...filesFields(after), updatedAt: now() })
+        return { before, after }
+      })
     },
 
     // ── Company Loans (finanziamento soci) ─────────────────────────────────
@@ -1102,7 +1126,7 @@ function createFirebaseDbAdapter(): DatabaseAdapter {
       const invoiceRefs = new Map(invoiceDocs.map((d) => [d.ref.path, d.ref]))
       for (const ref of invoiceRefs.values()) batch.delete(ref)
       await batch.commit()
-      await removeObjectsOf(Array.from(new Map(invoiceDocs.map((d) => [d.ref.path, d.data().file])).values()))
+      await removeObjectsOf(Array.from(new Map(invoiceDocs.map((d) => [d.ref.path, d])).values()).flatMap((d) => storedFiles(d.data().files, d.data().file)))
     },
 
     // ── CRM Opportunities ──────────────────────────────────────────────────
@@ -1648,7 +1672,7 @@ function createFirebaseDbAdapter(): DatabaseAdapter {
         dueDate: input.dueDate ? Timestamp.fromDate(input.dueDate) : null,
         paidDate: input.paidDate ? Timestamp.fromDate(input.paidDate) : null,
         paidAccountId: input.paidAccountId ?? null,
-        file: fileDoc(input.file ?? null),
+        ...filesFields(input.files ?? []),
         createdAt: now(),
         updatedAt: now(),
       })
@@ -1669,7 +1693,7 @@ function createFirebaseDbAdapter(): DatabaseAdapter {
       if (input.paidDate !== undefined)
         updates.paidDate = input.paidDate ? Timestamp.fromDate(input.paidDate) : null
       if (input.paidAccountId !== undefined) updates.paidAccountId = input.paidAccountId
-      if (input.file !== undefined) updates.file = fileDoc(input.file)
+      if (input.files !== undefined) Object.assign(updates, filesFields(input.files))
       await updateDoc(ref, updates)
       const snap = await readBack(ref)
       return mapInvoice(docData(snap))
@@ -1677,9 +1701,9 @@ function createFirebaseDbAdapter(): DatabaseAdapter {
 
     async deleteInvoice(userId: string, invoiceId: string): Promise<void> {
       const ref = docRef(userId, "invoices", invoiceId)
-      const file = (await getDoc(ref)).data()?.file
+      const gone = (await getDoc(ref)).data()
       await deleteDoc(ref)
-      await removeObjectsOf([file])
+      await removeObjectsOf(storedFiles(gone?.files, gone?.file))
     },
 
     // ── Company Deadlines ───────────────────────────────────────────────────

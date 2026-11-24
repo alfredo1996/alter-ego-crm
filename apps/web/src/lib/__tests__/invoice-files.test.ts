@@ -1,14 +1,14 @@
 import { describe, expect, it } from "vitest"
 
-import { checkInvoiceFile, filesInPeriod, formatFileSize, INVOICE_FILE_MAX_BYTES, zipName } from "../invoice-files"
+import { checkInvoiceFile, fileIdOf, filesInPeriod, formatFileSize, INVOICE_FILE_MAX_BYTES, storedFiles, zipName } from "../invoice-files"
 
 import type { PeriodDocument } from "../invoice-files"
 import type { CompanyExpense, Invoice } from "@/types"
 
 describe("filesInPeriod", () => {
   const cost = (o: Record<string, unknown>) =>
-    ({ id: "x", description: "Hosting", amount: 10, date: new Date(2026, 8, 2), isRecurring: false, documentRef: null, file: null, ...o }) as unknown as CompanyExpense
-  const inv = (o: Record<string, unknown>) => ({ id: "i", number: "13", yearMonth: "2026-09", amount: 100, file: null, ...o }) as unknown as Invoice
+    ({ id: "x", description: "Hosting", amount: 10, date: new Date(2026, 8, 2), isRecurring: false, documentRef: null, files: [], ...o }) as unknown as CompanyExpense
+  const inv = (o: Record<string, unknown>) => ({ id: "i", number: "13", yearMonth: "2026-09", amount: 100, files: [], ...o }) as unknown as Invoice
   const period = { from: "2026-09-01", to: "2026-09-30" }
 
   it("lists the period's one-off costs and invoices, never a recurring estimate or another month", () => {
@@ -40,7 +40,7 @@ describe("filesInPeriod", () => {
 })
 
 describe("zipName", () => {
-  const doc = (o: Partial<PeriodDocument>): PeriodDocument => ({ kind: "cost", id: "x", day: "2026-09-02", label: "Hosting", number: null, customer: null, amount: 1, file: null, ...o })
+  const doc = (o: Partial<PeriodDocument>): PeriodDocument => ({ kind: "cost", id: "x", day: "2026-09-02", label: "Hosting", number: null, customer: null, amount: 1, files: [], ...o })
 
   it.each([
     ["a colon and the other Windows-reserved characters", doc({ label: 'Re: a*b?c"d<e>f|g' }), "2026-09-02 Re- a-b-c-d-e-f-g"],
@@ -55,7 +55,7 @@ describe("zipName", () => {
   })
 
   it("labels a negative invoice a credit note", () => {
-    const [d] = filesInPeriod({ expenses: [], invoices: [{ id: "n", number: "NC 2/2026", yearMonth: "2026-09", amount: -50, file: null } as unknown as Invoice] }, { from: "2026-09-01", to: "2026-09-30" }, () => "Acme")
+    const [d] = filesInPeriod({ expenses: [], invoices: [{ id: "n", number: "NC 2/2026", yearMonth: "2026-09", amount: -50, files: [] } as unknown as Invoice] }, { from: "2026-09-01", to: "2026-09-30" }, () => "Acme")
     expect(zipName(d)).toBe("2026-09 Credit note NC 2-2026 (Acme)")
   })
 })
@@ -104,5 +104,32 @@ describe("checkInvoiceFile", () => {
 
   it("formats a size in KB under a megabyte and MB above", () => {
     expect([formatFileSize(14 * 1024), formatFileSize(10), formatFileSize(3 * 1024 * 1024)]).toEqual(["14 KB", "1 KB", "3 MB"])
+  })
+})
+
+describe("fileIdOf", () => {
+  it.each([
+    ["users/u/company-files/h8Ys1DfK4uZo6EqJ2rVa.xml.p7m", "h8Ys1DfK4uZo6EqJ2rVa"],
+    ["users/u/company-files/h8Ys1DfK4uZo6EqJ2rVa.xml", "h8Ys1DfK4uZo6EqJ2rVa"],
+    ["users/u/company-files/h8Ys1DfK4uZo6EqJ2rVa.pdf", "h8Ys1DfK4uZo6EqJ2rVa"],
+    ["users/u/company-files/mock-12", "mock-12"],
+  ])("%s is %s", (path, id) => expect(fileIdOf(path)).toBe(id))
+})
+
+describe("storedFiles", () => {
+  it("puts the legacy file first, then the list as stored, and reads neither as nothing", () => {
+    expect(storedFiles(["b", "c"], "a")).toEqual(["a", "b", "c"])
+    expect(storedFiles(undefined, null)).toEqual([])
+    expect(storedFiles(null, "a")).toEqual(["a"])
+    expect(storedFiles("not a list", undefined)).toEqual([])
+  })
+})
+
+describe("filesInPeriod carries every file", () => {
+  it("passes the row's list through to the document", () => {
+    const f = (n: string) => ({ path: `p/${n}`, name: n, kind: "xml" as const, size: 1, uploadedAt: new Date() })
+    const exp = { id: "x", description: "Hosting", amount: 10, date: new Date(2026, 8, 2), isRecurring: false, documentRef: null, files: [f("a.xml"), f("b.xml")] } as unknown as CompanyExpense
+    const [doc] = filesInPeriod({ expenses: [exp], invoices: [] }, { from: "2026-09-01", to: "2026-09-30" }, () => "Acme")
+    expect(doc.files.map((x) => x.name)).toEqual(["a.xml", "b.xml"])
   })
 })

@@ -24,7 +24,7 @@ const MAIN: CompanyAccount = {
 const cost = (o: Partial<CompanyExpense> & Pick<CompanyExpense, "id" | "description" | "amount">): CompanyExpense => ({
   userId: "u1", category: "other", date: d("2026-10-05"), isRecurring: false, recurrenceMonths: null, notes: null,
   accountId: null, paidByOwner: false, vat: 0, documentRef: null, project: null, recurringExpenseId: null,
-  dateEstimated: false, importRef: null, collaboratorId: null, engagementId: null, forMonth: null, createdAt: at, updatedAt: at, ...o,
+  dateEstimated: false, importRef: null, collaboratorId: null, engagementId: null, forMonth: null, files: [], createdAt: at, updatedAt: at, ...o,
 })
 const GOOGLE = cost({ id: "google", description: "Google Workspace", category: "software", amount: 12, vat: null, isRecurring: true, recurrenceMonths: 1, date: d("2026-01-01") })
 const PAID = cost({ id: "oct", description: "Google, October", category: "software", amount: 12, vat: 2.64, accountId: "main", recurringExpenseId: "google" })
@@ -58,7 +58,12 @@ const DATA: Record<string, unknown> = {}
 const createCompanyExpense = vi.fn()
 const createCompanyLoan = vi.fn()
 const updateCompanyExpense = vi.fn()
-const WRITES: Record<string, unknown> = { createCompanyExpense, createCompanyLoan, updateCompanyExpense }
+// The row's files change as the row is: the change function runs on the files of the stored row.
+const changeFiles = vi.fn(async (_u: string, _target: string, id: string, change: (f: unknown[]) => unknown[]) => {
+  const before = ((DATA.getCompanyExpenses as { id: string; files: unknown[] }[]).find((e) => e.id === id)?.files ?? []) as unknown[]
+  return { before, after: change(before) }
+})
+const WRITES: Record<string, unknown> = { createCompanyExpense, createCompanyLoan, updateCompanyExpense, changeFiles }
 const upload = vi.fn()
 const removeFile = vi.fn()
 const download = vi.fn()
@@ -90,6 +95,7 @@ beforeEach(() => {
   createCompanyExpense.mockReset().mockResolvedValue({ id: "new" })
   createCompanyLoan.mockReset().mockResolvedValue({ id: "new" })
   updateCompanyExpense.mockReset().mockResolvedValue({ id: "edited" })
+  changeFiles.mockClear()
   upload.mockReset()
   removeFile.mockReset().mockResolvedValue(undefined)
   download.mockReset()
@@ -675,7 +681,7 @@ describe("CompanyExpensesShell", () => {
 
     it("sits under Document, empty, saying what it takes", async () => {
       const dialog = await newCost()
-      const slot = within(dialog).getByRole("group", { name: "Invoice File" })
+      const slot = within(dialog).getByRole("group", { name: "Invoice Files" })
       expect(within(slot).getByRole("button", { name: "Choose File" })).toBeInTheDocument()
       expect(slot).toHaveTextContent("XML, signed XML (.p7m) or PDF · up to 10 MB")
       const document = within(dialog).getByLabelText("Document (optional)")
@@ -691,7 +697,7 @@ describe("CompanyExpensesShell", () => {
       expect(within(dialog).getByText("FatturaPA XML · 1 KB · saved with the cost")).toBeInTheDocument()
       expect(upload).not.toHaveBeenCalled()
       fireEvent.click(within(dialog).getByRole("button", { name: "Add Cost" }))
-      await waitFor(() => expect(createCompanyExpense).toHaveBeenCalledWith("u1", expect.objectContaining({ description: "Accountant, October", file: pointer })))
+      await waitFor(() => expect(createCompanyExpense).toHaveBeenCalledWith("u1", expect.objectContaining({ description: "Accountant, October", files: [pointer] })))
       expect(upload).toHaveBeenCalledWith("u1", expect.any(File), "IT01_00001.xml")
       expect(removeFile).not.toHaveBeenCalled()
     })
@@ -708,11 +714,11 @@ describe("CompanyExpensesShell", () => {
     it("takes a picked file back with Remove, and saves with no file", async () => {
       const dialog = await newCost()
       choose(dialog, xml())
-      fireEvent.click(within(dialog).getByRole("button", { name: "Remove" }))
+      fireEvent.click(within(dialog).getByRole("button", { name: "Remove IT01_00001.xml" }))
       expect(within(dialog).getByRole("button", { name: "Choose File" })).toBeInTheDocument()
       fireEvent.click(within(dialog).getByRole("button", { name: "Add Cost" }))
       await waitFor(() => expect(createCompanyExpense).toHaveBeenCalled())
-      expect(createCompanyExpense.mock.calls[0][1]).not.toHaveProperty("file")
+      expect(createCompanyExpense.mock.calls[0][1]).not.toHaveProperty("files")
       expect(upload).not.toHaveBeenCalled()
     })
 
@@ -756,49 +762,82 @@ describe("CompanyExpensesShell", () => {
 
     describe("on a cost that keeps one", () => {
       const KEPT = stored("IT09876543210_00014.xml.p7m", "users/u1/company-files/kept.xml.p7m")
+      const SECOND = stored("IT09876543210_00015.xml", "users/u1/company-files/second.xml")
       async function edit() {
-        DATA.getCompanyExpenses = [{ ...FRIDGE, file: { ...KEPT, kind: "p7m" as const } }]
+        DATA.getCompanyExpenses = [{ ...FRIDGE, files: [{ ...KEPT, kind: "p7m" as const }, SECOND] }]
         await show()
         fireEvent.click(screen.getAllByRole("button", { name: "Edit Fridge" })[0])
         return screen.findByRole("dialog", { name: "Edit Cost" })
       }
 
-      it("shows its name, kind, size and date with Download and no View for an XML", async () => {
+      it("shows each file's name, kind, size and date with its own Download, and no button View for an XML", async () => {
         const dialog = await edit()
-        const slot = within(dialog).getByRole("group", { name: "Invoice File" })
+        const slot = within(dialog).getByRole("group", { name: "Invoice Files" })
         expect(within(slot).getByText("IT09876543210_00014.xml.p7m")).toBeInTheDocument()
         expect(within(slot).getByText("Signed FatturaPA XML · 14 KB · added 1 Oct")).toBeInTheDocument()
-        expect(within(slot).getByRole("button", { name: "Download file" })).toBeInTheDocument()
-        expect(within(slot).queryByRole("button", { name: "View" })).not.toBeInTheDocument()
+        expect(within(slot).getByText("IT09876543210_00015.xml")).toBeInTheDocument()
+        expect(within(slot).getByRole("button", { name: "Download IT09876543210_00014.xml.p7m" })).toBeInTheDocument()
+        expect(within(slot).getByRole("button", { name: "Download IT09876543210_00015.xml" })).toBeInTheDocument()
+        expect(within(slot).queryByRole("button", { name: /^View/ })).not.toBeInTheDocument()
       })
 
-      it("replaces it on Save: uploads the new one, writes it, then deletes the old object", async () => {
+      it("replaces one on Save: uploads the new one, changes the row's files, then deletes the old object, keeping the other file", async () => {
         const next = stored("new.xml")
         upload.mockResolvedValue(next)
         const dialog = await edit()
-        fireEvent.keyDown(within(dialog).getByRole("button", { name: "More file actions" }), { key: "Enter" })
+        fireEvent.keyDown(within(dialog).getByRole("button", { name: "More actions for IT09876543210_00014.xml.p7m" }), { key: "Enter" })
         fireEvent.click(await screen.findByRole("menuitem", { name: "Replace File…" }))
         choose(dialog, xml())
         expect(removeFile).not.toHaveBeenCalled()
         fireEvent.click(within(dialog).getByRole("button", { name: "Save Changes" }))
-        await waitFor(() => expect(updateCompanyExpense).toHaveBeenCalledWith("u1", "fridge", expect.objectContaining({ file: next })))
+        await waitFor(() => expect(changeFiles).toHaveBeenCalledWith("u1", "cost", "fridge", expect.any(Function)))
+        expect((await changeFiles.mock.results[0].value).after).toEqual([SECOND, next])
         await waitFor(() => expect(removeFile).toHaveBeenCalledWith(KEPT.path))
         expect(removeFile).toHaveBeenCalledTimes(1)
+        // The fields go through the update without any files in it: the row's files changed on their own.
+        expect(updateCompanyExpense.mock.calls[0][2]).not.toHaveProperty("files")
       })
 
-      it("removes it on Save, not before, and Undo keeps it", async () => {
+      it("cancelling the chooser of Replace File… changes nothing on Save", async () => {
         const dialog = await edit()
-        fireEvent.keyDown(within(dialog).getByRole("button", { name: "More file actions" }), { key: "Enter" })
+        fireEvent.keyDown(within(dialog).getByRole("button", { name: "More actions for IT09876543210_00014.xml.p7m" }), { key: "Enter" })
+        fireEvent.click(await screen.findByRole("menuitem", { name: "Replace File…" }))
+        expect(within(dialog).queryByText(/is removed when you save/)).not.toBeInTheDocument()
+        fireEvent.change(within(dialog).getByLabelText("Description"), { target: { value: "Fridge, grey" } })
+        fireEvent.click(within(dialog).getByRole("button", { name: "Save Changes" }))
+        await waitFor(() => expect(updateCompanyExpense).toHaveBeenCalled())
+        expect(changeFiles).not.toHaveBeenCalled()
+        expect(removeFile).not.toHaveBeenCalled()
+      })
+
+      it("a save with two new files writes both, after the ones it keeps", async () => {
+        const [n1, n2] = [stored("n1.xml"), stored("n2.xml")]
+        upload.mockResolvedValueOnce(n1).mockResolvedValueOnce(n2)
+        const dialog = await edit()
+        choose(dialog, new File(["<a/>"], "n1.xml"))
+        choose(dialog, new File(["<b/>"], "n2.xml"))
+        fireEvent.click(within(dialog).getByRole("button", { name: "Save Changes" }))
+        await waitFor(() => expect(changeFiles).toHaveBeenCalledTimes(1))
+        expect((await changeFiles.mock.results[0].value).after.map((f: { name: string }) => f.name)).toEqual([KEPT.name, SECOND.name, "n1.xml", "n2.xml"])
+        expect(removeFile).not.toHaveBeenCalled()
+      })
+
+      it("removes one on Save, not before, and Undo keeps it; the other file stays", async () => {
+        const dialog = await edit()
+        const menu = "More actions for IT09876543210_00014.xml.p7m"
+        fireEvent.keyDown(within(dialog).getByRole("button", { name: menu }), { key: "Enter" })
         fireEvent.click(await screen.findByRole("menuitem", { name: "Remove File" }))
         expect(within(dialog).getByText("IT09876543210_00014.xml.p7m is removed when you save.")).toBeInTheDocument()
         expect(removeFile).not.toHaveBeenCalled()
         fireEvent.click(within(dialog).getByRole("button", { name: "Undo" }))
-        expect(within(dialog).getByRole("button", { name: "Download file" })).toBeInTheDocument()
-        fireEvent.keyDown(within(dialog).getByRole("button", { name: "More file actions" }), { key: "Enter" })
+        expect(within(dialog).getByRole("button", { name: "Download IT09876543210_00014.xml.p7m" })).toBeInTheDocument()
+        fireEvent.keyDown(within(dialog).getByRole("button", { name: menu }), { key: "Enter" })
         fireEvent.click(await screen.findByRole("menuitem", { name: "Remove File" }))
         fireEvent.click(within(dialog).getByRole("button", { name: "Save Changes" }))
-        await waitFor(() => expect(updateCompanyExpense).toHaveBeenCalledWith("u1", "fridge", expect.objectContaining({ file: null })))
+        await waitFor(() => expect(changeFiles).toHaveBeenCalledTimes(1))
+        expect((await changeFiles.mock.results[0].value).after).toEqual([SECOND])
         await waitFor(() => expect(removeFile).toHaveBeenCalledWith(KEPT.path))
+        expect(removeFile).toHaveBeenCalledTimes(1)
       })
 
       it("leaves the file alone on a save that does not touch it", async () => {
@@ -806,12 +845,13 @@ describe("CompanyExpensesShell", () => {
         fireEvent.change(within(dialog).getByLabelText("Description"), { target: { value: "Fridge, grey" } })
         fireEvent.click(within(dialog).getByRole("button", { name: "Save Changes" }))
         await waitFor(() => expect(updateCompanyExpense).toHaveBeenCalled())
-        expect(updateCompanyExpense.mock.calls[0][2]).not.toHaveProperty("file")
+        expect(updateCompanyExpense.mock.calls[0][2]).not.toHaveProperty("files")
+        expect(changeFiles).not.toHaveBeenCalled()
         expect(removeFile).not.toHaveBeenCalled()
       })
 
       it("keeps a PDF viewable: View opens it in a new tab", async () => {
-        DATA.getCompanyExpenses = [{ ...FRIDGE, file: { ...stored("EU-1.pdf"), kind: "pdf" as const } }]
+        DATA.getCompanyExpenses = [{ ...FRIDGE, files: [{ ...stored("EU-1.pdf"), kind: "pdf" as const }] }]
         download.mockResolvedValue(new Blob(["%PDF"], { type: "application/pdf" }))
         const tab = { location: { href: "" }, opener: {}, close: vi.fn() }
         const open = vi.spyOn(window, "open").mockReturnValue(tab as unknown as Window)
@@ -819,23 +859,38 @@ describe("CompanyExpensesShell", () => {
         await show()
         fireEvent.click(screen.getAllByRole("button", { name: "Edit Fridge" })[0])
         const dialog = await screen.findByRole("dialog", { name: "Edit Cost" })
-        fireEvent.click(within(dialog).getByRole("button", { name: "View" }))
+        fireEvent.click(within(dialog).getByRole("button", { name: "View EU-1.pdf" }))
         expect(open).toHaveBeenCalledWith("about:blank", "_blank")
         await waitFor(() => expect(tab.location.href).toBe("blob:pdf"))
         open.mockRestore()
       })
     })
 
-    it("switching a cost with a file to a Recurring Estimate removes the file on Save: an estimate is no document", async () => {
-      DATA.getCompanyExpenses = [cost({ id: "host", description: "Hosting", amount: 50, file: { ...KEPT_FILE } })]
+    it("switching a cost with files to a Recurring Estimate says how many go, and removes every one on Save: an estimate is no document", async () => {
+      const second = { ...stored("second-host.xml"), kind: "xml" as const }
+      DATA.getCompanyExpenses = [cost({ id: "host", description: "Hosting", amount: 50, files: [{ ...KEPT_FILE }, second] })]
+      await show()
+      fireEvent.click(screen.getAllByRole("button", { name: "Edit Hosting" })[0])
+      const dialog = await screen.findByRole("dialog", { name: "Edit Cost" })
+      expect(within(dialog).queryByText(/removed when you save/)).not.toBeInTheDocument()
+      fireEvent.click(within(dialog).getByRole("switch"))
+      expect(within(dialog).queryByRole("group", { name: "Invoice Files" })).not.toBeInTheDocument()
+      expect(within(dialog).getByText("Its 2 invoice files are removed when you save.")).toBeInTheDocument()
+      fireEvent.click(within(dialog).getByRole("button", { name: "Save Changes" }))
+      await waitFor(() => expect(updateCompanyExpense).toHaveBeenCalledWith("u1", "host", expect.objectContaining({ isRecurring: true })))
+      await waitFor(() => expect(changeFiles).toHaveBeenCalledTimes(1))
+      expect((await changeFiles.mock.results[0].value).after).toEqual([])
+      await waitFor(() => expect(removeFile).toHaveBeenCalledTimes(2))
+      expect(removeFile.mock.calls.map((c) => c[0]).sort()).toEqual([KEPT_FILE.path, second.path].sort())
+    })
+
+    it("says nothing under the Recurring Estimate switch for a cost with no file", async () => {
+      DATA.getCompanyExpenses = [cost({ id: "host", description: "Hosting", amount: 50 })]
       await show()
       fireEvent.click(screen.getAllByRole("button", { name: "Edit Hosting" })[0])
       const dialog = await screen.findByRole("dialog", { name: "Edit Cost" })
       fireEvent.click(within(dialog).getByRole("switch"))
-      expect(within(dialog).queryByRole("group", { name: "Invoice File" })).not.toBeInTheDocument()
-      fireEvent.click(within(dialog).getByRole("button", { name: "Save Changes" }))
-      await waitFor(() => expect(updateCompanyExpense).toHaveBeenCalledWith("u1", "host", expect.objectContaining({ isRecurring: true, file: null })))
-      await waitFor(() => expect(removeFile).toHaveBeenCalledWith(KEPT_FILE.path))
+      expect(within(dialog).queryByText(/removed when you save/)).not.toBeInTheDocument()
     })
   })
 })

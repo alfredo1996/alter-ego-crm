@@ -20,7 +20,7 @@ import { readCapacityDoc } from "@/lib/capacity"
 import { BILL_HAS_PAYMENTS, leavesSupplierDocument } from "@/lib/cash-book"
 import { normalizeAmendments } from "@/lib/engagements"
 import { getAdminBucket, getAdminFirestore } from "@/lib/firebase-admin-client"
-import { checkInvoiceFile, INVOICE_FILE_CONTENT_TYPE, INVOICE_FILE_EXTENSION } from "@/lib/invoice-files"
+import { checkInvoiceFile, INVOICE_FILE_CONTENT_TYPE, INVOICE_FILE_EXTENSION, storedFiles } from "@/lib/invoice-files"
 import { normalizeLabels } from "@/lib/tasks"
 import {
   createCompanyAccountSchema,
@@ -32,6 +32,7 @@ import {
   normalizeCollaboratorFee,
   normalizePriceChanges,
   normalizeMonthDays,
+  invoiceFilesSchema,
   journalFields,
   normalizeJournalEntry,
   normalizeSolutionDomain,
@@ -528,22 +529,31 @@ function mapFile(f: unknown): InvoiceFile | null {
   return { path: d.path as string, name: d.name as string, kind: d.kind as InvoiceFile["kind"], size: Number(d.size), uploadedAt: toDate(d.uploadedAt) }
 }
 
+function fileDoc(f: InvoiceFile): Record<string, unknown> {
+  return { path: f.path, name: f.name, kind: f.kind, size: f.size, uploadedAt: Timestamp.fromDate(f.uploadedAt) }
+}
+
+/** A row's files: the old single `file` first, then `files` (see storedFiles). */
+function mapFiles(d: DocumentData): InvoiceFile[] {
+  return storedFiles(d.files, d.file).map(mapFile).filter((f): f is InvoiceFile => f !== null)
+}
+
 /**
- * After a cost or an invoice is deleted: its object goes too, so Storage keeps no file nothing names.
+ * After a cost or an invoice is deleted: its objects go too, so Storage keeps no file nothing names.
  * The Admin SDK skips storage.rules, so only the user's own folder is touched, whatever a record names.
  * A failure leaves one unreferenced object, never a rejected delete of a record that is already gone.
  */
-async function removeObjectOf(userId: string, file: unknown): Promise<void> {
-  const f = mapFile(file)
-  if (!f) return
-  if (!f.path.startsWith(`users/${userId}/company-files/`)) {
-    console.error(`Not deleting ${f.path}: outside the company-files folder of ${userId}`)
-    return
-  }
-  try {
-    await getAdminBucket()?.file(f.path).delete({ ignoreNotFound: true })
-  } catch (err) {
-    console.error(`Could not delete ${f.path}; it stays unreferenced`, err)
+async function removeObjectsOf(userId: string, data: DocumentData | undefined): Promise<void> {
+  for (const f of mapFiles(data ?? {})) {
+    if (!f.path.startsWith(`users/${userId}/company-files/`)) {
+      console.error(`Not deleting ${f.path}: outside the company-files folder of ${userId}`)
+      continue
+    }
+    try {
+      await getAdminBucket()?.file(f.path).delete({ ignoreNotFound: true })
+    } catch (err) {
+      console.error(`Could not delete ${f.path}; it stays unreferenced`, err)
+    }
   }
 }
 
@@ -596,7 +606,7 @@ function mapInvoice(d: DocumentData & { id: string }): Invoice {
     paidDate: d.paidDate != null ? toDate(d.paidDate) : null,
     // Absent on documents written before the cash book.
     paidAccountId: (d.paidAccountId as string | null | undefined) ?? null,
-    file: mapFile(d.file),
+    files: mapFiles(d),
     createdAt: toDate(d.createdAt),
     updatedAt: toDate(d.updatedAt),
   }
@@ -619,6 +629,7 @@ export async function createInvoice(userId: string, input: CreateInvoiceInput): 
     dueDate: input.dueDate ? Timestamp.fromDate(input.dueDate) : null,
     paidDate: input.paidDate ? Timestamp.fromDate(input.paidDate) : null,
     paidAccountId: input.paidAccountId ?? null,
+    files: (input.files ?? []).map(fileDoc),
     file: null,
     createdAt: now(),
     updatedAt: now(),
@@ -645,7 +656,7 @@ export async function updateInvoice(
   if (input.paidDate !== undefined)
     updates.paidDate = input.paidDate ? Timestamp.fromDate(input.paidDate) : null
   if (input.paidAccountId !== undefined) updates.paidAccountId = input.paidAccountId
-  if (input.file !== undefined) updates.file = input.file
+  if (input.files !== undefined) Object.assign(updates, { files: input.files.map(fileDoc), file: null })
   await ref.update(updates)
   return mapInvoice(withId(await ref.get()))
 }
@@ -653,9 +664,9 @@ export async function updateInvoice(
 /** The document alone, as the web's Delete: a bank fee booked with its payment stays on Costs. */
 export async function deleteInvoice(userId: string, id: string): Promise<void> {
   const ref = userDoc(userId, "invoices", id)
-  const file = (await ref.get()).data()?.file
+  const gone = (await ref.get()).data()
   await ref.delete()
-  await removeObjectOf(userId, file)
+  await removeObjectsOf(userId, gone)
 }
 
 // ─── Cash book: company accounts, movements, costs and loans ─────────────────
@@ -733,7 +744,7 @@ function mapCompanyExpense(d: DocumentData & { id: string }): CompanyExpense {
     endMonth: optional<string>(d.endMonth),
     priceChanges: normalizePriceChanges(d.priceChanges),
     countedWhenPaid: d.countedWhenPaid === true,
-    file: mapFile(d.file),
+    files: mapFiles(d),
     createdAt: toDate(d.createdAt),
     updatedAt: toDate(d.updatedAt),
   }
@@ -781,7 +792,9 @@ async function updateMerged<T>(
     const set = Object.fromEntries(Object.entries(input).filter(([, v]) => v !== undefined))
     schema.parse({ ...map(withId(snap)), ...set })
     const stamp = (v: unknown) => (v instanceof Date ? Timestamp.fromDate(v) : v)
-    t.update(ref, { ...Object.fromEntries(Object.entries(set).map(([k, v]) => [k, stamp(v)])), updatedAt: now() })
+    // A write of `files` stores them as pointers and clears the old single `file`, so it is not read twice.
+    const files = Array.isArray(set.files) ? { files: (set.files as InvoiceFile[]).map(fileDoc), file: null } : {}
+    t.update(ref, { ...Object.fromEntries(Object.entries(set).map(([k, v]) => [k, stamp(v)])), ...files, updatedAt: now() })
   })
   return map(withId(await ref.get()))
 }
@@ -870,7 +883,8 @@ function expenseDoc(userId: string, input: CreateCompanyExpenseInput) {
     endMonth: v.endMonth ?? null,
     priceChanges: v.priceChanges ?? [],
     countedWhenPaid: v.countedWhenPaid ?? false,
-    file: v.file ?? null,
+    files: (v.files ?? []).map(fileDoc),
+    file: null,
     createdAt: now(),
     updatedAt: now(),
   }
@@ -902,15 +916,35 @@ export async function updateCompanyExpense(
   )
 }
 
+/** See CrmAdapter.changeFiles: one transaction, the files as they are now. The Admin SDK skips the rules, so the list is parsed here. */
+export async function changeFiles(
+  userId: string,
+  target: "cost" | "invoice",
+  id: string,
+  change: (files: InvoiceFile[]) => InvoiceFile[],
+): Promise<{ before: InvoiceFile[]; after: InvoiceFile[] }> {
+  const ref = userDoc(userId, target === "cost" ? "company_expenses" : "invoices", id)
+  return getAdminFirestore().runTransaction(async (t) => {
+    const snap = await t.get(ref)
+    if (!snap.exists) throw new Error(target === "cost" ? "Company expense not found" : `Invoice ${id} not found`)
+    const before = mapFiles(snap.data() ?? {})
+    const after = invoiceFilesSchema.parse(change(before))
+    // A cost is parsed whole, as updateMerged does: a legacy cost the schema no longer accepts answers with the schema's words.
+    if (target === "cost") createCompanyExpenseSchema.parse({ ...mapCompanyExpense(withId(snap)), files: after })
+    t.update(ref, { files: after.map(fileDoc), file: null, updatedAt: now() })
+    return { before, after }
+  })
+}
+
 export async function deleteCompanyExpense(userId: string, id: string): Promise<void> {
-  let file: unknown
+  let gone: DocumentData | undefined
   await getAdminFirestore().runTransaction(async (t) => {
     await refusePaidBill(t, userId, id)
     const ref = userDoc(userId, "company_expenses", id)
-    file = (await t.get(ref)).data()?.file
+    gone = (await t.get(ref)).data()
     t.delete(ref)
   })
-  await removeObjectOf(userId, file)
+  await removeObjectsOf(userId, gone)
 }
 
 export async function getCompanyLoans(userId: string): Promise<CompanyLoan[]> {

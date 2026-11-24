@@ -10,9 +10,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { PUT } from "@/app/api/uploads/[token]/route"
 import { __resetMockState } from "@/lib/backend/mock"
 import { getServerDb, getServerFiles } from "@/lib/backend/server-db"
+import { fileIdOf } from "@/lib/invoice-files"
 import { WRITE_TOOLS, registerCrmWriteTools } from "@/lib/mcp/tools/crm-write"
 import { downloadPublicFile } from "@/lib/safe-download"
 import { type z } from "@/lib/zod"
+import { INVOICE_FILES_MAX } from "@/types/schemas"
 
 import type { McpServer } from "@modelcontextprotocol/server"
 
@@ -49,9 +51,10 @@ async function put(uploadUrl: string, body: string | Uint8Array) {
 }
 
 async function newCost(userId = USER, file?: Awaited<ReturnType<ReturnType<typeof getServerFiles>["upload"]>>) {
-  return getServerDb().createCompanyExpense(userId, { description: "Office Chair", category: "other", amount: 100, date: new Date(), ...(file && { file }) })
+  return getServerDb().createCompanyExpense(userId, { description: "Office Chair", category: "other", amount: 100, date: new Date(), ...(file && { files: [file] }) })
 }
-const rowFile = async (id: string, userId = USER) => (await getServerDb().getCompanyExpenses(userId)).find((e) => e.id === id)?.file ?? null
+const rowFiles = async (id: string, userId = USER) => (await getServerDb().getCompanyExpenses(userId)).find((e) => e.id === id)?.files ?? []
+const rowFile = async (id: string, userId = USER) => (await rowFiles(id, userId))[0] ?? null
 
 beforeEach(() => {
   __resetMockState()
@@ -125,12 +128,25 @@ describe("create_upload_url", () => {
     expect(body.error).toMatch(/recurring estimate/)
   })
 
-  it("refuses a row that has a file unless replace: true", async () => {
+  it("makes a link for a row that has a file, and with replace: true too", async () => {
     const cost = await newCost(USER, await getServerFiles().upload(USER, new Blob(["<old/>"]), "old.xml"))
-    const refused = await call("create_upload_url", { target: "cost", id: cost.id, name: "new.xml" })
-    expect(refused.isError).toBe(true)
-    expect(refused.body.error).toContain("already has a file: old.xml")
+    expect((await call("create_upload_url", { target: "cost", id: cost.id, name: "new.xml" })).isError).toBe(false)
     expect((await call("create_upload_url", { target: "cost", id: cost.id, name: "new.xml", replace: true })).isError).toBe(false)
+  })
+
+  it("refuses a link for a full row, and replace: true on a row of several, naming each fileId", async () => {
+    const stored = await Promise.all(Array.from({ length: INVOICE_FILES_MAX }, (_, n) => getServerFiles().upload(USER, new Blob([`<${n}/>`]), `f${n}.xml`)))
+    const cost = await getServerDb().createCompanyExpense(USER, { description: "Office Chair", category: "other", amount: 100, date: new Date(), files: stored })
+    const full = await call("create_upload_url", { target: "cost", id: cost.id, name: "one-more.xml" })
+    expect(full.isError).toBe(true)
+    expect(full.body.error).toBe(`The cost "Office Chair" already holds ${INVOICE_FILES_MAX} files, the most a cost can hold. Remove one with remove_file first.`)
+    const replace = await call("create_upload_url", { target: "cost", id: cost.id, name: "r.xml", replace: true })
+    expect(replace.isError).toBe(true)
+    expect(replace.body.error).toBe(
+      `replace: true swaps the only file of a row, and the cost "Office Chair" holds ${INVOICE_FILES_MAX}: ${stored.map((f) => `${f.name} (fileId ${fileIdOf(f.path)})`).join(", ")}. ` +
+        "To change one of them, remove it with remove_file and its fileId, then attach the new one.",
+    )
+    expect(await getServerDb().listUploads(USER)).toEqual([])
   })
 
   it("deletes this user's expired, uncompleted uploads and their objects, and nobody else's", async () => {
@@ -199,9 +215,9 @@ describe("complete_upload", () => {
     expect(await rowFile(cost.id)).toBeNull() // the row changes only at complete_upload
     const { isError, body } = await call("complete_upload", { uploadId: link.uploadId })
     expect(isError).toBe(false)
-    expect(body.file).toEqual({ name: "IT01_0002.xml", kind: "xml", size: xml.length, sha256: sha(xml) })
-    expect(body.summary).toContain("Attached IT01_0002.xml")
     const file = (await rowFile(cost.id))!
+    expect(body.file).toEqual({ fileId: fileIdOf(file.path), name: "IT01_0002.xml", kind: "xml", size: xml.length, sha256: sha(xml) })
+    expect(body.summary).toContain("Attached IT01_0002.xml")
     expect(await (await getServerFiles().download(file)).text()).toBe(xml)
   })
 
@@ -253,16 +269,49 @@ describe("complete_upload", () => {
     expect(body.error).toMatch(/No upload with id/)
   })
 
-  it("refuses when the row gained a file meanwhile, without replace, and drops the object", async () => {
+  it("adds to a row that gained a file meanwhile, keeping both", async () => {
     const { cost, link } = await arrived("<new/>")
-    const stored = (await getServerDb().getUpload(link.uploadId))!.file!
     const other = await getServerFiles().upload(USER, new Blob(["<other/>"]), "other.xml")
-    await getServerDb().updateCompanyExpense(USER, cost.id, { file: other })
+    await getServerDb().updateCompanyExpense(USER, cost.id, { files: [other] })
     const { isError, body } = await call("complete_upload", { uploadId: link.uploadId })
-    expect(isError).toBe(true)
-    expect(body.error).toContain("already has a file: other.xml")
-    expect(await rowFile(cost.id)).toEqual(other)
+    expect(isError).toBe(false)
+    expect(body.summary).toContain("; it now holds 2 files.")
+    expect((await rowFiles(cost.id)).map((f) => f.name)).toEqual(["other.xml", "IT01_0002.xml"])
+  })
+
+  it("three parallel completions for one row all land", async () => {
+    const cost = await newCost()
+    const links = await Promise.all(["a", "b", "c"].map(async (n) => (await call("create_upload_url", { target: "cost", id: cost.id, name: `${n}.xml` })).body))
+    for (const [n, l] of links.entries()) expect((await put(l.uploadUrl, `<${n}/>`)).status).toBe(201)
+    const done = await Promise.all(links.map((l) => call("complete_upload", { uploadId: l.uploadId })))
+    expect(done.map((d) => d.isError)).toEqual([false, false, false])
+    expect((await rowFiles(cost.id)).map((f) => f.name).sort()).toEqual(["a.xml", "b.xml", "c.xml"])
+  })
+
+  it("refuses a duplicate, a full row and a replace of several at completion, dropping the object and leaving the row", async () => {
+    const dup = await arrived("<a/>")
+    const first = await getServerFiles().upload(USER, new Blob(["<x/>"]), "IT01_0002.xml") // same name and size as the one that arrived
+    await getServerDb().updateCompanyExpense(USER, dup.cost.id, { files: [first] })
+    const stored = (await getServerDb().getUpload(dup.link.uploadId))!.file!
+    const refused = await call("complete_upload", { uploadId: dup.link.uploadId })
+    expect(refused.body.error).toBe('The cost "Office Chair" already holds IT01_0002.xml (FatturaPA XML, 1 KB). Nothing was attached and the upload was discarded.')
     await expect(getServerFiles().download(stored)).rejects.toThrow()
+    expect(await rowFiles(dup.cost.id)).toEqual([first])
+
+    const full = await arrived("<f/>")
+    const held = await Promise.all(Array.from({ length: INVOICE_FILES_MAX }, (_, n) => getServerFiles().upload(USER, new Blob([`<${n}-held/>`]), `h${n}.xml`)))
+    await getServerDb().updateCompanyExpense(USER, full.cost.id, { files: held })
+    expect((await call("complete_upload", { uploadId: full.link.uploadId })).body.error).toBe(
+      `The cost "Office Chair" already holds ${INVOICE_FILES_MAX} files, the most a cost can hold. Nothing was attached and the upload was discarded; remove one with remove_file first.`,
+    )
+    expect(await rowFiles(full.cost.id)).toEqual(held)
+
+    const swap = await arrived("<s/>", {}, { replace: true })
+    await getServerDb().updateCompanyExpense(USER, swap.cost.id, { files: held.slice(0, 2) })
+    expect((await call("complete_upload", { uploadId: swap.link.uploadId })).body.error).toBe(
+      'The cost "Office Chair" now holds 2 files, so replace: true cannot pick one. Nothing was attached and the upload was discarded; remove the wrong file with remove_file, then start again without replace.',
+    )
+    expect(await rowFiles(swap.cost.id)).toEqual(held.slice(0, 2))
   })
 
   it("with replace: true the old object goes only after the row points at the new one", async () => {
@@ -281,7 +330,7 @@ describe("complete_upload", () => {
 })
 
 describe("complete_upload and attach_file keep the old file when the row cannot be pointed at the new one", () => {
-  const breakRow = () => vi.spyOn(getServerDb(), "updateCompanyExpense").mockRejectedValueOnce(new Error("row write failed"))
+  const breakRow = () => vi.spyOn(getServerDb(), "changeFiles").mockRejectedValueOnce(new Error("row write failed"))
 
   it("complete_upload with replace: the old object still downloads, the row still names it, the new one is dropped", async () => {
     const old = await getServerFiles().upload(USER, new Blob(["<old/>"]), "old.xml")
@@ -329,7 +378,7 @@ describe("attach_file", () => {
     const cost = await newCost()
     const { isError, body } = await call("attach_file", { target: "cost", id: cost.id, name: "a.xml", content_base64: b64("<a/>") })
     expect(isError).toBe(false)
-    expect(body.file).toEqual({ name: "a.xml", kind: "xml", size: 4, sha256: sha("<a/>") })
+    expect(body.file).toEqual({ fileId: fileIdOf((await rowFile(cost.id))!.path), name: "a.xml", kind: "xml", size: 4, sha256: sha("<a/>") })
     expect(body.summary).toContain("Attached a.xml")
   })
 
@@ -350,7 +399,7 @@ describe("attach_file", () => {
     const { isError, body } = await call("attach_file", { target: "cost", id: cost.id, name: "a.xml", url: "https://files.example.com/a.xml?sig=secret" })
     expect(isError).toBe(false)
     expect(downloadPublicFile).toHaveBeenCalledWith("https://files.example.com/a.xml?sig=secret")
-    expect(body.file).toEqual({ name: "a.xml", kind: "xml", size: 11, sha256: sha("<from-url/>") })
+    expect(body.file).toMatchObject({ name: "a.xml", kind: "xml", size: 11, sha256: sha("<from-url/>") })
     expect(await (await getServerFiles().download((await rowFile(cost.id))!)).text()).toBe("<from-url/>")
   })
 
@@ -372,16 +421,17 @@ describe("attach_file", () => {
     audit.mockRestore()
   })
 
-  it("refuses an over-10 MB download and a row that has a file, leaving the row alone", async () => {
+  it("refuses an over-10 MB download and a full row, leaving the row alone", async () => {
     const cost = await newCost()
     vi.mocked(downloadPublicFile).mockResolvedValue(Buffer.alloc(10 * MB + 1))
     const big = await call("attach_file", { target: "cost", id: cost.id, name: "a.pdf", url: "https://files.example.com/a.pdf" })
     expect(big.body.error).toMatch(/over the 10 MB limit/)
 
-    const has = await newCost(USER, await getServerFiles().upload(USER, new Blob(["<old/>"]), "old.xml"))
+    const held = await Promise.all(Array.from({ length: INVOICE_FILES_MAX }, (_, n) => getServerFiles().upload(USER, new Blob([`<${n}/>`]), `h${n}.xml`)))
+    const has = await getServerDb().createCompanyExpense(USER, { description: "Office Chair", category: "other", amount: 100, date: new Date(), files: held })
     vi.mocked(downloadPublicFile).mockClear()
     const refused = await call("attach_file", { target: "cost", id: has.id, name: "a.xml", url: "https://files.example.com/a.xml" })
-    expect(refused.body.error).toContain("already has a file")
+    expect(refused.body.error).toContain(`already holds ${INVOICE_FILES_MAX} files`)
     expect(downloadPublicFile).not.toHaveBeenCalled() // nothing is fetched for a row that would refuse it
     expect(await rowFile(cost.id)).toBeNull()
   })

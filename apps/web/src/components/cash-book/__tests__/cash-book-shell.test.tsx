@@ -29,7 +29,7 @@ const movement = (o: Partial<CompanyMovement> & Pick<CompanyMovement, "kind" | "
 })
 const invoice = (o: Partial<Invoice> & Pick<Invoice, "id" | "number" | "amount" | "vat">): Invoice => ({
   userId: "u1", clientId: "c1", engagementId: null, fromMonth: null, yearMonth: "2026-09", dueDate: null,
-  paidDate: null, paidAccountId: null, createdAt: at, updatedAt: at, ...o,
+  paidDate: null, paidAccountId: null, files: [], createdAt: at, updatedAt: at, ...o,
 })
 
 const MAIN = account({ id: "main", name: "Main Bank", openingBalance: 1000, statementBalance: 9800, statementDate: d("2026-10-07") })
@@ -37,7 +37,7 @@ const SECOND = account({ id: "second", name: "Second Bank" })
 const FEE: CompanyExpense = {
   id: "fee", userId: "u1", description: "Bank fee on invoice 16/2026", category: "bank_fees", amount: 25,
   date: d("2026-10-05"), isRecurring: false, recurrenceMonths: null, notes: null, accountId: "main", paidByOwner: false,
-  vat: null, documentRef: null, project: null, recurringExpenseId: null, dateEstimated: false, importRef: null, collaboratorId: null, engagementId: null, forMonth: null, createdAt: at, updatedAt: at,
+  vat: null, documentRef: null, project: null, recurringExpenseId: null, dateEstimated: false, importRef: null, collaboratorId: null, engagementId: null, forMonth: null, files: [], createdAt: at, updatedAt: at,
 }
 
 const DATA: Record<string, unknown> = {}

@@ -38,6 +38,7 @@ import {
   MAX_SOLUTION_RELATIONS,
   MAX_SOLUTION_STACK,
   MAX_SOLUTION_STEPS,
+  INVOICE_FILES_MAX,
   MEETING_TEXT_MAX,
   SOLUTION_SECTION_MAX,
   SOLUTION_TARGET_MAX,
@@ -1561,7 +1562,7 @@ describe("signed out (#352)", () => {
   })
 })
 
-describe("the invoice file on a cost and an invoice", () => {
+describe("the invoice files on a cost and an invoice", () => {
   const file = (o: Record<string, unknown> = {}) => ({
     path: `users/${uid}/company-files/abc.xml`, name: "IT01_00001.xml", kind: "xml", size: 1234, uploadedAt: new Date(), ...o,
   })
@@ -1605,6 +1606,84 @@ describe("the invoice file on a cost and an invoice", () => {
     await updateDoc(ref, { file: file({ name: "other.xml" }) })
     await updateDoc(ref, { file: null })
     await expect(updateDoc(ref, { file: file({ kind: "exe" }) })).rejects.toThrow()
+  })
+
+  // ── several files (#48): `files`, a list of the same pointer, up to INVOICE_FILES_MAX ──
+
+  const files = (n: number, o: Record<string, unknown> = {}) =>
+    Array.from({ length: n }, (_, i) => file({ path: `users/${uid}/company-files/f${i}.xml`, ...o }))
+
+  it("pins the cap the rules write out to the constant in schemas.ts", () => {
+    expect(INVOICE_FILES_MAX).toBe(4)
+  })
+
+  it.each(kinds)("$col: accepts files with none, one and up to the cap, the last a 10 MB p7m, on create and on update", async ({ make, col }) => {
+    const last = file({ kind: "p7m", path: `users/${uid}/company-files/last.xml.p7m`, size: 10485760 })
+    const full = [...files(INVOICE_FILES_MAX - 1), last]
+    for (const n of [0, 1, 2, INVOICE_FILES_MAX - 1]) await setDoc(mine(col), make({ files: files(n) }))
+    await setDoc(mine(col), make({ files: full }))
+    const ref = mine(col)
+    await setDoc(ref, make({}))
+    await updateDoc(ref, { files: full })
+    await updateDoc(ref, { files: files(1), file: null })
+  })
+
+  it.each(kinds)("$col: refuses one file past the cap, and files that is not a list", async ({ make, col }) => {
+    await expect(setDoc(mine(col), make({ files: files(INVOICE_FILES_MAX + 1) }))).rejects.toThrow()
+    await expect(setDoc(mine(col), make({ files: file() }))).rejects.toThrow()
+    await expect(setDoc(mine(col), make({ files: "IT01.xml" }))).rejects.toThrow()
+    const ref = mine(col)
+    await setDoc(ref, make({ files: files(INVOICE_FILES_MAX) }))
+    await expect(updateDoc(ref, { files: files(INVOICE_FILES_MAX + 1) })).rejects.toThrow()
+  })
+
+  const badFiles: [string, Record<string, unknown> | string][] = [
+    ["another kind", file({ kind: "docx" })],
+    ["over 10 MB", file({ size: 10485761 })],
+    ["a negative size", file({ size: -1 })],
+    ["a fractional size", file({ size: 1.5 })],
+    ["an empty name", file({ name: "" })],
+    ["a string uploadedAt", file({ uploadedAt: "yesterday" })],
+    ["another user's path", file({ path: `users/${OTHER}/company-files/abc.xml` })],
+    ["a nested path", file({ path: `users/${uid}/company-files/a/b.xml` })],
+    ["a path outside company-files", file({ path: `users/${uid}/elsewhere/abc.xml` })],
+    ["an extra key", { ...file(), extra: 1 }],
+    ["a missing key", { path: file().path, name: "x.xml", kind: "xml", size: 1 }],
+    ["a string in place of the map", "IT01.xml"],
+    ["a five-character string in place of the map", "a.xml"],
+  ]
+  it.each(kinds)("$col: refuses, as the file is refused, a first and a last element with each bad shape", async ({ make, col }) => {
+    for (const [why, bad] of badFiles) {
+      await expect(setDoc(mine(col), make({ files: [bad] })), `first element with ${why}`).rejects.toThrow()
+      await expect(setDoc(mine(col), make({ files: [...files(INVOICE_FILES_MAX - 1), bad] })), `last element with ${why}`).rejects.toThrow()
+    }
+  })
+
+  it.each(kinds)("$col: a document saved with only the old file stays readable and editable, and converts on a files write", async ({ make, col }) => {
+    const ref = mine(col)
+    await getAdminFirestore().doc(ref.path).set({ ...make({}), createdAt: new Date(), updatedAt: new Date(), file: file() })
+    expect((await getDoc(ref)).data()?.file.name).toBe("IT01_00001.xml")
+    await updateDoc(ref, col === "invoices" ? { vat: 1 } : { notes: "edited" })
+    await updateDoc(ref, { files: files(2), file: null })
+    expect((await getDoc(ref)).data()?.files).toHaveLength(2)
+  })
+
+  it.each(kinds)("$col: accepts a document that holds both the old file and files (the read joins them)", async ({ make, col }) => {
+    await setDoc(mine(col), make({ file: file(), files: files(2) }))
+  })
+
+  // The budget: a request may spend 1,000 expressions. The worst write is an expense that sets every
+  // optional field (a cap's worth of files among them), so the cap is the one that write still passes:
+  // measured on the emulator, five files of this document are refused, and so is a ten-slot rule.
+  it("company_expenses: the worst-case write, every optional field and a full list, stays within the expression budget", async () => {
+    const full = cost({
+      isRecurring: false, recurrenceMonths: null, accountId: "a1", paidByOwner: false, vat: 22, documentRef: "118-26", project: "Print",
+      recurringExpenseId: "r1", dateEstimated: false, importRef: "imp-1", collaboratorId: "c1", engagementId: "e1", forMonth: "2026-09",
+      leaseId: "l1", endMonth: "2026-12", priceChanges: [], countedWhenPaid: false, notes: "n", file: null,
+    })
+    const ref = mine("company_expenses")
+    await setDoc(ref, { ...full, files: files(INVOICE_FILES_MAX) })
+    await updateDoc(ref, { files: files(INVOICE_FILES_MAX), notes: "again" })
   })
 })
 

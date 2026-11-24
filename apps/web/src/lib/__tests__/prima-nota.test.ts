@@ -17,11 +17,11 @@ import type { Assignment, Collaborator, CompanyAccount, CompanyExpense, CompanyL
 const stamp = { userId: "u", createdAt: new Date(2026, 0, 1), updatedAt: new Date(2026, 0, 1) }
 const d = (day: string) => new Date(`${day}T00:00:00`)
 const invoice = (o: Partial<Invoice> & Pick<Invoice, "id" | "number" | "amount" | "vat" | "clientId">): Invoice => ({
-  engagementId: null, fromMonth: null, yearMonth: "2026-06", dueDate: null, paidDate: null, paidAccountId: null, ...stamp, ...o,
+  engagementId: null, fromMonth: null, yearMonth: "2026-06", dueDate: null, paidDate: null, paidAccountId: null, files: [], ...stamp, ...o,
 })
 const expense = (o: Partial<CompanyExpense> & Pick<CompanyExpense, "id" | "description" | "amount">): CompanyExpense => ({
   category: "other", date: d("2026-05-20"), isRecurring: false, recurrenceMonths: null, notes: null, accountId: null, paidByOwner: false,
-  vat: null, documentRef: null, project: null, recurringExpenseId: null, dateEstimated: false, importRef: null, collaboratorId: null, engagementId: null, forMonth: null, ...stamp, ...o,
+  vat: null, documentRef: null, project: null, recurringExpenseId: null, dateEstimated: false, importRef: null, collaboratorId: null, engagementId: null, forMonth: null, files: [], ...stamp, ...o,
 })
 const loan = (o: Partial<CompanyLoan> & Pick<CompanyLoan, "id" | "direction" | "amount">): CompanyLoan => ({
   description: "Loan", date: d("2026-05-25"), notes: null, accountId: null, dateEstimated: false, importRef: null, ...stamp, ...o,

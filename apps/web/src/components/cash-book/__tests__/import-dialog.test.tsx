@@ -18,7 +18,7 @@ import type { CompanyAccount, CompanyExpense, CompanyMovement, Invoice } from "@
 
 const stamp = { userId: "u1", createdAt: new Date(2026, 0, 1), updatedAt: new Date(2026, 0, 1) }
 const invoice = (o: Partial<Invoice> & Pick<Invoice, "id" | "number" | "amount" | "vat" | "clientId">): Invoice => ({
-  engagementId: null, fromMonth: null, yearMonth: "2026-06", dueDate: null, paidDate: null, paidAccountId: null, ...stamp, ...o,
+  engagementId: null, fromMonth: null, yearMonth: "2026-06", dueDate: null, paidDate: null, paidAccountId: null, files: [], ...stamp, ...o,
 })
 const APP: AppData = {
   accounts: [],
@@ -158,7 +158,7 @@ describe("Import Excel", () => {
     const monitor: CompanyExpense = {
       id: "e1", description: "Monitor", category: "office_supplies", amount: 200, date: new Date(2026, 4, 20), isRecurring: false,
       recurrenceMonths: null, notes: "Bought for the office", accountId: null, paidByOwner: false, vat: null, documentRef: "R-9", project: null,
-      recurringExpenseId: null, dateEstimated: false, importRef: null, collaboratorId: null, engagementId: null, forMonth: null, ...stamp,
+      recurringExpenseId: null, dateEstimated: false, importRef: null, collaboratorId: null, engagementId: null, forMonth: null, files: [], ...stamp,
     }
     const dialog = await openWith(primaNotaWorkbook(SYNTHETIC_BOOK), { ...APP, expenses: [monitor] })
     const already = await within(dialog).findByRole("region", { name: "Already in the App" }, READ)
@@ -249,7 +249,7 @@ describe("Undo Import", () => {
   const cost = (id: string, updatedAt: Date): CompanyExpense => ({
     id, userId: "u1", description: `Cost ${id}`, category: "other", amount: 10, date: new Date(2026, 4, 1), isRecurring: false, recurrenceMonths: null,
     notes: null, accountId: "a1", paidByOwner: false, vat: 0, documentRef: null, project: null, recurringExpenseId: null, dateEstimated: true,
-    importRef: `2026:Maggio!${id}`, collaboratorId: null, engagementId: null, forMonth: null, createdAt: t0, updatedAt,
+    importRef: `2026:Maggio!${id}`, collaboratorId: null, engagementId: null, forMonth: null, files: [], createdAt: t0, updatedAt,
   })
   const data = {
     accounts: [account],

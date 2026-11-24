@@ -8,7 +8,7 @@ import type { InvoiceFile } from "@/types"
 /**
  * The zip of a period's files: `costs/` and `invoices/`, each entry named by
  * zipName with the stored file's extension, a number added when two names meet.
- * Records without a file are left out and counted. `load` fetches one file's
+ * Records without a file are left out and counted; a record's several files are each an entry. `load` fetches one file's
  * bytes (Storage in the app), so the builder itself does no I/O of its own.
  * `extra` adds top-level entries (the accountant's package CSVs).
  * Stored, not deflated: PDFs and p7m barely compress. ponytail: all in memory;
@@ -24,21 +24,27 @@ export async function zipInvoiceFiles(
   const taken = new Set<string>()
   let missing = 0
   for (const doc of docs) {
-    if (!doc.file) {
+    if (doc.files.length === 0) {
       missing++
       continue
     }
     const dir = doc.kind === "cost" ? "costs" : "invoices"
-    const ext = INVOICE_FILE_EXTENSION[doc.file.kind]
-    let path = `${dir}/${zipName(doc)}${ext}`
-    for (let n = 2; taken.has(path.toLowerCase()); n++) path = `${dir}/${zipName(doc)} (${n})${ext}`
-    taken.add(path.toLowerCase())
-    try {
-      entries[path] = await load(doc.file)
-      files++
-    } catch {
-      // The whole zip fails, but says which record; the raw error may carry a storage path.
-      throw new Error(`${path.slice(dir.length + 1)} could not be downloaded`)
+    // A record's files read " (file i of n)" in list order; a number for a clash between records
+    // goes on the record's name, before that, so the two can never be read for each other.
+    const paths = (n: number) =>
+      doc.files.map((f, i) => `${dir}/${zipName(doc)}${n > 1 ? ` (${n})` : ""}${doc.files.length > 1 ? ` (file ${i + 1} of ${doc.files.length})` : ""}${INVOICE_FILE_EXTENSION[f.kind]}`)
+    let n = 1
+    while (paths(n).some((p) => taken.has(p.toLowerCase()))) n++
+    const named = paths(n)
+    for (const [i, file] of doc.files.entries()) {
+      taken.add(named[i].toLowerCase())
+      try {
+        entries[named[i]] = await load(file)
+        files++
+      } catch {
+        // The whole zip fails, but says which file; the raw error may carry a storage path.
+        throw new Error(`${named[i].slice(dir.length + 1)} could not be downloaded`)
+      }
     }
   }
   return { bytes: zipSync({ ...extra, ...entries }, { level: 0 }), files, missing }

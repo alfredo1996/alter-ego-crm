@@ -32,12 +32,12 @@ import { useClients } from "@/hooks/use-clients"
 import { useCollaborators } from "@/hooks/use-collaborators"
 import { useCompanyAccounts } from "@/hooks/use-company-accounts"
 import { useCompanyDeadlines, useUpdateCompanyDeadline } from "@/hooks/use-company-deadlines"
-import { useCompanyExpenses, useUpdateCompanyExpense } from "@/hooks/use-company-expenses"
-import { downloadInvoiceFile, FileUploadError, saveBlob, writeWithInvoiceFile } from "@/hooks/use-company-files"
+import { useCompanyExpenses } from "@/hooks/use-company-expenses"
+import { downloadInvoiceFile, FileUploadError, saveBlob, useChangeFiles, writeWithInvoiceFiles } from "@/hooks/use-company-files"
 import { useCompanyLoans } from "@/hooks/use-company-loans"
 import { useCompanyMovements } from "@/hooks/use-company-movements"
 import { useEngagements } from "@/hooks/use-engagements"
-import { useInvoices, useUpdateInvoice } from "@/hooks/use-invoices"
+import { useInvoices } from "@/hooks/use-invoices"
 import { useTimecards } from "@/hooks/use-timecards"
 import { buildPackage, plural } from "@/lib/accountant-package"
 import { bookRows, costCentresOf, dayLabel, exportCsv, exportFileName, monthEnd } from "@/lib/cash-book"
@@ -110,8 +110,7 @@ export function MonthEndShell() {
 
   const { apply: applyHours, setMonthDays } = useApplyHours(user?.id)
   const updateDeadline = useUpdateCompanyDeadline(user?.id)
-  const updateExpense = useUpdateCompanyExpense(user?.id)
-  const updateInvoice = useUpdateInvoice(user?.id)
+  const changeFiles = useChangeFiles(user?.id)
 
   const router = useRouter()
   const asked = useSearchParams().get("month")
@@ -312,20 +311,20 @@ export function MonthEndShell() {
   const uses = checklist.steps.hours.items.flatMap((i) =>
     i.kind === "hours_use" && i.ref && i.days !== undefined ? [{ engagementId: i.ref, yearMonth: month, days: i.days }] : [],
   )
-  /** Attach File in place: the slot's own upload-then-write order, for the chosen item. */
+  /** Attach File in place: the slot's own upload-then-point order, for the chosen item (one file a pick). */
   const attach = async (item: MonthEndItem, file: File) => {
     const check = checkInvoiceFile(file)
     if (!check.ok) return toast({ variant: "destructive", title: "File not attached", description: check.reason })
     setAttaching(item.ref!)
     try {
-      await writeWithInvoiceFile({
+      await writeWithInvoiceFiles({
         userId: user?.id ?? "",
-        stored: null,
-        draft: { picked: file, removed: false },
-        write: async (stored) => {
-          if (item.kind === "file_cost") await updateExpense.mutateAsync({ id: item.ref!, input: { file: stored } })
-          else await updateInvoice.mutateAsync({ id: item.ref!, input: { file: stored } })
-        },
+        target: item.kind === "file_cost" ? "cost" : "invoice",
+        rowId: item.ref!,
+        draft: { picked: [file], removed: [] },
+        changeFiles,
+        // Only the files change: the row as it is now takes the new one at the end.
+        write: async () => undefined,
       })
     } catch (err) {
       // A rejected write has its app-wide error toast; a failed upload is said here.
@@ -473,7 +472,7 @@ export function MonthEndShell() {
               type="button"
               variant="outline"
               size="sm"
-              disabled={attaching !== null || updateExpense.isPending || updateInvoice.isPending}
+              disabled={attaching !== null}
               aria-describedby={describedBy}
               onClick={(e) => {
                 attachTo.current = item

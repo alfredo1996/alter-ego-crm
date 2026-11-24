@@ -316,7 +316,7 @@ describe("get_cash_book", () => {
     const { payload: before } = await callTool("get_cash_book", { period: early.slice(0, 7) })
     expect(before.otherEntries).toContainEqual({
       date: early, account: "Main Bank", type: "Tax (F24)", kind: "tax", description: "IRES (F24)", documentRef: null, costCentre: null,
-      amount: -77, why: "dated before the account opened", source: "movement", file: null, id: ref.id, imported: true,
+      amount: -77, why: "dated before the account opened", source: "movement", files: [], id: ref.id, imported: true,
     })
     await ref.delete()
   })

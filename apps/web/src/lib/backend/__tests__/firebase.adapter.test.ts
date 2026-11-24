@@ -14,6 +14,7 @@ import { addDoc, collection, doc, getDocs, setDoc, Timestamp } from "firebase/fi
 import { describe, expect, it } from "vitest"
 
 import { createFirebaseAdapter } from "@/lib/backend/firebase"
+import { getAdminFirestore } from "@/lib/firebase-admin-client"
 import { getFirebaseAuth, getFirebaseDb } from "@/lib/firebase-client"
 
 import { describeAdapterContract } from "./adapter-contract"
@@ -47,6 +48,17 @@ describeAdapterContract("firebase", async () => {
           dueDate: null, paidDate: null, createdAt: new Date(), updatedAt: new Date(),
         })
       ).id,
+    // A raw document with the one `file` key, written with the rules out of the way: what a row saved before several files holds.
+    seedLegacyFile: async (target, file) => {
+      const ref = getAdminFirestore().collection(`users/${user.uid}/${target === "cost" ? "company_expenses" : "invoices"}`).doc()
+      const stored = { path: file.path, name: file.name, kind: file.kind, size: file.size, uploadedAt: file.uploadedAt }
+      await ref.set(
+        target === "cost"
+          ? { userId: user.uid, description: "Legacy", category: "other", amount: 10, date: new Date(), isRecurring: false, file: stored, createdAt: new Date(), updatedAt: new Date() }
+          : { userId: user.uid, clientId: "c1", number: "L1", yearMonth: "2027-01", amount: 100, vat: 22, file: stored, createdAt: new Date(), updatedAt: new Date() },
+      )
+      return ref.id
+    },
     legacyBalanceSnapshots: {
       seed: async () => {
         await addDoc(collection(getFirebaseDb(), `users/${user.uid}/account_balance_snapshots`), {

@@ -65,6 +65,10 @@ export const invoiceFileSchema = z.object({
   uploadedAt: z.date(),
 })
 
+/** How many files a cost or an invoice holds. firestore/crm.rules writes the check out to this many places (rules cannot loop; its expression budget sets the number, see the note there); the rules tests pin the two. */
+export const INVOICE_FILES_MAX = 4
+export const invoiceFilesSchema = z.array(invoiceFileSchema).max(INVOICE_FILES_MAX, `A cost or an invoice holds up to ${INVOICE_FILES_MAX} files.`)
+
 const companyExpenseFields = z.object({
   description: z.string().min(1, "Description is required").max(300),
   category: companyExpenseCategorySchema,
@@ -97,7 +101,7 @@ const companyExpenseFields = z.object({
   endMonth: priceMonth.nullish(),
   priceChanges: z.array(priceChangeSchema).max(MAX_PRICE_CHANGES).optional(),
   countedWhenPaid: z.boolean().optional(),
-  file: invoiceFileSchema.nullish(),
+  files: invoiceFilesSchema.optional(),
 })
 
 type ExpenseShape = Partial<z.infer<typeof companyExpenseFields>>
@@ -343,7 +347,7 @@ export const createInvoiceSchema = z.object({
   // The company account the payment landed on. No rule ties it to paidDate: an
   // untick sends {paidDate: null} alone, and the stale account is ignored on read.
   paidAccountId: z.string().min(1).max(200).nullish(),
-  file: invoiceFileSchema.nullish(),
+  files: invoiceFilesSchema.optional(),
 })
 
 export const updateInvoiceSchema = createInvoiceSchema.partial().omit({ clientId: true })

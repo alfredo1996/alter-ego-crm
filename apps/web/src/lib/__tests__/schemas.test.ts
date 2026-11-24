@@ -7,6 +7,7 @@ import {
   createCompanyMovementSchema,
   createInvoiceSchema,
   createSolutionSchema,
+  INVOICE_FILES_MAX,
   MAX_SOLUTION_ENTITIES,
   MAX_SOLUTION_RELATIONS,
   MAX_SOLUTION_STEPS,
@@ -398,32 +399,47 @@ describe("normalizeSolutionGraph", () => {
   })
 })
 
-describe("the invoice file on a cost and an invoice", () => {
+describe("the invoice files on a cost and an invoice", () => {
   const file = { path: "users/u/company-files/a.xml", name: "IT01.xml", kind: "xml", size: 10, uploadedAt: new Date() }
   const cost = { description: "Books", category: "accountant", amount: 100, date: new Date() }
   const invoice = { clientId: "c1", number: "1", yearMonth: "2026-09", amount: 100, vat: 22 }
+  const some = (n: number) => Array.from({ length: n }, (_, i) => ({ ...file, path: `users/u/company-files/f${i}.xml` }))
 
   it.each([
     ["a cost", createCompanyExpenseSchema, cost],
     ["an invoice", createInvoiceSchema, invoice],
-  ])("%s takes a file, null or none", (_n, schema, base) => {
-    expect(schema.safeParse({ ...base, file }).success).toBe(true)
-    expect(schema.safeParse({ ...base, file: null }).success).toBe(true)
+  ])("%s takes no files, one, and up to the cap", (_n, schema, base) => {
     expect(schema.safeParse(base).success).toBe(true)
+    for (const n of [0, 1, 2, INVOICE_FILES_MAX]) expect(schema.safeParse({ ...base, files: some(n) }).success).toBe(true)
   })
+
+  it.each([
+    ["a cost", createCompanyExpenseSchema, cost],
+    ["an invoice", createInvoiceSchema, invoice],
+  ])("%s refuses one file past the cap, in words", (_n, schema, base) => {
+    const r = schema.safeParse({ ...base, files: some(INVOICE_FILES_MAX + 1) })
+    expect(r.success ? [] : r.error.issues.map((i) => i.message)).toEqual(["A cost or an invoice holds up to 4 files."])
+  })
+
+  it("holds the cap at 4, the most a worst-case cost passes in firestore/crm.rules", () => expect(INVOICE_FILES_MAX).toBe(4))
 
   it.each([
     ["another kind", { ...file, kind: "docx" }],
     ["over 10 MB", { ...file, size: 10 * 1024 * 1024 + 1 }],
     ["a fractional size", { ...file, size: 1.5 }],
     ["no name", { ...file, name: "" }],
-  ])("refuses a file with %s", (_n, bad) => {
-    expect(createCompanyExpenseSchema.safeParse({ ...cost, file: bad }).success).toBe(false)
-    expect(createInvoiceSchema.safeParse({ ...invoice, file: bad }).success).toBe(false)
+  ])("refuses a files element with %s", (_n, bad) => {
+    expect(createCompanyExpenseSchema.safeParse({ ...cost, files: [file, bad] }).success).toBe(false)
+    expect(createInvoiceSchema.safeParse({ ...invoice, files: [bad] }).success).toBe(false)
   })
 
   it("drops a key the pointer does not have, so it is never stored", () => {
-    expect(createCompanyExpenseSchema.parse({ ...cost, file: { ...file, extra: 1 } }).file).toEqual(file)
+    expect(createCompanyExpenseSchema.parse({ ...cost, files: [{ ...file, extra: 1 }] }).files).toEqual([file])
+  })
+
+  it("no longer takes the single file key: it is stripped, never stored", () => {
+    expect("file" in createCompanyExpenseSchema.parse({ ...cost, file })).toBe(false)
+    expect("file" in createInvoiceSchema.parse({ ...invoice, file })).toBe(false)
   })
 })
 

@@ -377,8 +377,8 @@ describe("invoice files", () => {
   it("deleting a cost deletes only an object under the user's own company-files folder", async () => {
     const mine = await adapter.files.upload(USER, new Blob(["<a/>"]), "mine.xml")
     const theirs = await adapter.files.upload(OTHER_USER, new Blob(["<b/>"]), "theirs.xml")
-    const own = await db.createCompanyExpense(USER, { description: "Own", category: "other", amount: 10, date: new Date(), file: mine })
-    const foreign = await db.createCompanyExpense(USER, { description: "Foreign", category: "other", amount: 10, date: new Date(), file: theirs })
+    const own = await db.createCompanyExpense(USER, { description: "Own", category: "other", amount: 10, date: new Date(), files: [mine] })
+    const foreign = await db.createCompanyExpense(USER, { description: "Foreign", category: "other", amount: 10, date: new Date(), files: [theirs] })
     await db.deleteCompanyExpense(USER, own.id)
     await db.deleteCompanyExpense(USER, foreign.id)
     await expect(adapter.files.download(mine)).rejects.toThrow("File not found")

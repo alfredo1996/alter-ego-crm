@@ -32,7 +32,7 @@ const hoursIn = (engagementId: string, ym: string, days: number): Timecard[] =>
   }))
 const invoice = (o: Partial<Invoice> & Pick<Invoice, "clientId" | "number" | "yearMonth" | "amount">): Invoice => ({
   id: `i${++seq}`, userId: "u1", engagementId: null, fromMonth: null, vat: 0, dueDate: null, paidDate: null,
-  paidAccountId: null, createdAt: new Date(2026, 4, 1, 0, 0, seq), updatedAt: at, ...o,
+  paidAccountId: null, files: [], createdAt: new Date(2026, 4, 1, 0, 0, seq), updatedAt: at, ...o,
 })
 const MAIN: CompanyAccount = {
   id: "main", userId: "u1", name: "Main Bank", openingBalance: 1000, openingDate: d("2026-07-01"),
@@ -42,7 +42,7 @@ const MAIN: CompanyAccount = {
 const ESTIMATE: CompanyExpense = {
   id: "fee", userId: "u1", description: "Accountant fee", category: "accountant", amount: 250, date: d("2026-01-01"),
   isRecurring: true, recurrenceMonths: 1, notes: null, accountId: null, paidByOwner: false, vat: 0, documentRef: null,
-  project: null, recurringExpenseId: null, dateEstimated: false, importRef: null, collaboratorId: null, engagementId: null, forMonth: null, createdAt: at, updatedAt: at,
+  project: null, recurringExpenseId: null, dateEstimated: false, importRef: null, collaboratorId: null, engagementId: null, forMonth: null, files: [], createdAt: at, updatedAt: at,
 }
 
 const DATA: Record<string, unknown> = {}
