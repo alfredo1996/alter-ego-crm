@@ -44,7 +44,7 @@ import {
   solutionFields,
 } from "@/types/schemas"
 
-import type { FilesAdapter } from "./types"
+import type { FilesAdapter, UploadRecord, UploadStatus } from "./types"
 import type {
   Assignment,
   Collaborator,
@@ -127,6 +127,64 @@ function withId(snap: { id: string; data(): DocumentData | undefined }): Documen
   return { id: snap.id, ...(snap.data() ?? {}) }
 }
 
+
+// ─── Upload links (top-level uploads/{id}, id = the hash of the link's secret) ───
+// Server-only: no rule opens the collection, so only the Admin SDK reaches it.
+
+function mapUpload(id: string, d: DocumentData): UploadRecord {
+  return {
+    id,
+    userId: d.userId as string,
+    target: d.target as UploadRecord["target"],
+    rowId: d.rowId as string,
+    name: d.name as string,
+    kind: d.kind as UploadRecord["kind"],
+    declaredSize: (d.declaredSize as number | null | undefined) ?? null,
+    declaredSha256: (d.declaredSha256 as string | null | undefined) ?? null,
+    replace: d.replace === true,
+    status: d.status as UploadStatus,
+    createdAt: toDate(d.createdAt),
+    expiresAt: toDate(d.expiresAt),
+    file: mapFile(d.file),
+    sha256: (d.sha256 as string | null | undefined) ?? null,
+  }
+}
+
+export async function createUpload(record: UploadRecord): Promise<void> {
+  const { id, ...data } = record
+  await getAdminFirestore().collection("uploads").doc(id).create(data)
+}
+
+export async function getUpload(id: string): Promise<UploadRecord | null> {
+  const snap = await getAdminFirestore().collection("uploads").doc(id).get()
+  return snap.exists ? mapUpload(snap.id, snap.data()!) : null
+}
+
+export async function listUploads(userId: string): Promise<UploadRecord[]> {
+  const snap = await getAdminFirestore().collection("uploads").where("userId", "==", userId).get()
+  return snap.docs.map((d) => mapUpload(d.id, d.data()))
+}
+
+/** One transaction: two concurrent callers cannot both leave `from`. */
+export async function moveUpload(
+  id: string,
+  from: UploadStatus,
+  to: UploadStatus,
+  patch: Partial<Pick<UploadRecord, "file" | "sha256">> = {},
+): Promise<boolean> {
+  const db = getAdminFirestore()
+  const ref = db.collection("uploads").doc(id)
+  return db.runTransaction(async (tx) => {
+    const snap = await tx.get(ref)
+    if (!snap.exists || snap.data()!.status !== from) return false
+    tx.update(ref, { ...patch, status: to })
+    return true
+  })
+}
+
+export async function deleteUpload(id: string): Promise<void> {
+  await getAdminFirestore().collection("uploads").doc(id).delete()
+}
 
 // ─── API keys (users/{uid}/api_keys + top-level api_keys_index) ─────────────
 // The server is the only writer (#342): the visible doc and the index row go in

@@ -63,10 +63,10 @@ describe("tool module registrations", () => {
 
   // The README's count went stale once: it is checked here now. ping is not counted.
   it("the README counts every tool served, ping excluded", () => {
-    expect(all.length).toBe(79)
-    expect(all.length - financeTools.length).toBe(68)
+    expect(all.length).toBe(81)
+    expect(all.length - financeTools.length).toBe(70)
     expect(financeTools).toHaveLength(11)
-    expect(readFileSync("../../README.md", "utf8")).toContain("- 79 tools: 68 over the company data and 11 over Personal Finance")
+    expect(readFileSync("../../README.md", "utf8")).toContain("- 81 tools: 70 over the company data and 11 over Personal Finance")
   })
 })
 
@@ -100,6 +100,11 @@ describe("tool descriptions keep the owner's rules", () => {
     expect(crm.get_month_end.match(/«/g)).toHaveLength(3)
   })
 
+  it("get_month_end no longer says that no tool attaches a file", () => {
+    expect(crm.get_month_end).not.toContain("no tool attaches")
+    expect(crm.get_month_end).toContain("create_upload_url")
+  })
+
   // "Closed" is the Month End verdict only: a month that has ended is "ended".
   it("no description calls a month that has ended closed", () => {
     expect(Object.keys(crm).filter((tool) => /closed months?\b/.test(crm[tool]))).toEqual([])
@@ -131,7 +136,7 @@ describe("tools served per module set", () => {
   it("serves only Consulting's tools when it is the only plugin: no invoice, cash, Quarters or rent tool", () => {
     const names = new Set(served("consulting"))
     const accounting = [
-      "list_invoices", "get_unbilled", "create_invoice", "mark_invoice_paid", "update_invoice", "delete_invoice", "attach_file", "remove_file", "get_file",
+      "list_invoices", "get_unbilled", "create_invoice", "mark_invoice_paid", "update_invoice", "delete_invoice", "attach_file", "create_upload_url", "complete_upload", "remove_file", "get_file",
       "get_cash_book", "get_month_end", "add_movement", "add_expense", "record_loan", "check_balance", "get_quarters",
     ]
     expect(accounting.filter((t) => names.has(t))).toEqual([])

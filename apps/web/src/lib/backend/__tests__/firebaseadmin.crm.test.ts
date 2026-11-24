@@ -13,6 +13,8 @@ import * as admin from "@/lib/backend/firebase-admin"
 import { BILL_HAS_PAYMENTS } from "@/lib/cash-book"
 import { getAdminBucket, getAdminFirestore } from "@/lib/firebase-admin-client"
 
+import { describeUploadsContract } from "./adapter-contract"
+
 import type * as AdminClient from "@/lib/firebase-admin-client"
 
 // Passes through; one test swaps in a bucket whose delete fails.
@@ -900,3 +902,5 @@ describe("the Admin files slice (what the MCP's attach_file and get_file store t
     await files.remove(path)
   })
 })
+
+describeUploadsContract("firebase-admin", () => admin)

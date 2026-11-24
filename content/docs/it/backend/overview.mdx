@@ -44,7 +44,7 @@ Le operazioni sono raggruppate per dominio:
 
 ### Superfici solo server
 
-Il server MCP raggiunge il database tramite `getServerDb()`, che aggiunge `AuditAdapter` (la collezione `mcp_audit`, chiusa ai client dalle regole) e `CrmServerAdapter` (scritture che devono essere atomiche sul server).
+Il server MCP raggiunge il database tramite `getServerDb()`, che aggiunge `AuditAdapter` (la collezione `mcp_audit`, chiusa ai client dalle regole), `CrmServerAdapter` (scritture che devono essere atomiche sul server) e `UploadsAdapter` (la collezione `uploads`: link di caricamento monouso, chiusa ai client dal default deny delle regole).
 
 ## Backend Disponibili
 

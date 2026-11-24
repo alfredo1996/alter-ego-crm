@@ -1259,7 +1259,12 @@ export function monthEndNext(checklist: MonthEnd, data: MonthEndData, today: str
   }
 
   for (const i of steps.files.items) {
-    if (i.status === "check") out.set(i, [{ app: "In the app only: Month End → Invoice Files → Attach File. No tool attaches a file." }])
+    if (i.status !== "check") continue
+    const args = { target: i.kind === "file_cost" ? "cost" : "invoice", id: i.ref }
+    out.set(i, [
+      { tool: "attach_file", args, note: "Add name and content_base64 for a file under about 10 KB, or name and an https url the server downloads (up to 10 MB)." },
+      { tool: "create_upload_url", args, note: "A larger file: add name; PUT the file to the uploadUrl, then call complete_upload with the uploadId." },
+    ])
   }
 
   const owed = supplierDocuments(expenses, data.movements).docs
@@ -1394,6 +1399,9 @@ export function planMonths(entries: { date: Date; recurringExpenseId?: string | 
 }
 
 /** What a read says of a row's invoice file: enough to see it is there; get_file fetches it. null = none. */
-export function fileSummary(file: InvoiceFile | null | undefined): { name: string; kind: InvoiceFile["kind"]; size: number } | null {
-  return file ? { name: file.name, kind: file.kind, size: file.size } : null
+export function fileSummary(
+  file: InvoiceFile | null | undefined,
+  sha256?: string,
+): { name: string; kind: InvoiceFile["kind"]; size: number; sha256?: string } | null {
+  return file ? { name: file.name, kind: file.kind, size: file.size, ...(sha256 && { sha256 }) } : null
 }

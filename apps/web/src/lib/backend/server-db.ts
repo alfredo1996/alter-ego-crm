@@ -12,7 +12,7 @@ import { getBackend } from "@/lib/backend"
 import * as firebaseAdmin from "@/lib/backend/firebase-admin"
 import { env } from "@/lib/env"
 
-import type { AuditAdapter, CrmServerAdapter, DatabaseAdapter, FilesAdapter } from "./types"
+import type { AuditAdapter, CrmServerAdapter, DatabaseAdapter, FilesAdapter, UploadsAdapter } from "./types"
 import type { Account } from "@alter-ego/finance/types"
 
 /**
@@ -21,7 +21,8 @@ import type { Account } from "@alter-ego/finance/types"
  * surface so they don't care which backend is wired in.
  */
 export type ServerDb = AuditAdapter &
-  CrmServerAdapter & {
+  CrmServerAdapter &
+  UploadsAdapter & {
     /** Server-only (#342): the key is valid only while its visible document exists. */
     validateApiKey(keyHash: string): Promise<string | null>
     /** Personal Finance: close or reopen only (#312). The Admin SDK bypasses the rules, so it takes no wider write. */

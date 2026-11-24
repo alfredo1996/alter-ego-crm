@@ -1,12 +1,12 @@
 import { describeFinanceContract } from "@alter-ego/finance/contract"
 import { describeRentContract } from "@alter-ego/rent/contract"
-import { describe, it, expect, beforeAll, afterAll } from "vitest"
+import { describe, it, expect, beforeAll, afterAll, afterEach } from "vitest"
 
 import { ACCOUNT_HAS_ENTRIES, BILL_HAS_PAYMENTS, CLIENT_HAS_CASH, NON_CASH } from "@/lib/cash-book"
 import { CONTRACT_HAS_HOURS } from "@/lib/engagements"
 import { invoiceClientId } from "@/lib/invoices"
 
-import type { DatabaseAdapter, FilesAdapter } from "../types"
+import type { DatabaseAdapter, FilesAdapter, UploadRecord, UploadsAdapter } from "../types"
 import type { CreateCompanyMovementInput, CreateJournalEntryInput } from "@/types"
 
 export interface ContractSetup {
@@ -2400,5 +2400,66 @@ export function describeAdapterContract(name: string, setup: ContractSetup) {
 
     // Personal Finance: every case is the package's own, run against this app's composed adapter.
     describeFinanceContract(() => ({ db, userId, otherUserId, legacyBalanceSnapshots, seedNetWorthSnapshot }))
+  })
+}
+
+/**
+ * The upload records' write path (create_upload_url / PUT / complete_upload). They are server-only, so the
+ * client adapters this file's main contract runs against cannot hold them: the mock and the Admin SDK run this one.
+ */
+export function describeUploadsContract(name: string, uploads: () => UploadsAdapter) {
+  describe(`${name} — upload records`, () => {
+    const made: string[] = []
+    const record = (over: Partial<UploadRecord> = {}): UploadRecord => {
+      const id = `contract-${crypto.randomUUID()}`
+      made.push(id)
+      return {
+        id, userId: "uploads-user", target: "cost", rowId: "c1", name: "IT01_1.xml", kind: "xml", declaredSize: 12, declaredSha256: "ab".repeat(32), replace: true,
+        status: "pending", createdAt: new Date("2026-11-23T10:00:00.000Z"), expiresAt: new Date("2026-11-23T10:15:00.000Z"), file: null, sha256: null, ...over,
+      }
+    }
+    afterEach(async () => {
+      await Promise.all(made.splice(0).map((id) => uploads().deleteUpload(id)))
+    })
+
+    it("stores a record and reads it back as written, with its dates", async () => {
+      const r = record()
+      await uploads().createUpload(r)
+      expect(await uploads().getUpload(r.id)).toEqual(r)
+      expect(await uploads().getUpload("contract-missing")).toBeNull()
+    })
+
+    it("lists only the owner's uploads", async () => {
+      const mine = record()
+      const theirs = record({ userId: "uploads-other" })
+      await Promise.all([uploads().createUpload(mine), uploads().createUpload(theirs)])
+      expect((await uploads().listUploads("uploads-user")).map((u) => u.id)).toEqual([mine.id])
+      expect((await uploads().listUploads("uploads-other")).map((u) => u.id)).toEqual([theirs.id])
+    })
+
+    it("moves the status only from the one expected, and merges the patch", async () => {
+      const r = record()
+      await uploads().createUpload(r)
+      const file = { path: "users/uploads-user/company-files/x.xml", name: "IT01_1.xml", kind: "xml" as const, size: 12, uploadedAt: new Date("2026-11-23T10:01:00.000Z") }
+      expect(await uploads().moveUpload(r.id, "received", "completing")).toBe(false)
+      expect(await uploads().moveUpload(r.id, "pending", "received", { file, sha256: "cd".repeat(32) })).toBe(true)
+      expect(await uploads().getUpload(r.id)).toEqual({ ...r, status: "received", file, sha256: "cd".repeat(32) })
+      expect(await uploads().moveUpload("contract-missing", "pending", "received")).toBe(false)
+    })
+
+    it("lets exactly one of two concurrent moves win", async () => {
+      const r = record()
+      await uploads().createUpload(r)
+      const won = await Promise.all([uploads().moveUpload(r.id, "pending", "receiving"), uploads().moveUpload(r.id, "pending", "receiving")])
+      expect(won.filter(Boolean)).toHaveLength(1)
+    })
+
+    it("deletes a record, and deleting it again is not an error", async () => {
+      const r = record()
+      await uploads().createUpload(r)
+      await uploads().deleteUpload(r.id)
+      await expect(uploads().deleteUpload(r.id)).resolves.toBeUndefined()
+      expect(await uploads().getUpload(r.id)).toBeNull()
+    })
   })
 }

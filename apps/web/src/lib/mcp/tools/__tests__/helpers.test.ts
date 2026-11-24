@@ -1092,10 +1092,18 @@ describe("monthEndNext", () => {
     ])
   })
 
-  it("files: no tool attaches one, so each missing file points at the app", () => {
+  it("files: each missing file names attach_file and create_upload_url with the row's target and id", () => {
     const rows = of("files")
     expect(rows.length).toBeGreaterThan(0)
-    for (const [, n] of rows) expect(n).toEqual([{ app: "In the app only: Month End → Invoice Files → Attach File. No tool attaches a file." }])
+    const refs = checklist.steps.files.items.filter((i) => i.status !== "done")
+    for (const item of refs) {
+      const target = item.kind === "file_cost" ? "cost" : "invoice"
+      expect(next.get(item)).toEqual([
+        { tool: "attach_file", args: { target, id: item.ref }, note: expect.stringContaining("content_base64") },
+        { tool: "create_upload_url", args: { target, id: item.ref }, note: expect.stringContaining("complete_upload") },
+      ])
+    }
+    expect(JSON.stringify(rows)).not.toContain("No tool attaches")
   })
 
   it("the amber steps: Mark Paid, pay the supplier invoice, link the payment or record one at the month end", () => {

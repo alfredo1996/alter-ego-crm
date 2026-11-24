@@ -1583,14 +1583,14 @@ describe("get_month_end", () => {
     expect(after).toMatchObject({ month: last, closed: true, todo: [], alsoOpen: [{ month: before, todo: ["Hours"] }] })
     expect(after.summary).toMatch(new RegExp(`^${formatYearMonth(last)} is closed: every required step is done\\. Also open: 1 earlier month`))
     expect(after.summary).toContain("waiting for payment")
-    // Invoice Files: the invoice just recorded has no file. An amber reminder, so the month stays closed; only the app attaches one.
+    // Invoice Files: the invoice just recorded has no file. An amber reminder, so the month stays closed; attach_file or create_upload_url attaches one.
     expect(after.summary).toContain("1 invoice file missing")
     expect(steps(after).find((s) => s.step === "files")).toMatchObject({
       title: "Invoice Files",
       blocking: false,
       status: "check",
       toCheck: 1,
-      items: [{ kind: "file_invoice", next: [{ app: expect.stringContaining("Attach File") }] }],
+      items: [{ kind: "file_invoice", next: [{ tool: "attach_file" }, { tool: "create_upload_url" }] }],
     })
     // The bank check on the month end closes the month before too, labelled.
     const older = await monthEndOf({ month: before })
