@@ -94,7 +94,7 @@ export interface BackendAdapter {
 
 /**
  * The company side's invoice files (a supplier's invoice on a cost, an issued
- * one on an invoice). Objects only: the record's `file` pointer is written
+ * one on an invoice). Objects only: the record's `files` pointers are written
  * through db, so the caller uploads first and points second, and a failed
  * upload never leaves a record naming a file that is not there. Deleting a
  * cost, an invoice or its client deletes their objects (the db adapters do it).
@@ -124,6 +124,19 @@ export interface CrmAdapter {
   createCompanyExpense(userId: string, input: CreateCompanyExpenseInput): Promise<CompanyExpense>
   updateCompanyExpense(userId: string, expenseId: string, input: UpdateCompanyExpenseInput): Promise<CompanyExpense>
   deleteCompanyExpense(userId: string, expenseId: string): Promise<void>
+  /**
+   * One cost's or invoice's files changed atomically, as the row is now: reads them (a row saved with the old
+   * single `file` reads as that one), applies `change`, and writes `files` with `file` cleared. A concurrent
+   * add and a concurrent remove both land. Throws what `change` throws, or a refusal of a list over the cap,
+   * writing nothing; a row that is not there is an error. `change` must be pure: a transaction may run it twice.
+   * Objects are the caller's: upload before, delete what `before` held and `after` does not, after.
+   */
+  changeFiles(
+    userId: string,
+    target: "cost" | "invoice",
+    id: string,
+    change: (files: InvoiceFile[]) => InvoiceFile[],
+  ): Promise<{ before: InvoiceFile[]; after: InvoiceFile[] }>
 
   // Company loans (finanziamento soci — not taxed, not deductible, cash flow only)
   getCompanyLoans(userId: string): Promise<CompanyLoan[]>

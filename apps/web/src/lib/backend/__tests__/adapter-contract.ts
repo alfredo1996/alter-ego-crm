@@ -5,9 +5,10 @@ import { describe, it, expect, beforeAll, afterAll, afterEach } from "vitest"
 import { ACCOUNT_HAS_ENTRIES, BILL_HAS_PAYMENTS, CLIENT_HAS_CASH, NON_CASH } from "@/lib/cash-book"
 import { CONTRACT_HAS_HOURS } from "@/lib/engagements"
 import { invoiceClientId } from "@/lib/invoices"
+import { INVOICE_FILES_MAX } from "@/types/schemas"
 
 import type { DatabaseAdapter, FilesAdapter, UploadRecord, UploadsAdapter } from "../types"
-import type { CreateCompanyMovementInput, CreateJournalEntryInput } from "@/types"
+import type { CreateCompanyMovementInput, CreateJournalEntryInput, InvoiceFile } from "@/types"
 
 export interface ContractSetup {
   (): Promise<{
@@ -22,6 +23,11 @@ export interface ContractSetup {
      * a contract, no clientId: 2027-01, €1,000 + €220 VAT — and returns its id.
      */
     seedLegacyInvoice: (engagementId: string, number: string) => Promise<string>
+    /**
+     * Firebase only: stores a cost or an invoice as the app wrote it before several files, with
+     * the one `file` key and no `files`, with the rules out of the way, and returns its id.
+     */
+    seedLegacyFile?: (target: "cost" | "invoice", file: InvoiceFile) => Promise<string>
     /** Firebase only: the daily balance snapshots v0.9.0 and older stored, still in production. */
     legacyBalanceSnapshots?: { seed: () => Promise<void>; count: () => Promise<number> }
     /** Firebase only: stores a net-worth snapshot dated `date` (a local day) worth `netWorth`. */
@@ -38,6 +44,7 @@ export function describeAdapterContract(name: string, setup: ContractSetup) {
     let otherUserId: string
     let seedLegacyTask: (engagementId: string, title: string) => Promise<string>
     let seedLegacyInvoice: (engagementId: string, number: string) => Promise<string>
+    let seedLegacyFile: Awaited<ReturnType<ContractSetup>>["seedLegacyFile"]
     let legacyBalanceSnapshots: Awaited<ReturnType<ContractSetup>>["legacyBalanceSnapshots"]
     let seedNetWorthSnapshot: Awaited<ReturnType<ContractSetup>>["seedNetWorthSnapshot"]
     let cleanupFn: () => Promise<void>
@@ -50,6 +57,7 @@ export function describeAdapterContract(name: string, setup: ContractSetup) {
       otherUserId = result.otherUserId
       seedLegacyTask = result.seedLegacyTask
       seedLegacyInvoice = result.seedLegacyInvoice
+      seedLegacyFile = result.seedLegacyFile
       legacyBalanceSnapshots = result.legacyBalanceSnapshots
       seedNetWorthSnapshot = result.seedNetWorthSnapshot
       cleanupFn = result.cleanup
@@ -2205,54 +2213,162 @@ export function describeAdapterContract(name: string, setup: ContractSetup) {
         )
       })
 
-      it("keeps the file on an expense and an invoice, and null on one without", async () => {
-        const f = await files.upload(userId, text("<a/>"), "cost.xml")
-        const plain = await db.createCompanyExpense(userId, { description: "No file", category: "other", amount: 10, date: new Date() })
-        expect(plain.file).toBeNull()
-        const cost = await db.updateCompanyExpense(userId, plain.id, { file: f })
-        expect(cost.file).toEqual(f)
-        expect((await db.getCompanyExpenses(userId)).find((e) => e.id === plain.id)?.file).toEqual(f)
-        expect((await db.updateCompanyExpense(userId, plain.id, { description: "Renamed" })).file).toEqual(f)
-        expect((await db.updateCompanyExpense(userId, plain.id, { file: null })).file).toBeNull()
+      const cost = (over: Record<string, unknown> = {}) =>
+        db.createCompanyExpense(userId, { description: "Files", category: "other", amount: 10, date: new Date(), ...over })
+      const names = (list: InvoiceFile[]) => list.map((f) => f.name)
+
+      it("keeps the files of an expense and an invoice, in order, and none on one without", async () => {
+        const [a, b] = await Promise.all([files.upload(userId, text("<a/>"), "a.xml"), files.upload(userId, text("<b/>"), "b.xml")])
+        const plain = await cost()
+        expect(plain.files).toEqual([])
+        const two = await db.updateCompanyExpense(userId, plain.id, { files: [a, b] })
+        expect(two.files).toEqual([a, b])
+        expect((await db.getCompanyExpenses(userId)).find((e) => e.id === plain.id)?.files).toEqual([a, b])
+        expect((await db.updateCompanyExpense(userId, plain.id, { description: "Renamed" })).files).toEqual([a, b])
+        expect((await db.updateCompanyExpense(userId, plain.id, { files: [b] })).files).toEqual([b])
+        expect((await db.updateCompanyExpense(userId, plain.id, { files: [] })).files).toEqual([])
         await db.deleteCompanyExpense(userId, plain.id)
-        await files.remove(f.path)
+        await Promise.all([files.remove(a.path), files.remove(b.path)])
 
         const client = await db.createClient(userId, { name: "File Client" })
-        const g = await files.upload(userId, text("<b/>"), "inv.xml")
-        const inv = await db.createInvoice(userId, { clientId: client.id, number: "F1", yearMonth: "2027-01", amount: 100, vat: 22, file: g })
-        expect(inv.file).toEqual(g)
-        expect((await db.getInvoices(userId)).find((i) => i.id === inv.id)?.file).toEqual(g)
-        expect((await db.updateInvoice(userId, inv.id, { number: "F2" })).file).toEqual(g)
+        const [g, h] = await Promise.all([files.upload(userId, text("<g/>"), "g.xml"), files.upload(userId, text("<h/>"), "h.pdf")])
+        const inv = await db.createInvoice(userId, { clientId: client.id, number: "F1", yearMonth: "2027-01", amount: 100, vat: 22, files: [g, h] })
+        expect(inv.files).toEqual([g, h])
+        expect((await db.getInvoices(userId)).find((i) => i.id === inv.id)?.files).toEqual([g, h])
+        expect((await db.updateInvoice(userId, inv.id, { number: "F2" })).files).toEqual([g, h])
         await db.deleteInvoice(userId, inv.id)
         await expect(files.download(g)).rejects.toThrow()
+        await expect(files.download(h)).rejects.toThrow()
         await db.deleteClient(userId, client.id)
       })
 
-      it("replace: the record names the new object and the old one is gone", async () => {
+      it("replace: the record names the new object, and the caller removes the old one", async () => {
         const old = await files.upload(userId, text("<old/>"), "old.xml")
-        const cost = await db.createCompanyExpense(userId, { description: "Replaced", category: "other", amount: 10, date: new Date(), file: old })
+        const row = await cost({ files: [old] })
         const next = await files.upload(userId, text("<new/>"), "new.xml")
-        // The order the form uses: write the pointer, then delete the old object.
-        expect((await db.updateCompanyExpense(userId, cost.id, { file: next })).file).toEqual(next)
+        // The order the form uses: write the pointers, then delete the old object.
+        expect((await db.updateCompanyExpense(userId, row.id, { files: [next] })).files).toEqual([next])
         await files.remove(old.path)
         await expect(files.download(old)).rejects.toThrow()
         expect(await read(next)).toBe("<new/>")
-        await db.deleteCompanyExpense(userId, cost.id)
+        await db.deleteCompanyExpense(userId, row.id)
       })
 
-      it("deleting a cost deletes its file", async () => {
-        const f = await files.upload(userId, text("<a/>"), "cost.xml")
-        const cost = await db.createCompanyExpense(userId, { description: "With file", category: "other", amount: 10, date: new Date(), file: f })
-        await db.deleteCompanyExpense(userId, cost.id)
-        await expect(files.download(f)).rejects.toThrow()
+      it("deleting a cost with two files deletes both objects", async () => {
+        const [a, b] = await Promise.all([files.upload(userId, text("<a/>"), "a.xml"), files.upload(userId, text("<b/>"), "b.xml")])
+        const row = await cost({ files: [a, b] })
+        await db.deleteCompanyExpense(userId, row.id)
+        await expect(files.download(a)).rejects.toThrow()
+        await expect(files.download(b)).rejects.toThrow()
       })
 
-      it("deleting a client deletes the files of its invoices", async () => {
+      it("deleting a client deletes every file of every invoice", async () => {
         const client = await db.createClient(userId, { name: "Doomed File Client" })
-        const f = await files.upload(userId, text("<a/>"), "inv.xml")
-        await db.createInvoice(userId, { clientId: client.id, number: "F9", yearMonth: "2027-01", amount: 100, vat: 22, file: f })
+        const four = await Promise.all(["a.xml", "b.xml", "c.xml", "d.xml"].map((n) => files.upload(userId, text(n), n)))
+        await db.createInvoice(userId, { clientId: client.id, number: "F9", yearMonth: "2027-01", amount: 100, vat: 22, files: four.slice(0, 2) })
+        await db.createInvoice(userId, { clientId: client.id, number: "F10", yearMonth: "2027-02", amount: 100, vat: 22, files: four.slice(2) })
         await db.deleteClient(userId, client.id)
-        await expect(files.download(f)).rejects.toThrow()
+        for (const f of four) await expect(files.download(f)).rejects.toThrow()
+      })
+
+      describe("a row saved with the old single file", () => {
+        const legacy = async (target: "cost" | "invoice", name = "old.xml") => {
+          const f = await files.upload(userId, text("<old/>"), name)
+          return { f, id: await seedLegacyFile!(target, f) }
+        }
+
+        it("reads as a one-file list, in the reads of a cost and an invoice", async () => {
+          if (!seedLegacyFile) return
+          const c = await legacy("cost", "c.xml")
+          const i = await legacy("invoice", "i.xml")
+          expect((await db.getCompanyExpenses(userId)).find((e) => e.id === c.id)?.files).toEqual([c.f])
+          expect((await db.getInvoices(userId)).find((x) => x.id === i.id)?.files).toEqual([i.f])
+          await db.deleteCompanyExpense(userId, c.id)
+          await db.deleteInvoice(userId, i.id)
+        })
+
+        it("keeps its file when another field is edited, and gives it up when files are written", async () => {
+          if (!seedLegacyFile) return
+          const c = await legacy("cost")
+          expect((await db.updateCompanyExpense(userId, c.id, { description: "Edited" })).files).toEqual([c.f])
+          const extra = await files.upload(userId, text("<x/>"), "x.xml")
+          expect((await db.updateCompanyExpense(userId, c.id, { files: [extra] })).files).toEqual([extra])
+          // The legacy key was cleared by that write: it does not come back.
+          expect((await db.getCompanyExpenses(userId)).find((e) => e.id === c.id)?.files).toEqual([extra])
+          await db.deleteCompanyExpense(userId, c.id)
+          await files.remove(c.f.path)
+        })
+
+        it("deleting it deletes the old object", async () => {
+          if (!seedLegacyFile) return
+          const c = await legacy("cost")
+          const i = await legacy("invoice", "i2.xml")
+          await db.deleteCompanyExpense(userId, c.id)
+          await db.deleteInvoice(userId, i.id)
+          await expect(files.download(c.f)).rejects.toThrow()
+          await expect(files.download(i.f)).rejects.toThrow()
+        })
+      })
+
+      describe("changeFiles: the row's files change atomically", () => {
+        const up = (n: string) => files.upload(userId, text(n), n)
+
+        it("applies the change to the files as they are now, returning before and after", async () => {
+          const [a, b] = await Promise.all([up("a.xml"), up("b.xml")])
+          const row = await cost({ files: [a] })
+          const done = await db.changeFiles(userId, "cost", row.id, (list) => [...list, b])
+          expect(done).toEqual({ before: [a], after: [a, b] })
+          expect((await db.getCompanyExpenses(userId)).find((e) => e.id === row.id)?.files).toEqual([a, b])
+          await db.deleteCompanyExpense(userId, row.id)
+        })
+
+        it("keeps a concurrent add and a concurrent remove, whichever lands first", async () => {
+          const [a, b, c] = await Promise.all([up("a.xml"), up("b.xml"), up("c.xml")])
+          const row = await cost({ files: [a, b] })
+          await Promise.all([
+            db.changeFiles(userId, "cost", row.id, (list) => [...list, c]),
+            db.changeFiles(userId, "cost", row.id, (list) => list.filter((f) => f.path !== a.path)),
+          ])
+          expect(names((await db.getCompanyExpenses(userId)).find((e) => e.id === row.id)!.files).sort()).toEqual(["b.xml", "c.xml"])
+          await db.deleteCompanyExpense(userId, row.id)
+        })
+
+        it("lands three parallel adds on an invoice", async () => {
+          const client = await db.createClient(userId, { name: "Parallel Files" })
+          const inv = await db.createInvoice(userId, { clientId: client.id, number: "P1", yearMonth: "2027-01", amount: 100, vat: 22 })
+          const three = await Promise.all(["p1.xml", "p2.xml", "p3.xml"].map(up))
+          await Promise.all(three.map((f) => db.changeFiles(userId, "invoice", inv.id, (list) => [...list, f])))
+          expect(names((await db.getInvoices(userId)).find((i) => i.id === inv.id)!.files).sort()).toEqual(["p1.xml", "p2.xml", "p3.xml"])
+          await db.deleteClient(userId, client.id)
+        })
+
+        it("writes nothing when the change throws, and refuses a list past the cap", async () => {
+          const a = await up("a.xml")
+          const row = await cost({ files: [a] })
+          await expect(db.changeFiles(userId, "cost", row.id, () => { throw new Error("no") })).rejects.toThrow("no")
+          const many = await Promise.all(Array.from({ length: INVOICE_FILES_MAX }, (_, i) => up(`m${i}.xml`)))
+          await expect(db.changeFiles(userId, "cost", row.id, (list) => [...list, ...many])).rejects.toThrow()
+          expect((await db.getCompanyExpenses(userId)).find((e) => e.id === row.id)?.files).toEqual([a])
+          await expect(db.changeFiles(userId, "cost", "no-such-row", (list) => list)).rejects.toThrow()
+          await db.deleteCompanyExpense(userId, row.id)
+
+          const client = await db.createClient(userId, { name: "Cap Files" })
+          const inv = await db.createInvoice(userId, { clientId: client.id, number: "C1", yearMonth: "2027-01", amount: 100, vat: 22 })
+          await expect(db.changeFiles(userId, "invoice", inv.id, (list) => [...list, ...many, ...many])).rejects.toThrow()
+          expect((await db.getInvoices(userId)).find((i) => i.id === inv.id)!.files).toEqual([])
+          await db.deleteClient(userId, client.id)
+        })
+
+        it("folds the old single file in, and clears it", async () => {
+          if (!seedLegacyFile) return
+          const old = await up("old.xml")
+          const id = await seedLegacyFile("cost", old)
+          const b = await up("b.xml")
+          expect(await db.changeFiles(userId, "cost", id, (list) => [...list, b])).toEqual({ before: [old], after: [old, b] })
+          await db.changeFiles(userId, "cost", id, (list) => list.filter((f) => f.path !== old.path))
+          expect((await db.getCompanyExpenses(userId)).find((e) => e.id === id)?.files).toEqual([b])
+          await db.deleteCompanyExpense(userId, id)
+        })
       })
     })
 

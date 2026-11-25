@@ -426,10 +426,11 @@ export interface Task {
 export type InvoiceFileKind = "xml" | "p7m" | "pdf"
 
 /**
- * The invoice file a cost or an invoice keeps, stored exactly as uploaded.
+ * An invoice file a cost or an invoice keeps, stored exactly as uploaded.
  * `path` is the object in Storage (the adapter chooses it); `name` is what the
- * file was called when it was picked. null on the record = no file, and on
- * every document written before this existed.
+ * file was called when it was picked. A record keeps a list of them (`files`,
+ * up to INVOICE_FILES_MAX); [] = none, and on every document written before
+ * files existed.
  */
 export interface InvoiceFile {
   path: string
@@ -483,8 +484,8 @@ export interface Invoice {
    * tick. null = not known (documents written before it, or never said).
    */
   paidAccountId: string | null
-  /** The invoice file kept with it; null or absent = none (every invoice written before files). */
-  file?: InvoiceFile | null
+  /** The invoice files kept with it, in the order they were added; [] = none (a document saved with the old single `file` reads as that one). */
+  files: InvoiceFile[]
   createdAt: Date
   updatedAt: Date
 }
@@ -564,8 +565,8 @@ export interface CompanyExpense {
   forMonth: string | null
   /** A rent offset: the lease it is netted against (its month is `forMonth`). null on any other cost. */
   leaseId?: string | null
-  /** The supplier's invoice file; null or absent = none (every cost written before files). */
-  file?: InvoiceFile | null
+  /** The supplier's invoice files, in the order they were added; [] = none (a document saved with the old single `file` reads as that one). */
+  files: InvoiceFile[]
   createdAt: Date
   updatedAt: Date
 }
@@ -593,7 +594,8 @@ export interface CreateCompanyExpenseInput {
   endMonth?: string | null
   priceChanges?: FeeChange[]
   countedWhenPaid?: boolean
-  file?: InvoiceFile | null
+  /** Replaces the whole list; absent leaves the files alone. */
+  files?: InvoiceFile[]
 }
 
 export type UpdateCompanyExpenseInput = Partial<CreateCompanyExpenseInput>
@@ -910,7 +912,8 @@ export interface CreateInvoiceInput {
   dueDate?: Date | null
   paidDate?: Date | null
   paidAccountId?: string | null
-  file?: InvoiceFile | null
+  /** Replaces the whole list; absent leaves the files alone. */
+  files?: InvoiceFile[]
 }
 
 export interface UpdateInvoiceInput {
@@ -923,7 +926,8 @@ export interface UpdateInvoiceInput {
   dueDate?: Date | null
   paidDate?: Date | null
   paidAccountId?: string | null
-  file?: InvoiceFile | null
+  /** Replaces the whole list; absent leaves the files alone. */
+  files?: InvoiceFile[]
 }
 
 /**

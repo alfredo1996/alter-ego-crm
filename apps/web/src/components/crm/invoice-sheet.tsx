@@ -38,7 +38,7 @@ import { StatusBadge } from "@/components/crm/invoice-table"
 import { MoneyInput } from "@/components/money-input"
 import { useClients } from "@/hooks/use-clients"
 import { useCompanyAccounts } from "@/hooks/use-company-accounts"
-import { FileUploadError, NO_FILE_CHANGE, writeWithInvoiceFile, type FileDraft } from "@/hooks/use-company-files"
+import { draftChanges, FileUploadError, NO_FILE_CHANGE, useChangeFiles, writeWithInvoiceFiles, type FileDraft } from "@/hooks/use-company-files"
 import { useEngagements } from "@/hooks/use-engagements"
 import { useCreateInvoice, useDeleteInvoice, useInvoices, useUpdateInvoice } from "@/hooks/use-invoices"
 import { useTimecards } from "@/hooks/use-timecards"
@@ -159,7 +159,7 @@ const day = (value: string) => (value ? new Date(`${value}T00:00:00`) : null)
 const dayKey = (d: Date | null | undefined) => (d ? isoDate(d) : "")
 
 // A new invoice is never paid here: the account is written by invoiceUpdate, when it changed.
-function invoiceInput(f: InvoiceFields): Required<Omit<UpdateInvoiceInput, "paidAccountId" | "file">> {
+function invoiceInput(f: InvoiceFields): Required<Omit<UpdateInvoiceInput, "paidAccountId" | "files">> {
   return {
     number: f.number.trim(),
     // From == to is a single month: stored as null, like every writer does.
@@ -175,7 +175,7 @@ function invoiceInput(f: InvoiceFields): Required<Omit<UpdateInvoiceInput, "paid
 /** The invoice Save would store, for the previews only: never written. */
 export function draftInvoice(f: InvoiceFields, clientId: string): Invoice {
   const now = new Date()
-  return { id: "draft", userId: "", clientId, engagementId: null, ...invoiceInput(f), paidAccountId: null, createdAt: now, updatedAt: now }
+  return { id: "draft", userId: "", clientId, engagementId: null, ...invoiceInput(f), paidAccountId: null, files: [], createdAt: now, updatedAt: now }
 }
 
 /**
@@ -457,6 +457,7 @@ function InvoiceForm({
   const { clients, engagements, timecards, invoices, accounts } = data
   const createInvoice = useCreateInvoice(userId)
   const updateInvoice = useUpdateInvoice(userId)
+  const changeFiles = useChangeFiles(userId)
   const deleteInvoice = useDeleteInvoice(userId)
   const [confirmDelete, setConfirmDelete] = useState(false)
   // The invoice file waits here until Save: Cancel uploads nothing.
@@ -586,7 +587,7 @@ function InvoiceForm({
     mode: "onTouched",
   })
   const values: InvoiceSheetValues = { ...initial.values, ...useWatch({ control: form.control }) }
-  const dirty = form.formState.isDirty || fileDraft.picked !== null || fileDraft.removed
+  const dirty = form.formState.isDirty || draftChanges(fileDraft)
   const { suggestion, amount, vat, vatSuggested } = resolve(values)
   const net = money(amount)
   const vatValue = money(vat)
@@ -669,10 +670,10 @@ function InvoiceForm({
     const f: InvoiceFields = { ...v, amount: cents(sign(Number(a))), vat: cents(sign(Number(t))) }
     const number = f.number.trim()
     /** The record and its file, written in the order that never leaves a pointer to a missing object. */
-    const save = async <T,>(write: (file: Invoice["file"]) => Promise<T>): Promise<{ value: T } | null> => {
+    const save = async <T,>(write: (files: Invoice["files"] | undefined) => Promise<T>): Promise<{ value: T } | null> => {
       setSaving(true)
       try {
-        return { value: await writeWithInvoiceFile({ userId: userId ?? "", stored: opened?.file, draft: fileDraft, write }) }
+        return { value: await writeWithInvoiceFiles({ userId: userId ?? "", target: "invoice", rowId: opened?.id, draft: fileDraft, changeFiles, write }) }
       } catch (err) {
         // A rejected write has its app-wide error toast; a failed upload is said here. The sheet stays to retry.
         if (err instanceof FileUploadError) toast({ variant: "destructive", title: `${Noun} not saved`, description: err.message })
@@ -683,8 +684,11 @@ function InvoiceForm({
     }
     if (opened) {
       const input = invoiceUpdate(opened, f)
-      if (Object.keys(input).length === 0 && !fileDraft.picked && !fileDraft.removed) return close()
-      const done = await save((file) => updateInvoice.mutateAsync({ id: opened.id, input: { ...input, ...(file !== undefined && { file }) } }))
+      if (Object.keys(input).length === 0 && !draftChanges(fileDraft)) return close()
+      // The files change on their own, as the row is at save time: only the fields go through this write.
+      const done = await save(async () => {
+        if (Object.keys(input).length > 0) await updateInvoice.mutateAsync({ id: opened.id, input })
+      })
       if (!done) return
       close()
       toast({ title: `${Noun} ${number} saved.` })
@@ -693,7 +697,7 @@ function InvoiceForm({
     if (!clientId) return
     const label = invoicePeriodLabel({ fromMonth: f.from < f.to ? f.from : null, yearMonth: f.to })
     const left = after ? rangeSuggestion(after, f.from, f.to).amount : 0
-    const saved = await save((file) => createInvoice.mutateAsync({ clientId, ...invoiceInput(f), ...(file !== undefined && { file }) }))
+    const saved = await save((files) => createInvoice.mutateAsync({ clientId, ...invoiceInput(f), ...(files !== undefined && { files }) }))
     if (!saved) return
     const created = saved.value
     close()
@@ -1178,8 +1182,8 @@ function InvoiceForm({
                   </Group>
                 )}
 
-                <Group title="Invoice File">
-                  <InvoiceFileSlot stored={opened?.file} draft={fileDraft} onDraftChange={setFileDraft} noun="invoice" viewHref={opened ? `/invoices/${opened.id}/file` : undefined} unsaved={dirty} disabled={pending} />
+                <Group title="Invoice Files">
+                  <InvoiceFileSlot stored={opened?.files ?? []} draft={fileDraft} onDraftChange={setFileDraft} noun="invoice" viewHref={opened ? `/invoices/${opened.id}/file` : undefined} unsaved={dirty} disabled={pending} />
                 </Group>
 
                 <div className={cn(ROW, "rounded-lg bg-surface-subtle px-3 py-2.5")}>

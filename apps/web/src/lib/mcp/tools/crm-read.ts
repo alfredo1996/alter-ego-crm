@@ -64,7 +64,7 @@ import {
   plural,
   resolveClient,
   resolveCompanyAccount,
-  fileSummary,
+  filesOf,
   resolveEngagement,
   resolveSolution,
   revenueCells,
@@ -490,7 +490,7 @@ export function registerCrmReadTools(server: McpServer): void {
           dueDate: i.dueDate ? isoDate(i.dueDate) : null,
           paidDate: i.paidDate ? isoDate(i.paidDate) : null,
           overdue: isInvoiceOverdue(i, today),
-          file: fileSummary(i.file),
+          files: filesOf(i.files),
         }))
         const overdue = rows.filter((r) => r.overdue)
         const overdueTotal = round2(overdue.reduce((s, r) => s + r.total, 0))
@@ -1433,9 +1433,9 @@ export function registerCrmReadTools(server: McpServer): void {
 
         // The page's own read model, step by step: cashRows → splitRows → the rest.
         const { rows, counted } = bookRows({ accounts, invoices, expenses, loans, movements, clients, engagements })
-        // The file an invoice or a cost row keeps; a loan or a movement has none.
+        // The files an invoice or a cost row keeps; a loan or a movement has none.
         const fileOf = (source: string, id: string) =>
-          fileSummary(source === "invoice" ? invoices.find((i) => i.id === id)?.file : source === "expense" ? expenses.find((e) => e.id === id)?.file : null)
+          filesOf(source === "invoice" ? invoices.find((i) => i.id === id)?.files : source === "expense" ? expenses.find((e) => e.id === id)?.files : undefined)
         const balances = balancesAt(accounts, counted, today)
 
         // A month is its sheet; a year, each month the Months tab lists, up to this one.
@@ -1478,7 +1478,7 @@ export function registerCrmReadTools(server: McpServer): void {
               amount: r.delta,
               why: opened.has(r.accountId) ? "dated before the account opened" : "on an unknown account",
               source: r.source,
-              file: fileOf(r.source, r.sourceId),
+              files: fileOf(r.source, r.sourceId),
               id: r.sourceId,
               ...(r.importRef ? { imported: true } : {}),
             })),
@@ -1500,7 +1500,7 @@ export function registerCrmReadTools(server: McpServer): void {
                   costCentre: e.project,
                   amount: -round2(e.amount + (e.vat ?? 0)),
                   source: "expense",
-                  file: fileSummary(e.file),
+                  files: filesOf(e.files),
                   id: e.id,
                   ...(e.importRef ? { imported: true } : {}),
                 }))
@@ -1634,7 +1634,7 @@ export function registerCrmReadTools(server: McpServer): void {
             endOfDay,
             dateEstimated: row.dateEstimated,
             source: row.source,
-            file: fileOf(row.source, row.sourceId),
+            files: fileOf(row.source, row.sourceId),
             id: row.sourceId,
             ...(row.importRef ? { imported: true } : {}),
           })),

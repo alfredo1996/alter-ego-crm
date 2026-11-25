@@ -51,7 +51,7 @@ const hoursIn = (engagementId: string, ym: string, days: number, perDay = 8): Ti
 }
 const invoice = (o: Partial<Invoice> & Pick<Invoice, "number" | "yearMonth" | "amount">): Invoice => ({
   id: `i${++seq}`, userId: "u", clientId: "c1", engagementId: null, fromMonth: null, vat: 0, dueDate: null,
-  paidDate: null, paidAccountId: null, createdAt: new Date(2026, 4, 1, 0, 0, seq), updatedAt: at, ...o,
+  paidDate: null, paidAccountId: null, files: [], createdAt: new Date(2026, 4, 1, 0, 0, seq), updatedAt: at, ...o,
 })
 const account = (o: Partial<CompanyAccount> & Pick<CompanyAccount, "id" | "name">): CompanyAccount => ({
   userId: "u", openingBalance: 1000, openingDate: d("2026-07-01"), statementBalance: null, statementDate: null,
@@ -64,7 +64,7 @@ const movement = (o: Partial<CompanyMovement> & Pick<CompanyMovement, "kind" | "
 })
 const expense = (o: Partial<CompanyExpense> & Pick<CompanyExpense, "id" | "description" | "category" | "amount" | "date">): CompanyExpense => ({
   userId: "u", isRecurring: false, recurrenceMonths: null, notes: null, accountId: null, paidByOwner: false, vat: 0,
-  documentRef: null, project: null, recurringExpenseId: null, dateEstimated: false, importRef: null, collaboratorId: null, engagementId: null, forMonth: null,
+  documentRef: null, project: null, recurringExpenseId: null, dateEstimated: false, importRef: null, collaboratorId: null, engagementId: null, forMonth: null, files: [],
   createdAt: at, updatedAt: at, ...o,
 })
 const deadline = (o: Partial<CompanyDeadline> & Pick<CompanyDeadline, "id" | "title" | "date">): CompanyDeadline => ({
@@ -632,13 +632,13 @@ describe("Invoice Files", () => {
     const data = base({
       invoices: [
         invoice({ id: "inv-bare", number: "15/2026", yearMonth: "2026-09", amount: 4500 }),
-        invoice({ id: "inv-file", number: "14/2026", yearMonth: "2026-09", amount: 100, file: stored }),
+        invoice({ id: "inv-file", number: "14/2026", yearMonth: "2026-09", amount: 100, files: [stored] }),
         ...paidInvoices().slice(0, 2),
       ],
       expenses: [
         expense({ id: "bare", description: "Hosting", category: "software", amount: 41.2, date: d("2026-09-03"), documentRef: "EU-1" }),
         expense({ id: "est", description: "Rent", category: "rent", amount: 900, date: d("2026-07-01"), isRecurring: true }),
-        expense({ id: "has", description: "Phone", category: "software", amount: 30, date: d("2026-09-05"), file: stored }),
+        expense({ id: "has", description: "Phone", category: "software", amount: 30, date: d("2026-09-05"), files: [stored] }),
       ],
     })
     const m = sept(data)
@@ -649,6 +649,24 @@ describe("Invoice Files", () => {
     ])
     expect(m.steps.files.items.filter((i) => i.status === "done").map((i) => i.ref)).toEqual(["has", "inv-file"])
     expect(m.steps.files.items[0].detail).toBe("Cost · 3 Sep · €41.20 · Invoice EU-1")
+  })
+
+  it("is to check only without a file; with several, its detail names them all", () => {
+    const second = { ...stored, name: "b.xml", path: "company-files/u/b.xml" }
+    const data = base({
+      invoices: [],
+      expenses: [
+        expense({ id: "one", description: "Phone", category: "software", amount: 30, date: d("2026-09-05"), files: [stored] }),
+        expense({ id: "two", description: "Print run", category: "software", amount: 30, date: d("2026-09-06"), files: [stored, second] }),
+        expense({ id: "none", description: "Hosting", category: "software", amount: 30, date: d("2026-09-07"), files: [] }),
+      ],
+    })
+    const items = sept(data).steps.files.items
+    expect(items.map((i) => [i.ref, i.status, i.detail?.startsWith("Cost") ? "bare" : i.detail])).toEqual([
+      ["one", "done", "a.xml"],
+      ["two", "done", "2 files: a.xml, b.xml"],
+      ["none", "check", "bare"],
+    ])
   })
 
   it("calls a negative invoice a credit note in its text and detail", () => {

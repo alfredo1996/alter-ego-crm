@@ -30,7 +30,7 @@ afterEach(() => vi.unstubAllGlobals())
 describe("invoice files on the web adapter", () => {
   it("a failed object delete does not undo the cost delete: one unreferenced object is left", async () => {
     const file = await adapter.files.upload(userId, new Blob(["<a/>"]), "stuck.xml")
-    const cost = await adapter.db.createCompanyExpense(userId, { description: "Stuck", category: "other", amount: 10, date: new Date(), file })
+    const cost = await adapter.db.createCompanyExpense(userId, { description: "Stuck", category: "other", amount: 10, date: new Date(), files: [file] })
     vi.mocked(deleteObject).mockRejectedValueOnce(Object.assign(new Error("offline"), { code: "storage/retry-limit-exceeded" }))
     await expect(adapter.db.deleteCompanyExpense(userId, cost.id)).resolves.toBeUndefined()
     expect((await adapter.db.getCompanyExpenses(userId)).find((e) => e.id === cost.id)).toBeUndefined()

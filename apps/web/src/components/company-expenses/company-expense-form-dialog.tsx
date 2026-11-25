@@ -24,7 +24,7 @@ import { useAssignments } from "@/hooks/use-assignments"
 import { useClients } from "@/hooks/use-clients"
 import { useCollaborators } from "@/hooks/use-collaborators"
 import { useCreateCompanyExpense, useUpdateCompanyExpense } from "@/hooks/use-company-expenses"
-import { FileUploadError, NO_FILE_CHANGE, writeWithInvoiceFile, type FileDraft } from "@/hooks/use-company-files"
+import { draftChanges, FileUploadError, NO_FILE_CHANGE, useChangeFiles, writeWithInvoiceFiles, type FileDraft } from "@/hooks/use-company-files"
 import { useEngagements } from "@/hooks/use-engagements"
 import { useTimecards } from "@/hooks/use-timecards"
 import { COST_CATEGORY_LABELS, pickEstimate, round2 } from "@/lib/cash-book"
@@ -105,7 +105,7 @@ function timingHint(v: Values, amount: number): string {
 const DRAFT_ESTIMATE: CompanyExpense = {
   id: "draft", userId: "", description: "", category: "other", amount: 0, date: new Date(0), isRecurring: true, recurrenceMonths: 1,
   notes: null, accountId: null, paidByOwner: false, vat: null, documentRef: null, project: null, recurringExpenseId: null,
-  dateEstimated: false, importRef: null, collaboratorId: null, engagementId: null, forMonth: null, createdAt: new Date(0), updatedAt: new Date(0),
+  dateEstimated: false, importRef: null, collaboratorId: null, engagementId: null, forMonth: null, files: [], createdAt: new Date(0), updatedAt: new Date(0),
 }
 
 /** "every month", "every 3 months". */
@@ -225,6 +225,7 @@ function CostForm({
 }) {
   const createExpense = useCreateCompanyExpense(userId)
   const updateExpense = useUpdateCompanyExpense(userId)
+  const changeFiles = useChangeFiles(userId)
   const { data: collaborators = [] } = useCollaborators(userId)
   const { data: assignments = [] } = useAssignments(userId)
   const { data: engagements = [] } = useEngagements(userId)
@@ -377,13 +378,15 @@ function CostForm({
     }
     setSaving(true)
     try {
-      await writeWithInvoiceFile({
+      await writeWithInvoiceFiles({
         userId: userId ?? "",
-        stored: editing?.file,
-        // An estimate is no invoice: it keeps no file, so switching a cost to one removes its file.
-        draft: recurring ? (editing?.file ? { picked: null, removed: true } : NO_FILE_CHANGE) : fileDraft,
-        write: async (file) => {
-          const withFile = { ...input, ...(file !== undefined && { file }) }
+        target: "cost",
+        rowId: editing?.id,
+        changeFiles,
+        // An estimate is no invoice: it keeps no file, so switching a cost to one removes every file it holds.
+        draft: recurring ? { picked: [], removed: (editing?.files ?? []).map((f) => f.path) } : fileDraft,
+        write: async (files) => {
+          const withFile = { ...input, ...(files !== undefined && { files }) }
           if (editing) {
             // Any date edit makes the day a real one.
             const dateEdited = values.date !== isoDate(editing.date)
@@ -822,14 +825,14 @@ function CostForm({
 
           {!v.isRecurring && (
             <div className="space-y-2">
-              <span className="text-sm font-medium leading-none">Invoice File</span>
+              <span className="text-sm font-medium leading-none">Invoice Files</span>
               <InvoiceFileSlot
-                stored={editing?.file}
+                stored={editing?.files ?? []}
                 draft={fileDraft}
                 onDraftChange={setFileDraft}
                 noun="cost"
                 viewHref={editing ? `/costs/${editing.id}/file` : undefined}
-                unsaved={form.formState.isDirty || fileDraft.picked !== null || fileDraft.removed}
+                unsaved={form.formState.isDirty || draftChanges(fileDraft)}
                 disabled={pending}
                 hint="The XML from the SDI, signed (.p7m) or not. A PDF only when the supplier sends no XML."
               />
@@ -845,6 +848,11 @@ function CostForm({
                   <div className="space-y-0.5">
                     <FormLabel>Recurring Estimate</FormLabel>
                     <FormDescription>The Plan counts it every period, until a payment stands for it.</FormDescription>
+                    {v.isRecurring && editing && editing.files.length > 0 && (
+                      <p role="status" className="text-xs text-warning-soft-foreground">
+                        Its {editing.files.length} invoice {editing.files.length === 1 ? "file is" : "files are"} removed when you save.
+                      </p>
+                    )}
                   </div>
                   <FormControl>
                     <Switch

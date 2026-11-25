@@ -39,7 +39,7 @@ const SEP_HOURS: Timecard = {
 }
 const SEP_INVOICE: Invoice = {
   id: "i1", userId: "u1", clientId: "c1", engagementId: null, number: "9/2026", fromMonth: null, yearMonth: "2026-09",
-  amount: 8000, vat: 0, dueDate: null, paidDate: null, paidAccountId: null, createdAt: at, updatedAt: at,
+  amount: 8000, vat: 0, dueDate: null, paidDate: null, paidAccountId: null, files: [], createdAt: at, updatedAt: at,
 }
 
 beforeAll(() => vi.setSystemTime(new Date(2026, 9, 7, 12)))

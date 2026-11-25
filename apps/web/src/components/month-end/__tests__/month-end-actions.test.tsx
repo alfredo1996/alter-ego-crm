@@ -142,8 +142,24 @@ describe("Month End's fixes", () => {
     fireEvent.change(screen.getByLabelText("Choose invoice file"), { target: { files: [pdf] } })
     await badge("Invoice Files", "Done")
     expect(await screen.findByText("Attached EU-1.pdf.")).toBeInTheDocument()
-    const stored = (await db.getCompanyExpenses(U)).find((e) => e.id === hosting.id)?.file
-    expect(stored).toMatchObject({ name: "EU-1.pdf", kind: "pdf", size: 4 })
+    const stored = (await db.getCompanyExpenses(U)).find((e) => e.id === hosting.id)?.files
+    expect(stored).toHaveLength(1)
+    expect(stored?.[0]).toMatchObject({ name: "EU-1.pdf", kind: "pdf", size: 4 })
+  })
+
+  it("Attach File adds to the files the row holds by the time it is written, not to a list read earlier", async () => {
+    const lumen = await contract("Lumen Srl", "Retainer", 10)
+    await hours(lumen.engagementId, "2026-08", 10)
+    await hours(lumen.engagementId, "2026-09", 10)
+    const hosting = await db.createCompanyExpense(U, { description: "Hosting", category: "software", amount: 41.2, date: d("2026-09-03"), documentRef: "EU-1" })
+    await show()
+    const meanwhile = await getBackend().files.upload(U, new Blob(["<a/>"]), "meanwhile.xml")
+    await db.changeFiles(U, "cost", hosting.id, (list) => [...list, meanwhile])
+    fireEvent.click(within(card("Invoice Files")).getByRole("button", { name: "Attach File" }))
+    fireEvent.change(screen.getByLabelText("Choose invoice file"), { target: { files: [new File(["%PDF"], "EU-2.pdf", { type: "application/pdf" })] } })
+    expect(await screen.findByText("Attached EU-2.pdf.")).toBeInTheDocument()
+    const files = (await db.getCompanyExpenses(U)).find((e) => e.id === hosting.id)?.files
+    expect(files?.map((f) => f.name)).toEqual(["meanwhile.xml", "EU-2.pdf"])
   })
 
   it("Attach File shows Attaching and disables the row's button until the upload ends", async () => {
@@ -174,7 +190,7 @@ describe("Month End's fixes", () => {
     fireEvent.click(within(card("Invoice Files")).getByRole("button", { name: "Attach File" }))
     fireEvent.change(screen.getByLabelText("Choose invoice file"), { target: { files: [new File(["x"], "notes.docx")] } })
     expect(await screen.findByText("notes.docx can't be attached: use the XML, the signed .p7m, or a PDF.")).toBeInTheDocument()
-    expect((await db.getCompanyExpenses(U)).find((e) => e.id === hosting.id)?.file ?? null).toBeNull()
+    expect((await db.getCompanyExpenses(U)).find((e) => e.id === hosting.id)?.files).toEqual([])
   })
 
   // The plan's example A.

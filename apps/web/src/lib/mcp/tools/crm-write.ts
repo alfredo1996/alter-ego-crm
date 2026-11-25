@@ -116,7 +116,7 @@ import {
   targetEngagement,
   timecardDecision,
 } from "@/lib/mcp/tools/helpers"
-import { fileHolder, fileTargetInput, fileText, ownFolder } from "@/lib/mcp/tools/invoice-files"
+import { addedSummary, addFile, duplicateOf, fileHolder, fileIdInput, fileTargetInput, fileText, ownFolder, pickFile, refuseBeforeAdding } from "@/lib/mcp/tools/invoice-files"
 import { healthByContract } from "@/lib/meetings"
 import { getClient as getOAuthClient } from "@/lib/oauth/store"
 import { isOpen, STAGE_LABELS, STAGE_PROBABILITY } from "@/lib/opportunities"
@@ -158,6 +158,7 @@ import {
   solutionSectionKeySchema,
   solutionStatusSchema,
   SOLUTION_TARGET_MAX,
+  INVOICE_FILES_MAX,
   updateMeetingSchema,
 } from "@/types/schemas"
 
@@ -936,14 +937,23 @@ async function previewOrApply(
 /** "6 bytes" of base64 without decoding it: the size the file would have. */
 const base64Bytes = (b64: string) => Math.floor((b64.length * 3) / 4) - (b64.endsWith("==") ? 2 : b64.endsWith("=") ? 1 : 0)
 
-/** Points the record at `file`. A legacy record the schema no longer accepts answers with the schema's words, as valid() does. */
-async function pointAt(userId: string, target: "cost" | "invoice", id: string, file: InvoiceFile | null) {
+/**
+ * One atomic change to a row's files, as the row is now (so parallel calls for one row all land). A legacy record the schema
+ * no longer accepts answers with the schema's words, as valid() does.
+ */
+async function changeRow(userId: string, target: "cost" | "invoice", id: string, change: (files: InvoiceFile[]) => InvoiceFile[]) {
   try {
-    await (target === "cost" ? getServerDb().updateCompanyExpense(userId, id, { file }) : getServerDb().updateInvoice(userId, id, { file }))
+    return await getServerDb().changeFiles(userId, target, id, change)
   } catch (e) {
     if (e instanceof z.ZodError) throw new ToolInputError(e.issues.map((i) => i.message).join("; "))
     throw e
   }
+}
+
+/** After a change: the objects the row held and no longer names go (the row names the new ones first). */
+async function dropRemoved(userId: string, before: InvoiceFile[], after: InvoiceFile[]): Promise<void> {
+  const kept = new Set(after.map((f) => f.path))
+  for (const f of before) if (!kept.has(f.path)) await dropObject(userId, f)
 }
 
 /** Deletes an object a record named, only inside the caller's own folder. A failure leaves one unreferenced object. */
@@ -4126,16 +4136,17 @@ export function registerCrmWriteTools(server: McpServer): void {
     {
       title: "Attach Invoice File",
       description:
-        "Attaches an invoice file to a company (SRL) cost (the supplier's invoice) or to an issued invoice, as the Attach " +
-        "File slot does on the web: the FatturaPA XML, the signed .xml.p7m, or a PDF where there is no XML, up to 10 MB. " +
+        "Adds an invoice file to a company (SRL) cost (the supplier's invoice) or to an issued invoice, as Add File does on the " +
+        `web: the FatturaPA XML, the signed .xml.p7m, or a PDF where there is no XML, up to 10 MB. A row holds up to ${INVOICE_FILES_MAX} files, ` +
+        "so one payment can carry every invoice and credit note it settles: call once per file. " +
         "target is cost or invoice; id is the one get_cash_book (a cost) or list_invoices (an invoice) lists; name is the " +
         "file name with its extension (it decides the kind). Give the file as exactly one of content_base64 or url. " +
         "content_base64 is only for files under about 10 KB, since the model has to write every byte out: larger files go " +
         "through create_upload_url then complete_upload. url is an https address the server downloads (10 MB at most, " +
-        "never a private or internal address): «allega la fattura XML». Check the row's file in get_cash_book or " +
-        "list_invoices first: when it has none, this writes at once, with no preview. When it has one, ask the owner " +
-        "whether to replace it, and only then call again with replace: true, which swaps it and deletes the old one. " +
-        "Without replace: true a row that has a file is refused, naming it. The reply carries the stored file's sha256.",
+        "never a private or internal address): «allega la fattura XML». It writes at once, with no preview, and refuses a " +
+        "file the row already holds (same name and size). replace: true swaps the file of a row that holds exactly one (ask " +
+        "the owner first); to change one of several, remove it with remove_file and its fileId, then attach the new one. " +
+        "The reply carries the stored file's fileId and sha256.",
       inputSchema: z.object({
         target: fileTargetInput,
         id: z.string().min(1),
@@ -4171,32 +4182,32 @@ export function registerCrmWriteTools(server: McpServer): void {
             if (!check.ok) throw new ToolInputError(check.reason)
           }
           const holder = await fileHolder(userId, input.target, input.id)
-          if (holder.file && !input.replace) {
-            throw new ToolInputError(`This ${holder.noun} already has a file: ${fileText(holder.file)}. Ask the owner whether to replace it; if they agree, call again with replace: true.`)
-          }
+          // A retry of a file the row already holds is a retry, even on a full row: its size is known before any download.
+          const retried = bytes && !input.replace ? duplicateOf(holder.files, { name: input.name, size: bytes.length }) : undefined
+          if (retried) throw new ToolInputError(`${holder.label[0].toUpperCase()}${holder.label.slice(1)} already holds ${fileText(retried)}. Nothing was attached.`)
+          const refused = refuseBeforeAdding(holder, input.replace === true, "Nothing was attached; remove one with remove_file first.")
+          if (refused) throw new ToolInputError(refused)
           if (!bytes) {
             bytes = await downloadPublicFile(input.url!)
             if (bytes.length === 0) throw new ToolInputError("The download was empty.")
             const check = checkInvoiceFile({ name: input.name, size: bytes.length })
             if (!check.ok) throw new ToolInputError(check.reason)
           }
+          const same = input.replace ? undefined : duplicateOf(holder.files, { name: input.name, size: bytes.length })
+          if (same) throw new ToolInputError(`${holder.label[0].toUpperCase()}${holder.label.slice(1)} already holds ${fileText(same)}. Nothing was attached.`)
           const files = getServerFiles()
-          // Upload first, point second: a failed upload never leaves a record naming a file that is not there.
+          // Upload first, point second, delete last: a failed upload never leaves a record naming a file that is not there.
           const stored = await files.upload(userId, new Blob([new Uint8Array(bytes)]), input.name)
+          let changed: { before: InvoiceFile[]; after: InvoiceFile[] }
           try {
-            await pointAt(userId, input.target, input.id, stored)
+            changed = await changeRow(userId, input.target, input.id, addFile(holder, stored, input.replace === true, false))
           } catch (e) {
             await dropObject(userId, stored)
             throw e
           }
-          await dropObject(userId, holder.file)
+          await dropRemoved(userId, changed.before, changed.after)
           return {
-            payload: {
-              summary: holder.file
-                ? `Replaced ${holder.file.name} with ${fileText(stored)} on ${holder.label}.`
-                : `Attached ${fileText(stored)} to ${holder.label}.`,
-              file: fileSummary(stored, sha256Hex(bytes)),
-            },
+            payload: { summary: addedSummary(holder, changed.before, changed.after, stored, input.replace === true), file: fileSummary(stored, sha256Hex(bytes)) },
             documentIds: [input.id],
           }
         },
@@ -4211,8 +4222,9 @@ export function registerCrmWriteTools(server: McpServer): void {
         "Makes a temporary link to upload a larger invoice file (an XML with an embedded PDF, a PDF: up to 10 MB) to a company " +
         "(SRL) cost or an issued invoice without writing its bytes out: «allega questa fattura». target is cost or invoice; id " +
         "is the one get_cash_book or list_invoices lists; name is the file name with its extension; size (bytes) and sha256 " +
-        "(hex) are optional and checked when the upload completes; replace: true is for a row that already has a file (ask " +
-        "the owner first). It runs attach_file's checks and returns uploadId, uploadUrl, method PUT, headers, expiresAt " +
+        `(hex) are optional and checked when the upload completes. A row holds up to ${INVOICE_FILES_MAX} files and each link adds one, ` +
+        "so make one link per file; links for the same row can be completed in any order. replace: true swaps the file of a row " +
+        "that holds exactly one (ask the owner first). It runs attach_file's checks and returns uploadId, uploadUrl, method PUT, headers, expiresAt " +
         `(15 minutes) and maxBytes. The link takes one file, once, with no key: upload with ${CURL}, then call complete_upload ` +
         "with the uploadId. The row changes only at complete_upload; an upload never completed is deleted once the link expires.",
       inputSchema: z.object({
@@ -4230,9 +4242,8 @@ export function registerCrmWriteTools(server: McpServer): void {
         const check = checkInvoiceFile({ name: input.name, size: input.size ?? 0 })
         if (!check.ok) throw new ToolInputError(check.reason)
         const holder = await fileHolder(userId, input.target, input.id)
-        if (holder.file && !input.replace) {
-          throw new ToolInputError(`This ${holder.noun} already has a file: ${fileText(holder.file)}. Ask the owner whether to replace it; if they agree, call again with replace: true.`)
-        }
+        const refused = refuseBeforeAdding(holder, input.replace === true, "Remove one with remove_file first.")
+        if (refused) throw new ToolInputError(refused)
         const request = ctx.http?.req
         const origin = request ? publicOrigin(request) : process.env.MCP_PUBLIC_ORIGIN?.replace(/\/+$/, "")
         if (!origin) throw new ToolInputError("This connection has no public address to upload to: use attach_file.")
@@ -4268,8 +4279,8 @@ export function registerCrmWriteTools(server: McpServer): void {
       title: "Complete Upload",
       description:
         "Finishes an upload made with create_upload_url: checks that the file arrived and that its size and sha256 match the " +
-        "declared ones, then attaches it to the cost or invoice the link was made for, and returns what attach_file returns " +
-        "(name, kind, size, sha256). Only now does the row change; with replace: true the old file is deleted at this point. " +
+        "declared ones, then adds it to the cost or invoice the link was made for, and returns what attach_file returns " +
+        "(fileId, name, kind, size, sha256). Only now does the row change; with replace: true the old file is deleted at this point. " +
         "Call it after the PUT answered 201.",
       inputSchema: z.object({ uploadId: z.string().regex(/^[A-Za-z0-9_-]{43}$/, "uploadId is the one create_upload_url returned") }),
     },
@@ -4301,22 +4312,14 @@ export function registerCrmWriteTools(server: McpServer): void {
           if (upload.declaredSha256 !== null && sha256 !== upload.declaredSha256) {
             throw new ToolInputError("The sha256 of the file that arrived does not match the declared sha256. Nothing was attached and the upload was discarded.")
           }
-          // The row may have changed since the link was made: look again.
+          // The row may have changed since the link was made: the change reads it as it is, atomically.
           const holder = await fileHolder(userId, upload.target, upload.rowId)
-          if (holder.file && !upload.replace) {
-            throw new ToolInputError(`This ${holder.noun} already has a file: ${fileText(holder.file)}. Nothing was attached; ask the owner whether to replace it, then start again with replace: true.`)
-          }
-          await pointAt(userId, upload.target, upload.rowId, stored)
-          // The row now names the new object: only now does the old one go.
-          await dropObject(userId, holder.file)
+          const changed = await changeRow(userId, upload.target, upload.rowId, addFile(holder, stored, upload.replace, true))
+          // The row now names the new object: only now does a replaced one go.
+          await dropRemoved(userId, changed.before, changed.after)
           await db.moveUpload(upload.id, "completing", "completed").catch((e) => console.error("Could not mark the upload completed", e))
           return {
-            payload: {
-              summary: holder.file
-                ? `Replaced ${holder.file.name} with ${fileText(stored)} on ${holder.label}.`
-                : `Attached ${fileText(stored)} to ${holder.label}.`,
-              file: fileSummary(stored, sha256),
-            },
+            payload: { summary: addedSummary(holder, changed.before, changed.after, stored, upload.replace), file: fileSummary(stored, sha256) },
             documentIds: [upload.rowId],
           }
         } catch (e) {
@@ -4332,11 +4335,12 @@ export function registerCrmWriteTools(server: McpServer): void {
     {
       title: "Remove Invoice File",
       description:
-        "Removes the invoice file from a company (SRL) cost or an issued invoice and deletes it from storage (target cost " +
-        "or invoice, id from get_cash_book or list_invoices): «togli il PDF dalla fattura». To swap a file use " +
-        "attach_file with replace: true. Preview, then confirm: called without confirm it changes nothing and says which " +
-        "file would go; show that to the owner and ask; only once they agree call again, the same arguments, with confirm: true.",
-      inputSchema: z.object({ target: fileTargetInput, id: z.string().min(1), confirm: confirmInput }),
+        "Removes one invoice file from a company (SRL) cost or an issued invoice and deletes it from storage (target cost " +
+        "or invoice, id from get_cash_book or list_invoices; fileId from the row's files there, needed when the row holds more " +
+        "than one): «togli il PDF dalla fattura». To swap the only file of a row use attach_file with replace: true. " +
+        "Preview, then confirm: called without confirm it changes nothing and says which file would go; show that to the " +
+        "owner and ask; only once they agree call again, the same arguments, with confirm: true.",
+      inputSchema: z.object({ target: fileTargetInput, id: z.string().min(1), fileId: fileIdInput, confirm: confirmInput }),
     },
     async (input, ctx) =>
       audited(
@@ -4345,22 +4349,22 @@ export function registerCrmWriteTools(server: McpServer): void {
         input,
         async (userId) => {
           const holder = await fileHolder(userId, input.target, input.id)
-          if (!holder.file) throw new ToolInputError(`${holder.label[0].toUpperCase()}${holder.label.slice(1)} has no file.`)
+          const picked = pickFile(holder, input.fileId)
           if (!input.confirm) {
             return {
               payload: {
                 preview: true,
                 summary:
-                  `Preview, nothing changed yet: remove ${fileText(holder.file)} from ${holder.label}. Show this to the owner and ask; ` +
+                  `Preview, nothing changed yet: remove ${fileText(picked)} from ${holder.label}. Show this to the owner and ask; ` +
                   "if they agree, call again with the same arguments and confirm: true.",
-                file: fileSummary(holder.file),
+                file: fileSummary(picked),
               },
               documentIds: [],
             }
           }
-          await pointAt(userId, input.target, input.id, null)
-          await dropObject(userId, holder.file)
-          return { payload: { summary: `Removed ${holder.file.name} from ${holder.label}.`, file: fileSummary(holder.file) }, documentIds: [input.id] }
+          const { before, after } = await changeRow(userId, input.target, input.id, (files) => files.filter((f) => f.path !== picked.path))
+          await dropRemoved(userId, before, after)
+          return { payload: { summary: `Removed ${picked.name} from ${holder.label}.`, file: fileSummary(picked) }, documentIds: [input.id] }
         },
         !input.confirm,
       ),

@@ -32,7 +32,24 @@ export function invoiceFileKind(name: string): InvoiceFileKind | null {
 /** What a stored file is saved as: the signed XML keeps its double extension. */
 export const INVOICE_FILE_EXTENSION: Record<InvoiceFileKind, string> = { xml: ".xml", p7m: ".xml.p7m", pdf: ".pdf" }
 
-/** One cost or invoice of a period, with the file it keeps (null = none). */
+/**
+ * The id of a stored file: its object's name without the extension, the same in the web
+ * app's links and over MCP. A mock path (`mock-12`) has none to cut.
+ */
+export function fileIdOf(path: string): string {
+  return (path.split("/").pop() ?? path).replace(/\.(xml\.p7m|xml|pdf)$/i, "")
+}
+
+/**
+ * A stored row's files, raw: the legacy single `file` first (it is older), then `files`
+ * as stored. Each adapter maps the result with its own file mapper.
+ * ponytail: rows saved before several files keep their one `file`; it reads as the first of `files` until the row's files next change (every write of `files` also writes `file: null`). Drop this only after a one-off rewrite of stored rows.
+ */
+export function storedFiles(files: unknown, file: unknown): unknown[] {
+  return [...(file ? [file] : []), ...(Array.isArray(files) ? files : [])]
+}
+
+/** One cost or invoice of a period, with the files it keeps ([] = none). */
 export interface PeriodDocument {
   kind: "cost" | "invoice"
   id: string
@@ -45,7 +62,7 @@ export interface PeriodDocument {
   /** An invoice's customer. */
   customer: string | null
   amount: number
-  file: InvoiceFile | null
+  files: InvoiceFile[]
 }
 
 /**
@@ -61,13 +78,13 @@ export function filesInPeriod(
   const costs = data.expenses
     .filter((e) => !e.isRecurring && isoDate(e.date) >= period.from && isoDate(e.date) <= period.to)
     .map((e): PeriodDocument => ({
-      kind: "cost", id: e.id, day: isoDate(e.date), label: e.description, number: e.documentRef, customer: null, amount: e.amount, file: e.file ?? null,
+      kind: "cost", id: e.id, day: isoDate(e.date), label: e.description, number: e.documentRef, customer: null, amount: e.amount, files: e.files,
     }))
     .sort((a, b) => a.day.localeCompare(b.day))
   const invoices = data.invoices
     .filter((i) => i.yearMonth >= period.from.slice(0, 7) && i.yearMonth <= period.to.slice(0, 7))
     .map((i): PeriodDocument => ({
-      kind: "invoice", id: i.id, day: i.yearMonth, label: `${i.amount < 0 ? "Credit note" : "Invoice"} ${i.number}`, number: i.number, customer: customerOf(i), amount: i.amount, file: i.file ?? null,
+      kind: "invoice", id: i.id, day: i.yearMonth, label: `${i.amount < 0 ? "Credit note" : "Invoice"} ${i.number}`, number: i.number, customer: customerOf(i), amount: i.amount, files: i.files,
     }))
     .sort((a, b) => a.day.localeCompare(b.day) || a.label.localeCompare(b.label))
   return [...costs, ...invoices]

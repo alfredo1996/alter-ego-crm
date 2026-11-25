@@ -64,18 +64,18 @@ export function paymentsCsv(data: Data, sel: PackageSelection): { csv: string; p
     const [a, b, x] = whole ? [sel.from.slice(0, 7), sel.to.slice(0, 7), day.slice(0, 7)] : [sel.from, sel.to, day]
     return x < a ? "earlier" : x > b ? "later" : "this"
   }
-  const pays = (r: CashRow): { label: string; file: InvoiceFile | null | undefined; at: "this" | "earlier" | "later" } | null => {
+  const pays = (r: CashRow): { label: string; files: InvoiceFile[]; at: "this" | "earlier" | "later" } | null => {
     const ref = (text: string, number: string | null) => (number ? `${text} ${number}` : text)
     if (r.source === "expense") {
       const e = cost.get(r.sourceId)
-      return e ? { label: ref("Cost", e.documentRef), file: e.file, at: where(isoDate(e.date), false) } : null
+      return e ? { label: ref("Cost", e.documentRef), files: e.files, at: where(isoDate(e.date), false) } : null
     }
     if (r.source === "invoice") {
       const i = invoice.get(r.sourceId)
-      return i ? { label: ref("Credit note", i.number), file: i.file, at: where(i.yearMonth, true) } : null
+      return i ? { label: ref("Credit note", i.number), files: i.files, at: where(i.yearMonth, true) } : null
     }
     const bill = r.source === "movement" && r.kind === "supplier_payment" ? cost.get(movement.get(r.sourceId)?.expenseId ?? "") : undefined
-    return bill ? { label: ref("Supplier invoice", bill.documentRef), file: bill.file, at: where(isoDate(bill.date), false) } : null
+    return bill ? { label: ref("Supplier invoice", bill.documentRef), files: bill.files, at: where(isoDate(bill.date), false) } : null
   }
   const body = paid.map((r) => {
     const doc = pays(r)
@@ -87,7 +87,7 @@ export function paymentsCsv(data: Data, sel: PackageSelection): { csv: string; p
       amount(-r.delta),
       r.source === "invoice" ? amount(-r.vat) : r.vat > 0 || r.source === "expense" ? amount(r.vat) : "",
       escapeCsvValue(doc?.label ?? rowTypeLabel(r)),
-      doc ? (doc.file ? (doc.at === "this" ? "Yes" : `Yes (${doc.at} period)`) : "Missing") : "No document",
+      doc ? (doc.files.length > 0 ? (doc.at === "this" ? "Yes" : `Yes (${doc.at} period)`) : "Missing") : "No document",
     ])
   })
   const header = line(["Date", "Account", "Paid To", "Description", "Amount", "VAT", "Pays", "File"])
@@ -97,11 +97,12 @@ export function paymentsCsv(data: Data, sel: PackageSelection): { csv: string; p
 /** What the dialog's status line counts, without loading a file. */
 export function packageSummary(data: Data, sel: PackageSelection, customerOf: (i: Invoice) => string) {
   const docs = filesInPeriod(data, sel, customerOf)
-  const bare = docs.filter((d) => !d.file)
+  const bare = docs.filter((d) => d.files.length === 0)
   return {
     rows: exportCsv(data, { ...sel, costCentre: null }).rows,
     payments: paymentsCsv(data, sel).payments,
-    files: docs.length - bare.length,
+    // Files, not records: a cost can carry several.
+    files: docs.reduce((n, d) => n + d.files.length, 0),
     costsWithout: bare.filter((d) => d.kind === "cost").length,
     invoicesWithout: bare.filter((d) => d.kind === "invoice").length,
   }

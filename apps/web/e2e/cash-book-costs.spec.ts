@@ -242,7 +242,7 @@ test.describe("Cash Book costs and loans", () => {
       const u = (await backend.auth.getCurrentUser())!.id
       const laptop = (await backend.db.getCompanyExpenses(u)).find((e) => e.description === "Laptop")!
       const file = await backend.files.upload(u, new Blob(["<FatturaElettronica/>"]), "FT12.xml")
-      await backend.db.updateCompanyExpense(u, laptop.id, { file })
+      await backend.db.updateCompanyExpense(u, laptop.id, { files: [file] })
     })
     await navigateTo(page, "Cash Book", "/cash-book")
     await page.getByRole("button", { name: "More" }).click()

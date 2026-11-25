@@ -57,12 +57,12 @@ const movement = (o: Partial<CompanyMovement> & Pick<CompanyMovement, "kind" | "
 })
 const invoice = (o: Partial<Invoice> & Pick<Invoice, "id" | "number" | "amount" | "vat">): Invoice => ({
   userId: "u", clientId: "c1", engagementId: null, fromMonth: null, yearMonth: "2026-10", dueDate: null,
-  paidDate: null, paidAccountId: null, createdAt: at, updatedAt: at, ...o,
+  paidDate: null, paidAccountId: null, files: [], createdAt: at, updatedAt: at, ...o,
 })
 const expense = (o: Partial<CompanyExpense> & Pick<CompanyExpense, "id" | "amount">): CompanyExpense => ({
   userId: "u", description: "Bank fee", category: "bank_fees", date: d("2026-10-05"), isRecurring: false,
   recurrenceMonths: null, notes: null, accountId: null, paidByOwner: false, vat: null, documentRef: null, project: null,
-  recurringExpenseId: null, dateEstimated: false, importRef: null, collaboratorId: null, engagementId: null, forMonth: null, createdAt: at, updatedAt: at, ...o,
+  recurringExpenseId: null, dateEstimated: false, importRef: null, collaboratorId: null, engagementId: null, forMonth: null, files: [], createdAt: at, updatedAt: at, ...o,
 })
 
 const loan = (o: Partial<CompanyLoan> & Pick<CompanyLoan, "id" | "direction" | "amount">): CompanyLoan => ({

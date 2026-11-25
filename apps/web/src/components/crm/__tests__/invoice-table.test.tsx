@@ -18,7 +18,7 @@ import type { CompanyAccount, Invoice } from "@/types"
 const at = new Date(2026, 6, 1)
 const invoice = (o: Partial<Invoice> & Pick<Invoice, "id" | "number" | "yearMonth" | "amount" | "vat">): Invoice => ({
   userId: "u1", clientId: "c1", engagementId: null, fromMonth: null, dueDate: null, paidDate: null, paidAccountId: null,
-  createdAt: at, updatedAt: at, ...o,
+  files: [], createdAt: at, updatedAt: at, ...o,
 })
 
 const INVOICES = [

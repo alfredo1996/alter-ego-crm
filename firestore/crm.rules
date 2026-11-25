@@ -7,14 +7,28 @@
       // (storage.rules guards the object). The path must be this user's own, one level
       // under company-files; the 10 MB cap is the one storage.rules and schemas.ts hold.
       function isInvoiceFile(f) {
-        return f is map
-          && f.keys().hasOnly(['path', 'name', 'kind', 'size', 'uploadedAt'])
-          && f.keys().hasAll(['path', 'name', 'kind', 'size', 'uploadedAt'])
-          && f.path is string && f.path.matches('users/' + userId + '/company-files/[^/]+')
+        // Few expressions, since a cost is checked with up to INVOICE_FILES_MAX of these: the map's
+        // size is 5 (the key list's length) and each of the five is read below, which fails on a
+        // missing key, so the keys are exactly these. f.size() is the map's, f.size the file's.
+        return f.size() == 5
+          && f.path.matches('users/' + userId + '/company-files/[^/]+')
           && isShortString(f.name, 255)
           && f.kind in ['xml', 'p7m', 'pdf']
           && f.size is int && f.size >= 0 && f.size <= 10485760
           && f.uploadedAt is timestamp;
+      }
+
+      // The files a cost or an invoice keeps, each checked as isInvoiceFile checks one. Written
+      // out to the cap because rules cannot loop; || stops before an index past the end. The 4
+      // is INVOICE_FILES_MAX in schemas.ts; the rules tests pin the two. The expression budget
+      // sets it: a cost that fills every optional field and holds a fifth file is refused (measured
+      // on the emulator), and each slot below costs about as much as isInvoiceFile.
+      function isInvoiceFiles(l) {
+        return l is list && l.size() <= 4
+          && (l.size() < 1 || isInvoiceFile(l[0]))
+          && (l.size() < 2 || isInvoiceFile(l[1]))
+          && (l.size() < 3 || isInvoiceFile(l[2]))
+          && (l.size() < 4 || isInvoiceFile(l[3]));
       }
 
       // ── CRM Clients ───────────────────────────────────────────────────────
@@ -445,7 +459,7 @@
       match /invoices/{invoiceId} {
         function invoiceKeys() {
           return ['userId', 'clientId', 'engagementId', 'number', 'fromMonth', 'yearMonth', 'amount', 'vat', 'dueDate',
-                  'paidDate', 'paidAccountId', 'file', 'createdAt', 'updatedAt'];
+                  'paidDate', 'paidAccountId', 'file', 'files', 'createdAt', 'updatedAt'];
         }
         function invoiceRequired() {
           return ['userId', 'number', 'yearMonth', 'amount', 'vat'];
@@ -462,7 +476,9 @@
             && (d.get('dueDate', null) == null || d.dueDate is timestamp)
             && (d.get('paidDate', null) == null || d.paidDate is timestamp)
             && (d.get('paidAccountId', null) == null || isShortString(d.paidAccountId, 200))
+            // `file` is the single file of a document saved before several; a write of `files` clears it.
             && (d.get('file', null) == null || isInvoiceFile(d.file))
+            && (d.get('files', null) == null || isInvoiceFiles(d.files))
             && isStamped(d);
         }
         allow read, delete: if isOwner(userId);
@@ -499,7 +515,7 @@
         function expenseKeys() {
           return ['userId', 'description', 'category', 'amount', 'date', 'isRecurring', 'recurrenceMonths', 'notes',
                   'accountId', 'paidByOwner', 'vat', 'documentRef', 'project', 'recurringExpenseId', 'dateEstimated',
-                  'importRef', 'collaboratorId', 'engagementId', 'forMonth', 'leaseId', 'endMonth', 'priceChanges', 'countedWhenPaid', 'file',
+                  'importRef', 'collaboratorId', 'engagementId', 'forMonth', 'leaseId', 'endMonth', 'priceChanges', 'countedWhenPaid', 'file', 'files',
                   'createdAt', 'updatedAt'];
         }
         function validExpense(d) {
@@ -532,7 +548,9 @@
             && (d.get('endMonth', null) == null || isYearMonth(d.endMonth))
             && (d.get('priceChanges', []) is list && d.get('priceChanges', []).size() <= 24)
             && d.get('countedWhenPaid', false) is bool
+            // `file` is the single file of a document saved before several; a write of `files` clears it.
             && (d.get('file', null) == null || isInvoiceFile(d.file))
+            && (d.get('files', null) == null || isInvoiceFiles(d.files))
             // A recurring estimate is never paid: each payment is a one-off.
             && !(d.get('isRecurring', false)
                   && (d.get('accountId', null) != null || d.get('paidByOwner', false) || d.get('recurringExpenseId', null) != null))

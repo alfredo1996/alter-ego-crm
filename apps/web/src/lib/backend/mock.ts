@@ -12,6 +12,7 @@ import {
   cashFloorSchema,
   createCompanyAccountSchema,
   createCompanyExpenseSchema,
+  invoiceFilesSchema,
   createCompanyLoanSchema,
   createCompanyMovementSchema,
   assignmentFields,
@@ -173,7 +174,7 @@ function companyExpenseOf(base: Pick<CompanyExpense, "id" | "userId" | "createdA
     endMonth: v.endMonth ?? null,
     priceChanges: v.priceChanges ?? [],
     countedWhenPaid: v.countedWhenPaid ?? false,
-    file: v.file ?? null,
+    files: v.files ?? [],
     createdAt: base.createdAt,
     updatedAt: new Date(),
   }
@@ -249,9 +250,9 @@ function nextId(): string {
 
 const mockFiles: Map<string, Blob> = new Map()
 
-/** A deleted cost, invoice or client takes its file with it. */
-function dropFile(file: InvoiceFile | null | undefined, userId: string): void {
-  if (file?.path.startsWith(`users/${userId}/company-files/`)) mockFiles.delete(file.path)
+/** A deleted cost, invoice or client takes its files with it. */
+function dropFiles(files: InvoiceFile[], userId: string): void {
+  for (const f of files) if (f.path.startsWith(`users/${userId}/company-files/`)) mockFiles.delete(f.path)
 }
 
 const mockFilesAdapter: FilesAdapter = {
@@ -414,12 +415,23 @@ const mockDb: DatabaseAdapter & AuditAdapter & CrmServerAdapter & UploadsAdapter
     return updated
   },
 
+  async changeFiles(userId: string, target: "cost" | "invoice", id: string, change: (files: InvoiceFile[]) => InvoiceFile[]) {
+    const row = target === "cost" ? companyExpenses.get(id) : invoices.get(id)
+    if (!row || row.userId !== userId) throw new Error(target === "cost" ? "Company expense not found" : "Invoice not found")
+    const before = row.files
+    const after = invoiceFilesSchema.parse(change(before))
+    if (target === "cost") createCompanyExpenseSchema.parse({ ...row, files: after })
+    if (target === "cost") companyExpenses.set(id, { ...(row as CompanyExpense), files: after, updatedAt: new Date() })
+    else invoices.set(id, { ...(row as Invoice), files: after, updatedAt: new Date() })
+    return { before, after }
+  },
+
   async deleteCompanyExpense(userId: string, expenseId: string): Promise<void> {
     const e = companyExpenses.get(expenseId)
     if (!e || e.userId !== userId) return
     const paid = Array.from(companyMovements.values()).some((m) => m.userId === userId && m.expenseId === expenseId)
     if (paid) throw new Error(BILL_HAS_PAYMENTS)
-    dropFile(e.file, userId)
+    dropFiles(e.files, userId)
     companyExpenses.delete(expenseId)
   },
 
@@ -618,7 +630,7 @@ const mockDb: DatabaseAdapter & AuditAdapter & CrmServerAdapter & UploadsAdapter
     // Its invoices, re-pointed ones included; older ones name just their contract, below.
     for (const [id, i] of invoices) {
       if (i.userId === userId && i.clientId === clientId) {
-        dropFile(i.file, userId)
+        dropFiles(i.files, userId)
         invoices.delete(id)
       }
     }
@@ -635,7 +647,7 @@ const mockDb: DatabaseAdapter & AuditAdapter & CrmServerAdapter & UploadsAdapter
         }
         for (const [invoiceId, i] of invoices) {
           if (i.engagementId === id) {
-            dropFile(i.file, userId)
+            dropFiles(i.files, userId)
             invoices.delete(invoiceId)
           }
         }
@@ -1081,7 +1093,7 @@ const mockDb: DatabaseAdapter & AuditAdapter & CrmServerAdapter & UploadsAdapter
       dueDate: input.dueDate ?? null,
       paidDate: input.paidDate ?? null,
       paidAccountId: input.paidAccountId ?? null,
-      file: input.file ?? null,
+      files: input.files ?? [],
       createdAt: now,
       updatedAt: now,
     }
@@ -1102,7 +1114,7 @@ const mockDb: DatabaseAdapter & AuditAdapter & CrmServerAdapter & UploadsAdapter
       ...(input.dueDate !== undefined && { dueDate: input.dueDate }),
       ...(input.paidDate !== undefined && { paidDate: input.paidDate }),
       ...(input.paidAccountId !== undefined && { paidAccountId: input.paidAccountId }),
-      ...(input.file !== undefined && { file: input.file }),
+      ...(input.files !== undefined && { files: input.files }),
       updatedAt: new Date(),
     }
     invoices.set(invoiceId, updated)
@@ -1112,7 +1124,7 @@ const mockDb: DatabaseAdapter & AuditAdapter & CrmServerAdapter & UploadsAdapter
   async deleteInvoice(userId: string, invoiceId: string): Promise<void> {
     const i = invoices.get(invoiceId)
     if (i && i.userId === userId) {
-      dropFile(i.file, userId)
+      dropFiles(i.files, userId)
       invoices.delete(invoiceId)
     }
   },
@@ -1314,7 +1326,7 @@ export function __seedLegacyInvoice(userId: string, engagementId: string, number
   const now = new Date()
   const invoice: Invoice = {
     id: nextId(), userId, clientId: null, engagementId, number, fromMonth: null, yearMonth: "2027-01", amount: 1000, vat: 220,
-    dueDate: null, paidDate: null, paidAccountId: null, file: null, createdAt: now, updatedAt: now,
+    dueDate: null, paidDate: null, paidAccountId: null, files: [], createdAt: now, updatedAt: now,
   }
   invoices.set(invoice.id, invoice)
   return invoice

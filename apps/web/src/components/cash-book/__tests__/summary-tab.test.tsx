@@ -29,7 +29,7 @@ const movement = (o: Partial<CompanyMovement> & Pick<CompanyMovement, "kind" | "
 const expense = (o: Partial<CompanyExpense> & Pick<CompanyExpense, "id" | "amount" | "date" | "description">): CompanyExpense => ({
   userId: "u1", category: "software", isRecurring: false, recurrenceMonths: null, notes: null, accountId: null,
   paidByOwner: false, vat: null, documentRef: null, project: null, recurringExpenseId: null, dateEstimated: false,
-  importRef: null, collaboratorId: null, engagementId: null, forMonth: null, createdAt: at, updatedAt: at, ...o,
+  importRef: null, collaboratorId: null, engagementId: null, forMonth: null, files: [], createdAt: at, updatedAt: at, ...o,
 })
 
 const accounts = [account("main", "Main Bank", 1000), account("second", "Second Bank", 0)]

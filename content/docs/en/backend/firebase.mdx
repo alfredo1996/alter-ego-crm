@@ -24,7 +24,7 @@ Firestore uses a subcollection-based structure, one tree per user:
 /oauth_clients · /oauth_codes · /oauth_tokens · /api_keys_index · /uploads   (server-only)
 ```
 
-Invoice files live in Storage under `users/{userId}/company-files/`.
+Invoice files live in Storage under `users/{userId}/company-files/`. A cost or an invoice keeps a list of them (`files`, up to 4); a document saved before several files keeps its one `file`, which reads as the first of the list until the files next change, so nothing needs migrating.
 
 ## Security Rules
 

@@ -17,6 +17,7 @@ import {
   figureChanges,
   figureLine,
   fileSummary,
+  filesOf,
   groupInvoices,
   groupRevenue,
   groupTimecards,
@@ -201,7 +202,7 @@ describe("resolveEngagement", () => {
 function invoice(id: string, number: string): Invoice {
   return {
     id, userId: "u", clientId: null, engagementId: "e1", number, fromMonth: null, yearMonth: "2026-04",
-    amount: 5000, vat: 1100, dueDate: null, paidDate: null, paidAccountId: null, ...ts,
+    amount: 5000, vat: 1100, dueDate: null, paidDate: null, paidAccountId: null, files: [], ...ts,
   }
 }
 
@@ -838,7 +839,7 @@ function cost(id: string, over: Partial<CompanyExpense>): CompanyExpense {
   return {
     id, userId: "u", description: id, category: "other", amount: 100, date: new Date("2026-10-01T00:00:00"), isRecurring: false,
     recurrenceMonths: null, notes: null, accountId: null, paidByOwner: false, vat: 0, documentRef: null, project: null,
-    recurringExpenseId: null, dateEstimated: false, importRef: null, collaboratorId: null, engagementId: null, forMonth: null, ...ts, ...over,
+    recurringExpenseId: null, dateEstimated: false, importRef: null, collaboratorId: null, engagementId: null, forMonth: null, files: [], ...ts, ...over,
   }
 }
 
@@ -1278,11 +1279,16 @@ describe("planMonths", () => {
   })
 })
 
-describe("fileSummary", () => {
-  it("keeps the name, kind and size of a file and drops its path, and is null without one", () => {
-    const file = { path: "users/u/company-files/a.pdf", name: "a.pdf", kind: "pdf" as const, size: 6, uploadedAt: new Date("2026-10-01T10:00:00Z") }
-    expect(fileSummary(file)).toEqual({ name: "a.pdf", kind: "pdf", size: 6 })
-    expect([fileSummary(null), fileSummary(undefined)]).toEqual([null, null])
+describe("fileSummary and filesOf", () => {
+  const file = { path: "users/u/company-files/h8Ys1DfK4uZo6EqJ2rVa.xml.p7m", name: "a.xml.p7m", kind: "p7m" as const, size: 6, uploadedAt: new Date("2026-10-01T10:00:00Z") }
+  it("names a file by its fileId, keeps its name, kind and size, and drops its path", () => {
+    expect(fileSummary(file)).toEqual({ fileId: "h8Ys1DfK4uZo6EqJ2rVa", name: "a.xml.p7m", kind: "p7m", size: 6 })
+    expect(fileSummary(file, "ab12")).toEqual({ fileId: "h8Ys1DfK4uZo6EqJ2rVa", name: "a.xml.p7m", kind: "p7m", size: 6, sha256: "ab12" })
+  })
+  it("lists a row's files in order, and is [] for none or for a row that holds none", () => {
+    const pdf = { ...file, path: "users/u/company-files/Zt5Lw8Nc1QpB3sYd6HmE.pdf", name: "b.pdf", kind: "pdf" as const }
+    expect(filesOf([file, pdf]).map((f) => f.fileId)).toEqual(["h8Ys1DfK4uZo6EqJ2rVa", "Zt5Lw8Nc1QpB3sYd6HmE"])
+    expect([filesOf([]), filesOf(undefined)]).toEqual([[], []])
   })
 })
 

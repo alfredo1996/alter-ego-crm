@@ -36,6 +36,8 @@ firebase deploy --only firestore:rules,firestore:indexes,storage --project YOUR_
 gcloud storage buckets update gs://YOUR_PROJECT_ID.firebasestorage.app --cors-file=cors.json
 ```
 
+When you update a running deployment, deploy the rules (step 4) before the new app version whenever `firestore/*.rules` changed: the previous rules refuse a field the new app writes. A new app on the old rules fails to save; an old app on the new rules keeps working.
+
 ## Which plugins run
 
 Every area is a plugin (`finance`, `consulting`, `accounting`, `rent`). List the ones to run in

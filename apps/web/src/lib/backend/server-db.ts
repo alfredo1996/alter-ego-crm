@@ -77,6 +77,7 @@ export type ServerDb = AuditAdapter &
     | "createCompanyExpense"
     | "updateCompanyExpense"
     | "deleteCompanyExpense"
+    | "changeFiles"
     | "getCompanyLoans"
     | "createCompanyLoan"
     | "updateCompanyLoan"

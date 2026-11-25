@@ -475,7 +475,7 @@ function recurringStep(ctx: Context, month: string, end: string): MonthEndStep {
 
 /**
  * Invoice Files, M only and amber: each one-off cost dated in M and each invoice
- * of M with the file it keeps, or without one (the item to attach). A recurring
+ * of M with the files it keeps, or without any (the item to attach). A recurring
  * estimate is no document. Never blocking, so a month closed before stays closed.
  */
 function filesStep(ctx: Context, month: string, end: string): MonthEndStep {
@@ -484,7 +484,10 @@ function filesStep(ctx: Context, month: string, end: string): MonthEndStep {
     docs.map((doc) => {
       const kind = doc.kind === "cost" ? "file_cost" : "file_invoice"
       const text = doc.kind === "cost" ? doc.label : `${doc.label} · ${doc.customer}`
-      if (doc.file) return item(kind, "done", text, doc.file.name, doc.id)
+      if (doc.files.length > 0) {
+        const names = doc.files.map((f) => f.name)
+        return item(kind, "done", text, names.length === 1 ? names[0] : `${names.length} files: ${names.join(", ")}`, doc.id)
+      }
       const money = eurCents(doc.amount)
       const detail =
         doc.kind === "cost"

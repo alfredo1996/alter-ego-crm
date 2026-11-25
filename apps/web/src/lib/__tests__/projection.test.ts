@@ -27,7 +27,7 @@ function expense(o: Partial<CompanyExpense> = {}): CompanyExpense {
     id: "x1", userId: "u1", description: "Commercialista", category: "accountant",
     amount: 1200, date: new Date("2026-01-15"), isRecurring: false,
     recurrenceMonths: null, notes: null, accountId: null, paidByOwner: false, vat: null, documentRef: null,
-    project: null, recurringExpenseId: null, dateEstimated: false, importRef: null, collaboratorId: null, engagementId: null, forMonth: null, createdAt: NOW, updatedAt: NOW, ...o,
+    project: null, recurringExpenseId: null, dateEstimated: false, importRef: null, collaboratorId: null, engagementId: null, forMonth: null, files: [], createdAt: NOW, updatedAt: NOW, ...o,
   }
 }
 

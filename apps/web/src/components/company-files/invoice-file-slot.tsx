@@ -10,9 +10,10 @@ import Link from "next/link"
 import { useId, useRef, useState } from "react"
 
 
-import { downloadInvoiceFile, NO_FILE_CHANGE, saveBlob, saveInvoiceFile, type FileDraft } from "@/hooks/use-company-files"
+import { downloadInvoiceFile, saveBlob, saveInvoiceFile, type FileDraft } from "@/hooks/use-company-files"
 import { rememberOpenedFromApp } from "@/lib/back-navigation"
-import { checkInvoiceFile, formatFileSize, INVOICE_FILE_KIND_LABEL } from "@/lib/invoice-files"
+import { checkInvoiceFile, fileIdOf, formatFileSize, INVOICE_FILE_KIND_LABEL } from "@/lib/invoice-files"
+import { INVOICE_FILES_MAX } from "@/types/schemas"
 
 
 import type { InvoiceFile, InvoiceFileKind } from "@/types"
@@ -20,13 +21,13 @@ import type { InvoiceFile, InvoiceFileKind } from "@/types"
 const KIND_BADGE: Record<InvoiceFileKind, string> = { xml: "XML", p7m: "XML", pdf: "PDF" }
 
 /**
- * The invoice file of a cost or an invoice: choose or drop one, see it, view or
- * download it, replace or remove it. It changes nothing in storage itself: a
- * picked file waits in `draft` and the form uploads it on Save, so Cancel leaves
- * nothing behind (see writeWithInvoiceFile).
+ * The invoice files of a cost or an invoice: one row each, with a zone to add another (one file
+ * at a time). Each can be viewed, downloaded, replaced or removed on its own. It changes nothing
+ * in storage itself: picked files wait in `draft` and the form uploads them on Save, so Cancel
+ * leaves nothing behind (see writeWithInvoiceFiles).
  *
  * View opens a PDF in a tab; an XML or a signed XML opens as the readable invoice
- * at `viewHref` (the record's own page).
+ * at `viewHref` (the record's own page), with `?file=` naming which.
  */
 export function InvoiceFileSlot({
   stored,
@@ -38,11 +39,11 @@ export function InvoiceFileSlot({
   viewHref,
   unsaved,
 }: {
-  /** The file the record keeps now. */
-  stored: InvoiceFile | null | undefined
+  /** The files the record keeps now. */
+  stored: InvoiceFile[]
   draft: FileDraft
   onDraftChange: (draft: FileDraft) => void
-  /** What the file is saved with: "cost" or "invoice". */
+  /** What the files are saved with: "cost" or "invoice". */
   noun: "cost" | "invoice"
   hint?: string
   disabled?: boolean
@@ -53,15 +54,25 @@ export function InvoiceFileSlot({
 }) {
   const waitId = useId()
   const input = useRef<HTMLInputElement>(null)
+  /** The stored file Replace File… was chosen on: marked removed only once the new one is picked. */
+  const replacing = useRef<string | null>(null)
   const [refused, setRefused] = useState<string | null>(null)
   const [dragging, setDragging] = useState(false)
 
-  function pick(file: File | undefined) {
+  const kept = stored.filter((f) => !draft.removed.includes(f.path))
+  const count = kept.length + draft.picked.length
+  const full = count >= INVOICE_FILES_MAX
+  const An = noun === "cost" ? "A cost" : "An invoice"
+
+  /** `replaced` is the stored file Replace File… was chosen on; a drop never replaces. */
+  function pick(file: File | undefined, replaced: string | null) {
     if (!file) return
     const check = checkInvoiceFile(file)
     if (!check.ok) return setRefused(check.reason)
+    // Replacing takes one file away as it adds one, so it never passes the cap.
+    if (!replaced && full) return setRefused(`${file.name} can't be attached: ${An.toLowerCase()} holds up to ${INVOICE_FILES_MAX} files.`)
     setRefused(null)
-    onDraftChange({ picked: file, removed: false })
+    onDraftChange({ picked: [...draft.picked, file], removed: replaced ? [...draft.removed, replaced] : draft.removed })
   }
 
   /** A PDF opens in a tab. */
@@ -103,95 +114,131 @@ export function InvoiceFileSlot({
       accept=".xml,.p7m,.pdf,application/xml,text/xml,application/pdf"
       disabled={disabled}
       onChange={(e) => {
-        pick(e.target.files?.[0])
+        const replaced = replacing.current
+        replacing.current = null
+        pick(e.target.files?.[0], replaced)
         e.target.value = "" // The same file can be chosen again.
       }}
     />
   )
-  const choose = () => input.current?.click()
+  const choose = (replace: string | null = null) => {
+    replacing.current = replace
+    input.current?.click()
+  }
 
-  const shown = draft.picked
-    ? ({ kind: "picked", file: draft.picked } as const)
-    : stored && !draft.removed
-      ? ({ kind: "attached", file: stored } as const)
-      : null
+  const waits = (f: InvoiceFile) => f.kind !== "pdf" && viewHref !== undefined && (disabled || unsaved)
+  const waiting = stored.some((f) => !draft.removed.includes(f.path) && waits(f))
+  const dropZone = {
+    onDragOver: (e: React.DragEvent) => {
+      e.preventDefault()
+      if (!disabled) setDragging(true)
+    },
+    onDragLeave: () => setDragging(false),
+    onDrop: (e: React.DragEvent) => {
+      e.preventDefault()
+      setDragging(false)
+      replacing.current = null
+      if (!disabled) pick(e.dataTransfer.files[0], null)
+    },
+  }
 
   return (
-    <div role="group" aria-label="Invoice File" className="space-y-2">
+    <div role="group" aria-label="Invoice Files" className="space-y-2">
       {chooser}
-      {shown?.kind === "picked" && (
+      {stored.map((file) =>
+        draft.removed.includes(file.path) ? (
+          <p key={file.path} className="flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground">
+            <span>{file.name} is removed when you save.</span>
+            <Button
+              type="button"
+              variant="link"
+              size="sm"
+              className="h-auto p-0 text-xs"
+              onClick={() => onDraftChange({ ...draft, removed: draft.removed.filter((p) => p !== file.path) })}
+            >
+              Undo
+            </Button>
+          </p>
+        ) : (
+          <FileRow
+            key={file.path}
+            kind={file.kind}
+            name={file.name}
+            meta={`${INVOICE_FILE_KIND_LABEL[file.kind]} · ${formatFileSize(file.size)} · added ${format(file.uploadedAt, "d MMM")}`}
+          >
+            {file.kind === "pdf" && (
+              <Button type="button" variant="outline" size="sm" aria-label={`View ${file.name}`} onClick={() => view(file)}>
+                <Eye aria-hidden className="size-4" />
+                View
+              </Button>
+            )}
+            {waits(file) && (
+              <Button type="button" variant="outline" size="sm" disabled aria-label={`View ${file.name}`} aria-describedby={waitId}>
+                <Eye aria-hidden className="size-4" />
+                View
+              </Button>
+            )}
+            {file.kind !== "pdf" && viewHref && !disabled && !unsaved && (
+              <Button asChild variant="outline" size="sm">
+                <Link href={`${viewHref}?file=${fileIdOf(file.path)}`} aria-label={`View ${file.name}`} onClick={rememberOpenedFromApp}>
+                  <Eye aria-hidden className="size-4" />
+                  View
+                </Link>
+              </Button>
+            )}
+            <Button
+              type="button"
+              variant="outline"
+              size="icon"
+              aria-label={`Download ${file.name}`}
+              onClick={() => saveInvoiceFile(file).catch((err: unknown) => failed(file, err))}
+            >
+              <Download aria-hidden className="size-4" />
+            </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button type="button" variant="ghost" size="icon" aria-label={`More actions for ${file.name}`} disabled={disabled}>
+                  <MoreHorizontal aria-hidden className="size-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onSelect={() => choose(file.path)}>Replace File…</DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem variant="destructive" onSelect={() => onDraftChange({ ...draft, removed: [...draft.removed, file.path] })}>
+                  Remove File
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </FileRow>
+        ),
+      )}
+      {draft.picked.map((file, i) => (
         <FileRow
-          kind={checkedKind(shown.file)}
-          name={shown.file.name}
-          meta={`${INVOICE_FILE_KIND_LABEL[checkedKind(shown.file)]} · ${formatFileSize(shown.file.size)} · saved with the ${noun}`}
+          key={`${file.name}-${i}`}
+          kind={checkedKind(file)}
+          name={file.name}
+          meta={`${INVOICE_FILE_KIND_LABEL[checkedKind(file)]} · ${formatFileSize(file.size)} · saved with the ${noun}`}
         >
-          <Button type="button" variant="ghost" size="sm" disabled={disabled} onClick={() => onDraftChange(NO_FILE_CHANGE)}>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            disabled={disabled}
+            aria-label={`Remove ${file.name}`}
+            onClick={() => onDraftChange({ ...draft, picked: draft.picked.filter((_, n) => n !== i) })}
+          >
             Remove
           </Button>
         </FileRow>
-      )}
-      {shown?.kind === "attached" && (
-        <FileRow
-          kind={shown.file.kind}
-          name={shown.file.name}
-          meta={`${INVOICE_FILE_KIND_LABEL[shown.file.kind]} · ${formatFileSize(shown.file.size)} · added ${format(shown.file.uploadedAt, "d MMM")}`}
-        >
-          {shown.file.kind === "pdf" && (
-            <Button type="button" variant="outline" size="sm" onClick={() => view(shown.file)}>
-              <Eye aria-hidden className="size-4" />
-              View
-            </Button>
-          )}
-          {shown.file.kind !== "pdf" && viewHref && (disabled || unsaved) && (
-            <Button type="button" variant="outline" size="sm" disabled aria-describedby={waitId}>
-              <Eye aria-hidden className="size-4" />
-              View
-            </Button>
-          )}
-          {shown.file.kind !== "pdf" && viewHref && !disabled && !unsaved && (
-            <Button asChild variant="outline" size="sm">
-              <Link href={viewHref} onClick={rememberOpenedFromApp}>
-                <Eye aria-hidden className="size-4" />
-                View
-              </Link>
-            </Button>
-          )}
-          <Button type="button" variant="outline" size="icon" aria-label="Download file" onClick={() => saveInvoiceFile(shown.file).catch((err: unknown) => failed(shown.file, err))}>
-            <Download aria-hidden className="size-4" />
-          </Button>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button type="button" variant="ghost" size="icon" aria-label="More file actions" disabled={disabled}>
-                <MoreHorizontal aria-hidden className="size-4" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem onSelect={choose}>Replace File…</DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem variant="destructive" onSelect={() => onDraftChange({ picked: null, removed: true })}>
-                Remove File
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </FileRow>
-      )}
-      {shown?.kind === "attached" && shown.file.kind !== "pdf" && viewHref && (disabled || unsaved) && (
+      ))}
+      {waiting && (
         <p id={waitId} className="text-xs text-muted-foreground">
           Save first to view the invoice.
         </p>
       )}
-      {!shown && (
+      {count === 0 && (
         <div
-          onDragOver={(e) => {
-            e.preventDefault()
-            if (!disabled) setDragging(true)
-          }}
-          onDragLeave={() => setDragging(false)}
-          onDrop={(e) => {
-            e.preventDefault()
-            setDragging(false)
-            if (!disabled) pick(e.dataTransfer.files[0])
-          }}
+          {...dropZone}
           className={cn(
             "flex flex-col items-center gap-2 rounded-[10px] border border-dashed bg-muted/40 p-4 text-center",
             dragging && "border-foreground bg-muted",
@@ -200,19 +247,34 @@ export function InvoiceFileSlot({
           <Upload aria-hidden className="size-5 text-muted-foreground" />
           <div className="flex flex-wrap items-center justify-center gap-2 text-sm">
             <span>Drop the invoice file here, or</span>
-            <Button type="button" variant="outline" size="sm" disabled={disabled} onClick={choose}>
+            <Button type="button" variant="outline" size="sm" disabled={disabled} onClick={() => choose()}>
               Choose File
             </Button>
           </div>
           <span className="text-xs text-muted-foreground">XML, signed XML (.p7m) or PDF · up to 10 MB</span>
         </div>
       )}
-      {!shown && stored && draft.removed && (
-        <p className="flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground">
-          <span>{stored.name} is removed when you save.</span>
-          <Button type="button" variant="link" size="sm" className="h-auto p-0 text-xs" onClick={() => onDraftChange(NO_FILE_CHANGE)}>
-            Undo
-          </Button>
+      {count > 0 && !full && (
+        <>
+          <div
+            {...dropZone}
+            className={cn(
+              "flex flex-wrap items-center gap-x-2 gap-y-2 rounded-[10px] border border-dashed bg-muted/40 px-3 py-2.5 text-sm",
+              dragging && "border-foreground bg-muted",
+            )}
+          >
+            <Upload aria-hidden className="size-4 text-muted-foreground" />
+            <span>Drop another file here, or</span>
+            <Button type="button" variant="outline" size="sm" className="max-sm:w-full" disabled={disabled} onClick={() => choose()}>
+              Add File
+            </Button>
+          </div>
+          <span className="block text-xs text-muted-foreground">XML, signed XML (.p7m) or PDF · up to 10 MB</span>
+        </>
+      )}
+      {full && (
+        <p className="text-xs text-muted-foreground">
+          {An} holds up to {INVOICE_FILES_MAX} files: remove one to add another.
         </p>
       )}
       {refused && (
@@ -220,7 +282,7 @@ export function InvoiceFileSlot({
           {refused}
         </p>
       )}
-      {hint && !shown && !refused && <p className="text-xs text-muted-foreground">{hint}</p>}
+      {hint && !refused && (count === 0 || !full) && <p className="text-xs text-muted-foreground">{hint}</p>}
     </div>
   )
 }

@@ -12,6 +12,7 @@ import { afterEach, describe, it, expect, vi } from "vitest"
 import * as admin from "@/lib/backend/firebase-admin"
 import { BILL_HAS_PAYMENTS } from "@/lib/cash-book"
 import { getAdminBucket, getAdminFirestore } from "@/lib/firebase-admin-client"
+import { INVOICE_FILES_MAX } from "@/types/schemas"
 
 import { describeUploadsContract } from "./adapter-contract"
 
@@ -801,8 +802,8 @@ describe("invoice files", () => {
 
   it("deleting a cost through the MCP's adapter deletes its object", async () => {
     const file = await stored("admin-cost")
-    const e = await admin.createCompanyExpense(userId, { description: "With file", category: "other", amount: 10, date: new Date(), file })
-    expect((await admin.getCompanyExpenses(userId))[0].file).toEqual(file)
+    const e = await admin.createCompanyExpense(userId, { description: "With file", category: "other", amount: 10, date: new Date(), files: [file] })
+    expect((await admin.getCompanyExpenses(userId))[0].files).toEqual([file])
     await admin.deleteCompanyExpense(userId, e.id)
     expect(await exists(file.path)).toBe(false)
   })
@@ -811,14 +812,14 @@ describe("invoice files", () => {
     const file = await stored("admin-invoice")
     const i = await admin.createInvoice(userId, { clientId: "c1", number: "17/2026", yearMonth: "2026-09", amount: 1000, vat: 220 })
     await userSub("invoices").doc(i.id).update({ file })
-    expect((await admin.getInvoices(userId))[0].file).toEqual(file)
+    expect((await admin.getInvoices(userId))[0].files).toEqual([file])
     await admin.deleteInvoice(userId, i.id)
     expect(await exists(file.path)).toBe(false)
   })
 
   it("a failed object delete does not undo the cost delete: one unreferenced object is left", async () => {
     const file = await stored("admin-stuck")
-    const e = await admin.createCompanyExpense(userId, { description: "Stuck", category: "other", amount: 10, date: new Date(), file })
+    const e = await admin.createCompanyExpense(userId, { description: "Stuck", category: "other", amount: 10, date: new Date(), files: [file] })
     vi.mocked(getAdminBucket).mockReturnValueOnce({
       file: () => ({ delete: async () => { throw new Error("storage is down") } }),
     } as unknown as ReturnType<typeof getAdminBucket>)
@@ -831,7 +832,7 @@ describe("invoice files", () => {
     const other = `users/someone-else/company-files/admin-foreign.xml`
     await getAdminBucket()!.file(other).save("<a/>", { contentType: "application/xml" })
     const file = { path: other, name: "IT01.xml", kind: "xml" as const, size: 4, uploadedAt: new Date() }
-    const e = await admin.createCompanyExpense(userId, { description: "Foreign", category: "other", amount: 10, date: new Date(), file })
+    const e = await admin.createCompanyExpense(userId, { description: "Foreign", category: "other", amount: 10, date: new Date(), files: [file] })
     await admin.deleteCompanyExpense(userId, e.id)
     expect(await exists(other)).toBe(true)
     await getAdminBucket()!.file(other).delete()
@@ -839,18 +840,107 @@ describe("invoice files", () => {
 
   it("deleting a record without a file touches no object", async () => {
     const e = await admin.createCompanyExpense(userId, { description: "Plain", category: "other", amount: 10, date: new Date() })
-    expect((await admin.getCompanyExpenses(userId))[0].file).toBeNull()
+    expect((await admin.getCompanyExpenses(userId))[0].files).toEqual([])
     await admin.deleteCompanyExpense(userId, e.id)
   })
 })
 
-describe("an invoice's file pointer through the Admin adapter", () => {
-  it("sets it, keeps it through another edit, and clears it with null", async () => {
+describe("an invoice's files through the Admin adapter", () => {
+  it("sets them, keeps them through another edit, and clears them with an empty list", async () => {
     const file = { path: `users/${userId}/company-files/admin-pointer.pdf`, name: "p.pdf", kind: "pdf" as const, size: 4, uploadedAt: new Date("2026-10-01T10:00:00Z") }
     const i = await admin.createInvoice(userId, { clientId: "c1", number: "18/2026", yearMonth: "2026-09", amount: 1000, vat: 220 })
-    expect((await admin.updateInvoice(userId, i.id, { file })).file).toEqual(file)
-    expect((await admin.updateInvoice(userId, i.id, { number: "19/2026" })).file).toEqual(file)
-    expect((await admin.updateInvoice(userId, i.id, { file: null })).file).toBeNull()
+    expect((await admin.updateInvoice(userId, i.id, { files: [file] })).files).toEqual([file])
+    expect((await admin.updateInvoice(userId, i.id, { number: "19/2026" })).files).toEqual([file])
+    expect((await admin.updateInvoice(userId, i.id, { files: [] })).files).toEqual([])
+  })
+
+  it("gives up a legacy file when files are written", async () => {
+    const old = { path: `users/${userId}/company-files/legacy-inv.pdf`, name: "l.pdf", kind: "pdf" as const, size: 4, uploadedAt: new Date("2026-10-01T10:00:00Z") }
+    const doc = await userSub("invoices").add({ userId, clientId: "c1", number: "L1", yearMonth: "2026-09", amount: 100, vat: 22, file: old, createdAt: old.uploadedAt, updatedAt: old.uploadedAt })
+    await admin.updateInvoice(userId, doc.id, { files: [old] })
+    expect((await doc.get()).data()?.file).toBeNull()
+  })
+})
+
+// The admin adapter cannot run the whole adapter contract, so its several-file cases are here, on raw documents.
+describe("several files through the Admin adapter", () => {
+  const at = new Date("2026-10-01T10:00:00Z")
+  const ptr = (name: string, kind: "xml" | "p7m" | "pdf" = "xml") => ({ path: `users/${userId}/company-files/${name}${kind === "p7m" ? ".xml.p7m" : `.${kind}`}`, name: `${name}.${kind}`, kind, size: 4, uploadedAt: at })
+  const put = (f: { path: string }) => getAdminBucket()!.file(f.path).save("<a/>", { contentType: "application/xml" })
+  const exists = async (path: string) => (await getAdminBucket()!.file(path).exists())[0]
+  const rawCost = (o: Record<string, unknown>) =>
+    userSub("company_expenses").add({ userId, description: "Raw", category: "other", amount: 10, date: new Date(), isRecurring: false, createdAt: at, updatedAt: at, ...o })
+  const rawInvoice = (o: Record<string, unknown>) =>
+    userSub("invoices").add({ userId, clientId: "c1", number: "R1", yearMonth: "2026-09", amount: 100, vat: 22, createdAt: at, updatedAt: at, ...o })
+
+  it("reads a raw document with only the old file as a one-file list, a cost and an invoice", async () => {
+    const [c, i] = [ptr("legacy-c"), ptr("legacy-i")]
+    await rawCost({ file: c })
+    await rawInvoice({ file: i })
+    expect((await admin.getCompanyExpenses(userId))[0].files).toEqual([c])
+    expect((await admin.getInvoices(userId))[0].files).toEqual([i])
+  })
+
+  it("reads a document holding both keys as the old file first, then the list", async () => {
+    const [old, a, b] = [ptr("both-old"), ptr("both-a"), ptr("both-b", "p7m")]
+    await rawCost({ file: old, files: [a, b] })
+    expect((await admin.getCompanyExpenses(userId))[0].files).toEqual([old, a, b])
+  })
+
+  it("round-trips two files in order, and a files write leaves the raw document with file: null", async () => {
+    const [a, b] = [ptr("rt-a"), ptr("rt-b", "pdf")]
+    const e = await admin.createCompanyExpense(userId, { description: "Two", category: "other", amount: 10, date: new Date(), files: [a, b] })
+    expect((await admin.getCompanyExpenses(userId))[0].files).toEqual([a, b])
+    const raw = (await userSub("company_expenses").doc(e.id).get()).data()
+    expect([raw?.file, raw?.files.length]).toEqual([null, 2])
+    const legacy = await rawCost({ file: ptr("rt-old") })
+    await admin.updateCompanyExpense(userId, legacy.id, { files: [a] })
+    expect((await userSub("company_expenses").doc(legacy.id).get()).data()?.file).toBeNull()
+  })
+
+  it("deleting a two-file cost, a two-file invoice and a legacy one removes every object, and only in the user's folder", async () => {
+    const files = [ptr("d-a"), ptr("d-b"), ptr("d-c"), ptr("d-d"), ptr("d-e")]
+    await Promise.all(files.map(put))
+    const c = await admin.createCompanyExpense(userId, { description: "Two", category: "other", amount: 10, date: new Date(), files: files.slice(0, 2) })
+    const i = await admin.createInvoice(userId, { clientId: "c1", number: "D1", yearMonth: "2026-09", amount: 100, vat: 22, files: files.slice(2, 4) })
+    const l = await rawCost({ file: files[4] })
+    await admin.deleteCompanyExpense(userId, c.id)
+    await admin.deleteInvoice(userId, i.id)
+    await admin.deleteCompanyExpense(userId, l.id)
+    expect(await Promise.all(files.map((f) => exists(f.path)))).toEqual([false, false, false, false, false])
+  })
+
+  describe("changeFiles", () => {
+    it("folds the old file in, clears it, and returns before and after as read and written", async () => {
+      const [old, b] = [ptr("cf-old"), ptr("cf-b")]
+      const row = await rawCost({ file: old })
+      expect(await admin.changeFiles(userId, "cost", row.id, (list) => [...list, b])).toEqual({ before: [old], after: [old, b] })
+      const raw = (await userSub("company_expenses").doc(row.id).get()).data()
+      expect([raw?.file, raw?.files.map((f: { name: string }) => f.name)]).toEqual([null, [old.name, b.name]])
+    })
+
+    it("keeps three parallel adds and a concurrent remove on an invoice", async () => {
+      const [keep, a, b, c] = [ptr("par-k"), ptr("par-a"), ptr("par-b"), ptr("par-c")]
+      const row = await rawInvoice({ files: [keep] })
+      await Promise.all([
+        ...[a, b, c].map((f) => admin.changeFiles(userId, "invoice", row.id, (list) => [...list, f])),
+        admin.changeFiles(userId, "invoice", row.id, (list) => list.filter((f) => f.path !== keep.path)),
+      ])
+      expect((await admin.getInvoices(userId))[0].files.map((f) => f.name).sort()).toEqual([a.name, b.name, c.name])
+    })
+
+    it("writes nothing when the change throws, refuses a list past the cap, and a row that is not there", async () => {
+      const row = await rawCost({ files: [ptr("w-a")] })
+      await expect(admin.changeFiles(userId, "cost", row.id, () => { throw new Error("no") })).rejects.toThrow("no")
+      const many = Array.from({ length: INVOICE_FILES_MAX }, (_, n) => ptr(`w-m${n}`))
+      await expect(admin.changeFiles(userId, "cost", row.id, (list) => [...list, ...many])).rejects.toThrow("A cost or an invoice holds up to 4 files.")
+      expect((await admin.getCompanyExpenses(userId))[0].files).toEqual([ptr("w-a")])
+      const inv = await rawInvoice({ files: [ptr("w-i")] })
+      await expect(admin.changeFiles(userId, "invoice", inv.id, (list) => [...list, ...many])).rejects.toThrow("A cost or an invoice holds up to 4 files.")
+      expect((await admin.getInvoices(userId)).find((i) => i.id === inv.id)!.files).toEqual([ptr("w-i")])
+      await expect(admin.changeFiles(userId, "cost", "nope", (list) => list)).rejects.toThrow("Company expense not found")
+      await expect(admin.changeFiles(userId, "invoice", "nope", (list) => list)).rejects.toThrow("Invoice nope not found")
+    })
   })
 })
 

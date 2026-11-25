@@ -24,7 +24,7 @@ Firestore usa una struttura basata su sotto-collezioni, un albero per utente:
 /oauth_clients · /oauth_codes · /oauth_tokens · /api_keys_index · /uploads   (solo server)
 ```
 
-I file delle fatture stanno in Storage sotto `users/{userId}/company-files/`.
+I file delle fatture stanno in Storage sotto `users/{userId}/company-files/`. Un costo o una fattura tiene un elenco di file (`files`, fino a 4); un documento salvato prima dell'elenco tiene il suo unico `file`, che si legge come il primo dell'elenco finché i file non cambiano, quindi non c'è nulla da migrare.
 
 ## Regole di Sicurezza
 

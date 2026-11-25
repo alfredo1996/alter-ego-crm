@@ -20,7 +20,9 @@ import { PUT as upload } from "@/app/api/uploads/[token]/route"
 import * as admin from "@/lib/backend/firebase-admin"
 import { getAdminBucket, getAdminFirestore } from "@/lib/firebase-admin-client"
 import { getFirebaseAuth } from "@/lib/firebase-client"
+import { fileIdOf } from "@/lib/invoice-files"
 import { s256 } from "@/lib/oauth/pkce"
+import { INVOICE_FILES_MAX } from "@/types/schemas"
 
 const ORIGIN = "https://mcp.test"
 const REDIRECT = "https://claude.ai/api/mcp/auth_callback"
@@ -126,38 +128,70 @@ describe("attach_file", () => {
   it("on a cost with no file writes at once: the object, the pointer, and nothing to confirm", async () => {
     const c = await cost("Cloud hosting")
     const { payload } = await callOk("attach_file", { target: "cost", id: c.id, name: "IT01_00001.xml", content_base64: b64(standardXml) })
-    const file = (await storedCost(c.id)).file!
+    const file = (await storedCost(c.id)).files[0]
     expect(file).toMatchObject({ name: "IT01_00001.xml", kind: "xml", size: standardXml.length })
     expect(file.path).toMatch(new RegExp(`^users/${userId}/company-files/[\\w-]+\\.xml$`))
     expect(await bytesAt(file.path)).toEqual(standardXml)
-    expect(payload.file).toEqual({ name: "IT01_00001.xml", kind: "xml", size: standardXml.length, sha256: sha(standardXml) })
+    expect(payload.file).toEqual({ fileId: fileIdOf(file.path), name: "IT01_00001.xml", kind: "xml", size: standardXml.length, sha256: sha(standardXml) })
     expect(payload.summary).toBe('Attached IT01_00001.xml (FatturaPA XML, 4 KB) to the cost "Cloud hosting".')
   })
 
   it("on an invoice with no file writes at once, as a signed p7m", async () => {
     const i = await invoice("FT-1/2026")
     await callOk("attach_file", { target: "invoice", id: i.id, name: "IT01_00002.xml.p7m", content_base64: b64("signed") })
-    const file = (await storedInvoice(i.id)).file!
+    const file = (await storedInvoice(i.id)).files[0]
     expect(file).toMatchObject({ name: "IT01_00002.xml.p7m", kind: "p7m", size: 6 })
     expect((await getAdminBucket()!.file(file.path).getMetadata())[0].contentType).toBe("application/pkcs7-mime")
   })
 
-  it("refuses a row that has a file unless replace is true, naming the current file and changing nothing", async () => {
+  it("on a row that has a file adds another by default, naming how many it now holds, and keeps the first", async () => {
     const c = await cost("Has a file")
     await callOk("attach_file", { target: "cost", id: c.id, name: "first.pdf", content_base64: b64("%PDF-1") })
-    const first = (await storedCost(c.id)).file!
-    const said = await refusal("attach_file", { target: "cost", id: c.id, name: "second.pdf", content_base64: b64("%PDF-2") })
-    expect(said).toBe('This cost already has a file: first.pdf (PDF, 1 KB). Ask the owner whether to replace it; if they agree, call again with replace: true.')
-    expect((await storedCost(c.id)).file).toEqual(first)
+    const first = (await storedCost(c.id)).files[0]
+    const { payload } = await callOk("attach_file", { target: "cost", id: c.id, name: "second.pdf", content_base64: b64("%PDF-2") })
+    const [kept, second] = (await storedCost(c.id)).files
+    expect(kept).toEqual(first)
+    expect(payload.summary).toBe('Attached second.pdf (PDF, 1 KB) to the cost "Has a file"; it now holds 2 files.')
+    expect(payload.file).toEqual({ fileId: fileIdOf(second.path), name: "second.pdf", kind: "pdf", size: 6, sha256: sha("%PDF-2") })
     expect(await bytesAt(first.path)).toEqual(Buffer.from("%PDF-1"))
+    expect(await bytesAt(second.path)).toEqual(Buffer.from("%PDF-2"))
+  })
+
+  it("refuses the same name and size as a retry: nothing stored, no object left", async () => {
+    const c = await cost("Retried")
+    await callOk("attach_file", { target: "cost", id: c.id, name: "same.xml", content_base64: b64("<a/>") })
+    const before = await objectCount()
+    expect(await refusal("attach_file", { target: "cost", id: c.id, name: "same.xml", content_base64: b64("<b/>") })).toBe(
+      'The cost "Retried" already holds same.xml (FatturaPA XML, 1 KB). Nothing was attached.',
+    )
+    expect((await storedCost(c.id)).files).toHaveLength(1)
+    expect(await objectCount()).toBe(before)
+  })
+
+  it("refuses a file past the cap before uploading it, and replace: true on a row of several, pointing at remove_file", async () => {
+    const c = await cost("Full")
+    for (let n = 0; n < INVOICE_FILES_MAX; n++) await callOk("attach_file", { target: "cost", id: c.id, name: `f${n}.xml`, content_base64: b64(`<${n}/>`) })
+    const held = (await storedCost(c.id)).files
+    const before = await objectCount()
+    expect(await refusal("attach_file", { target: "cost", id: c.id, name: "one-more.xml", content_base64: b64("<x/>") })).toBe(
+      `The cost "Full" already holds ${INVOICE_FILES_MAX} files, the most a cost can hold. Nothing was attached; remove one with remove_file first.`,
+    )
+    const said = await refusal("attach_file", { target: "cost", id: c.id, name: "r.xml", content_base64: b64("<r/>"), replace: true })
+    expect(said).toBe(
+      `replace: true swaps the only file of a row, and the cost "Full" holds ${INVOICE_FILES_MAX}: ` +
+        `${held.map((f) => `${f.name} (fileId ${fileIdOf(f.path)})`).join(", ")}. To change one of them, remove it with remove_file and its fileId, then attach the new one.`,
+    )
+    expect((await storedCost(c.id)).files).toEqual(held)
+    expect(await objectCount()).toBe(before)
   })
 
   it("with replace: true points at the new object and deletes the old one", async () => {
     const c = await cost("Replaced")
     await callOk("attach_file", { target: "cost", id: c.id, name: "old.xml", content_base64: b64("<old/>") })
-    const old = (await storedCost(c.id)).file!
+    const old = (await storedCost(c.id)).files[0]
     const { payload } = await callOk("attach_file", { target: "cost", id: c.id, name: "new.pdf", content_base64: b64("%PDF-new"), replace: true })
-    const next = (await storedCost(c.id)).file!
+    const next = (await storedCost(c.id)).files[0]
+    expect((await storedCost(c.id)).files).toHaveLength(1)
     expect(next).toMatchObject({ name: "new.pdf", kind: "pdf" })
     expect(next.path).not.toBe(old.path)
     expect(await exists(old.path)).toBe(false)
@@ -173,7 +207,7 @@ describe("attach_file", () => {
     const c = await cost(`Refused ${_what}`)
     const before = await objectCount()
     expect(await refusal("attach_file", { target: "cost", id: c.id, ...args })).toBe(message)
-    expect((await storedCost(c.id)).file).toBeNull()
+    expect((await storedCost(c.id)).files).toEqual([])
     expect(await objectCount()).toBe(before)
   })
 
@@ -181,7 +215,7 @@ describe("attach_file", () => {
     const c = await cost("Wrapped")
     const wrapped = Buffer.alloc(10 * 1024 * 1024, 1).toString("base64").replace(/(.{76})/g, "$1\r\n")
     const { payload } = await callOk("attach_file", { target: "cost", id: c.id, name: "ten.pdf", content_base64: wrapped })
-    expect(payload.file).toEqual({ name: "ten.pdf", kind: "pdf", size: 10 * 1024 * 1024, sha256: sha(Buffer.alloc(10 * 1024 * 1024, 1)) })
+    expect(payload.file).toMatchObject({ name: "ten.pdf", kind: "pdf", size: 10 * 1024 * 1024, sha256: sha(Buffer.alloc(10 * 1024 * 1024, 1)) })
   })
 
   it("a cost the schema no longer accepts is refused with the schema's words, not 'Internal error', and its upload is dropped", async () => {
@@ -189,7 +223,7 @@ describe("attach_file", () => {
     await getAdminFirestore().collection("users").doc(userId).collection("company_expenses").doc(c.id).update({ vat: -20 })
     const before = await objectCount()
     expect(await refusal("attach_file", { target: "cost", id: c.id, name: "a.pdf", content_base64: b64("%PDF") })).toBe("VAT has the sign of the amount")
-    expect((await storedCost(c.id)).file).toBeNull()
+    expect((await storedCost(c.id)).files).toEqual([])
     expect(await objectCount()).toBe(before)
   })
 
@@ -209,7 +243,7 @@ describe("attach_file", () => {
     const res = await mcp(rpcRequest(readOnlyBearer, "attach_file", { target: "cost", id: c.id, name: "a.pdf", content_base64: b64("x") }))
     expect(res.status).toBe(403)
     expect(res.headers.get("WWW-Authenticate") ?? "").toContain('error="insufficient_scope"')
-    expect((await storedCost(c.id)).file).toBeNull()
+    expect((await storedCost(c.id)).files).toEqual([])
   })
 })
 
@@ -217,18 +251,34 @@ describe("remove_file", () => {
   it("previews first and changes nothing, then clears the pointer and deletes the object on confirm", async () => {
     const i = await invoice("FT-3/2026")
     await callOk("attach_file", { target: "invoice", id: i.id, name: "out.pdf", content_base64: b64("%PDF-out") })
-    const file = (await storedInvoice(i.id)).file!
+    const file = (await storedInvoice(i.id)).files[0]
 
     const preview = await callOk("remove_file", { target: "invoice", id: i.id })
     expect(preview.payload.preview).toBe(true)
     expect(preview.payload.summary).toContain("Preview, nothing changed yet: remove out.pdf (PDF, 1 KB) from invoice FT-3/2026")
-    expect((await storedInvoice(i.id)).file).toEqual(file)
+    expect((await storedInvoice(i.id)).files).toEqual([file])
     expect(await exists(file.path)).toBe(true)
 
     const done = await callOk("remove_file", { target: "invoice", id: i.id, confirm: true })
     expect(done.payload.summary).toBe("Removed out.pdf from invoice FT-3/2026.")
-    expect((await storedInvoice(i.id)).file).toBeNull()
+    expect((await storedInvoice(i.id)).files).toEqual([])
     expect(await exists(file.path)).toBe(false)
+  })
+
+  it("on a row of several refuses without fileId, listing each; with fileId removes that file only", async () => {
+    const c = await cost("Several to remove")
+    for (const n of ["a.xml", "b.xml"]) await callOk("attach_file", { target: "cost", id: c.id, name: n, content_base64: b64(`<${n}/>`) })
+    const [a, b] = (await storedCost(c.id)).files
+    const list = `${a.name} (fileId ${fileIdOf(a.path)}), ${b.name} (fileId ${fileIdOf(b.path)})`
+    expect(await refusal("remove_file", { target: "cost", id: c.id, confirm: true })).toBe(`The cost "Several to remove" holds 2 files: ${list}. Pass fileId to pick one.`)
+    expect(await refusal("remove_file", { target: "cost", id: c.id, fileId: "nope", confirm: true })).toBe(`The cost "Several to remove" has no file with fileId "nope". It holds: ${list}.`)
+    const preview = await callOk("remove_file", { target: "cost", id: c.id, fileId: fileIdOf(a.path) })
+    expect(preview.payload.summary).toContain("remove a.xml (FatturaPA XML, 1 KB)")
+    expect((await storedCost(c.id)).files).toHaveLength(2)
+    await callOk("remove_file", { target: "cost", id: c.id, fileId: fileIdOf(a.path), confirm: true })
+    expect((await storedCost(c.id)).files).toEqual([b])
+    expect(await exists(a.path)).toBe(false)
+    expect(await exists(b.path)).toBe(true)
   })
 
   it("says so when the row has no file", async () => {
@@ -239,9 +289,9 @@ describe("remove_file", () => {
   it("never deletes an object outside the caller's own folder, even when a record names one", async () => {
     const foreign = "users/someone-else/company-files/foreign.pdf"
     await getAdminBucket()!.file(foreign).save("%PDF", { contentType: "application/pdf" })
-    const c = await cost("Foreign pointer", { file: { path: foreign, name: "foreign.pdf", kind: "pdf", size: 4, uploadedAt: new Date() } })
+    const c = await cost("Foreign pointer", { files: [{ path: foreign, name: "foreign.pdf", kind: "pdf", size: 4, uploadedAt: new Date() }] })
     await callOk("remove_file", { target: "cost", id: c.id, confirm: true })
-    expect((await storedCost(c.id)).file).toBeNull()
+    expect((await storedCost(c.id)).files).toEqual([])
     expect(await exists(foreign)).toBe(true)
     await getAdminBucket()!.file(foreign).delete()
   })
@@ -258,15 +308,16 @@ describe("get_file", () => {
     await callOk("attach_file", { target: "cost", id: c.id, name: "IT01_00003.xml", content_base64: b64(standardXml) })
     const { content, payload } = await callOk("get_file", { target: "cost", id: c.id })
     const resource = content.find((x) => x.type === "resource")!.resource!
-    expect(resource).toEqual({ uri: `alter-ego://invoice-files/cost/${c.id}`, mimeType: "application/xml", text: standardXml.toString("utf8") })
-    expect(payload).toEqual({ summary: `IT01_00003.xml (FatturaPA XML, 4 KB) of the cost "Fetched XML".`, file: { name: "IT01_00003.xml", kind: "xml", size: standardXml.length, sha256: sha(standardXml) } })
+    const fileId = fileIdOf((await storedCost(c.id)).files[0].path)
+    expect(resource).toEqual({ uri: `alter-ego://invoice-files/cost/${c.id}/${fileId}`, mimeType: "application/xml", text: standardXml.toString("utf8") })
+    expect(payload).toEqual({ summary: `IT01_00003.xml (FatturaPA XML, 4 KB) of the cost "Fetched XML".`, file: { fileId, name: "IT01_00003.xml", kind: "xml", size: standardXml.length, sha256: sha(standardXml) } })
   })
 
   it("returns a PDF and a signed .p7m as a base64 blob with their content types", async () => {
     const i = await invoice("FT-4/2026")
     await callOk("attach_file", { target: "invoice", id: i.id, name: "issued.pdf", content_base64: b64("%PDF-1.4 body") })
     const pdf = (await callOk("get_file", { target: "invoice", id: i.id })).content.find((x) => x.type === "resource")!.resource!
-    expect(pdf).toEqual({ uri: `alter-ego://invoice-files/invoice/${i.id}`, mimeType: "application/pdf", blob: b64("%PDF-1.4 body") })
+    expect(pdf).toEqual({ uri: `alter-ego://invoice-files/invoice/${i.id}/${fileIdOf((await storedInvoice(i.id)).files[0].path)}`, mimeType: "application/pdf", blob: b64("%PDF-1.4 body") })
 
     const signed = Buffer.from([0x30, 0x82, 0xff, 0x00])
     const c = await cost("Signed")
@@ -286,7 +337,7 @@ describe("get_file", () => {
   it("refuses a record whose pointer leaves the caller's folder, and a row with no file", async () => {
     const foreign = "users/someone-else/company-files/secret.pdf"
     await getAdminBucket()!.file(foreign).save("%PDF-secret", { contentType: "application/pdf" })
-    const c = await cost("Foreign read", { file: { path: foreign, name: "secret.pdf", kind: "pdf", size: 11, uploadedAt: new Date() } })
+    const c = await cost("Foreign read", { files: [{ path: foreign, name: "secret.pdf", kind: "pdf", size: 11, uploadedAt: new Date() }] })
     expect(await refusal("get_file", { target: "cost", id: c.id })).toBe("The file of this cost is not in your folder, so it is not served.")
     await getAdminBucket()!.file(foreign).delete()
     const plain = await cost("No file to fetch")
@@ -294,14 +345,29 @@ describe("get_file", () => {
   })
 })
 
-describe("the reads show the file", () => {
-  it("list_invoices carries file {name, kind, size} or null", async () => {
+describe("get_file on a row of several", () => {
+  it("refuses without fileId, naming each; with fileId returns that file, and an unknown id is refused", async () => {
+    const c = await cost("Several to read")
+    await callOk("attach_file", { target: "cost", id: c.id, name: "one.xml", content_base64: b64("<one/>") })
+    await callOk("attach_file", { target: "cost", id: c.id, name: "two.pdf", content_base64: b64("%PDF-two") })
+    const [one, two] = (await storedCost(c.id)).files
+    const list = `${one.name} (fileId ${fileIdOf(one.path)}), ${two.name} (fileId ${fileIdOf(two.path)})`
+    expect(await refusal("get_file", { target: "cost", id: c.id })).toBe(`The cost "Several to read" holds 2 files: ${list}. Pass fileId to pick one.`)
+    expect(await refusal("get_file", { target: "cost", id: c.id, fileId: "nope" })).toBe(`The cost "Several to read" has no file with fileId "nope". It holds: ${list}.`)
+    const got = (await callOk("get_file", { target: "cost", id: c.id, fileId: fileIdOf(two.path) })).content.find((x) => x.type === "resource")!.resource!
+    expect(got).toEqual({ uri: `alter-ego://invoice-files/cost/${c.id}/${fileIdOf(two.path)}`, mimeType: "application/pdf", blob: b64("%PDF-two") })
+  })
+})
+
+describe("the reads show the files", () => {
+  it("list_invoices carries files [{fileId, name, kind, size}], [] for none, and no file key", async () => {
     const [withFile, without] = [await invoice("FT-5/2026"), await invoice("FT-6/2026")]
     await callOk("attach_file", { target: "invoice", id: withFile.id, name: "five.pdf", content_base64: b64("%PDF-5") })
     const { payload } = await callOk("list_invoices", {})
     const by = (id: string) => (payload.invoices as Payload[]).find((r) => r.id === id)!
-    expect(by(withFile.id).file).toEqual({ name: "five.pdf", kind: "pdf", size: 6 })
-    expect(by(without.id).file).toBeNull()
+    expect(by(withFile.id).files).toEqual([{ fileId: fileIdOf((await storedInvoice(withFile.id)).files[0].path), name: "five.pdf", kind: "pdf", size: 6 }])
+    expect(by(without.id).files).toEqual([])
+    expect("file" in by(withFile.id)).toBe(false)
   })
 
   it("get_cash_book rows carry the file of a cost and of an invoice, and null on the rest", async () => {
@@ -312,9 +378,9 @@ describe("the reads show the file", () => {
     await callOk("attach_file", { target: "invoice", id: paid.id, name: "paid.pdf", content_base64: b64("%PDF-p") })
     const { payload } = await callOk("get_cash_book", { limit: 200 })
     const row = (id: string) => (payload.rows as Payload[]).find((r) => r.id === id)!
-    expect(row(c.id).file).toEqual({ name: "row.xml", kind: "xml", size: 4 })
-    expect(row(plain.id).file).toBeNull()
-    expect(row(paid.id).file).toEqual({ name: "paid.pdf", kind: "pdf", size: 6 })
+    expect(row(c.id).files).toEqual([{ fileId: fileIdOf((await storedCost(c.id)).files[0].path), name: "row.xml", kind: "xml", size: 4 }])
+    expect(row(plain.id).files).toEqual([])
+    expect(row(paid.id).files).toEqual([{ fileId: fileIdOf((await storedInvoice(paid.id)).files[0].path), name: "paid.pdf", kind: "pdf", size: 6 }])
   })
 
   it("get_cash_book otherEntries carry the file of a cost on no company account (a supplier invoice, the owner's card)", async () => {
@@ -322,7 +388,22 @@ describe("the reads show the file", () => {
     await callOk("attach_file", { target: "cost", id: c.id, name: "card.pdf", content_base64: b64("%PDF-c") })
     const { payload } = await callOk("get_cash_book", { period: ym, limit: 200 })
     const entry = (payload.otherEntries as Payload[]).find((r) => r.id === c.id)!
-    expect(entry.file).toEqual({ name: "card.pdf", kind: "pdf", size: 6 })
+    expect(entry.files).toEqual([{ fileId: fileIdOf((await storedCost(c.id)).files[0].path), name: "card.pdf", kind: "pdf", size: 6 }])
+  })
+
+  it("a row saved with only the old single file reads as one file, with its fileId, in both reads", async () => {
+    const c = await cost("Legacy single file", { amount: 66 })
+    const old = { path: `users/${userId}/company-files/legacy-one.xml`, name: "legacy.xml", kind: "xml", size: 4, uploadedAt: new Date() }
+    await getAdminBucket()!.file(old.path).save("<a/>", { contentType: "application/xml" })
+    await getAdminFirestore().collection("users").doc(userId).collection("company_expenses").doc(c.id).update({ file: old })
+    const { payload } = await callOk("get_cash_book", { limit: 200 })
+    expect((payload.rows as Payload[]).find((r) => r.id === c.id)!.files).toEqual([{ fileId: "legacy-one", name: "legacy.xml", kind: "xml", size: 4 }])
+    // get_file and remove_file without a fileId act on it; the removal leaves file: null and files: [] on the raw row.
+    expect((await callOk("get_file", { target: "cost", id: c.id })).payload.file.fileId).toBe("legacy-one")
+    await callOk("remove_file", { target: "cost", id: c.id, confirm: true })
+    const raw = (await getAdminFirestore().collection("users").doc(userId).collection("company_expenses").doc(c.id).get()).data()
+    expect([raw?.file, raw?.files]).toEqual([null, []])
+    expect(await exists(old.path)).toBe(false)
   })
 })
 
@@ -350,15 +431,15 @@ describe("create_upload_url, PUT, complete_upload against Firestore and Storage"
     const made = await link({ target: "cost", id: c.id, name, size: bytes.length, sha256: sha(bytes) })
     expect(made).toMatchObject({ method: "PUT", headers: {}, maxBytes: bytes.length })
     expect(made.uploadUrl).toMatch(new RegExp(`^${ORIGIN}/api/uploads/[\\w-]{43}$`))
-    expect((await storedCost(c.id)).file).toBeNull()
+    expect((await storedCost(c.id)).files).toEqual([])
 
     const res = await put(made.uploadUrl, bytes)
     expect(res.status).toBe(201)
-    expect((await storedCost(c.id)).file).toBeNull() // arrived, not linked
+    expect((await storedCost(c.id)).files).toEqual([]) // arrived, not linked
 
     const { payload } = await callOk("complete_upload", { uploadId: made.uploadId })
-    expect(payload.file).toEqual({ name, kind: name.endsWith(".pdf") ? "pdf" : "xml", size: bytes.length, sha256: sha(bytes) })
-    const file = (await storedCost(c.id)).file!
+    expect(payload.file).toMatchObject({ name, kind: name.endsWith(".pdf") ? "pdf" : "xml", size: bytes.length, sha256: sha(bytes) })
+    const file = (await storedCost(c.id)).files[0]
     expect(file).toMatchObject({ name, size: bytes.length })
     expect(await bytesAt(file.path)).toEqual(bytes)
   })
@@ -368,24 +449,73 @@ describe("create_upload_url, PUT, complete_upload against Firestore and Storage"
     const made = await link({ target: "invoice", id: i.id, name: "out.pdf" })
     expect((await put(made.uploadUrl, pdfBytes(3))).status).toBe(201)
     await callOk("complete_upload", { uploadId: made.uploadId })
-    expect((await storedInvoice(i.id)).file).toMatchObject({ name: "out.pdf", kind: "pdf" })
+    expect((await storedInvoice(i.id)).files[0]).toMatchObject({ name: "out.pdf", kind: "pdf" })
   })
 
-  it("refuses a row that has a file unless replace; with replace the old object goes only at complete_upload", async () => {
+  it("a row that has a file takes another by default; with replace the old object goes only at complete_upload", async () => {
     const c = await cost("Upload replace")
     await callOk("attach_file", { target: "cost", id: c.id, name: "old.xml", content_base64: b64("<old/>") })
-    const old = (await storedCost(c.id)).file!
-    expect(await refusal("create_upload_url", { target: "cost", id: c.id, name: "new.xml" })).toContain("already has a file: old.xml")
+    const old = (await storedCost(c.id)).files[0]
+
+    const more = await link({ target: "cost", id: c.id, name: "more.xml" })
+    expect((await put(more.uploadUrl, Buffer.from("<more/>"))).status).toBe(201)
+    const added = await callOk("complete_upload", { uploadId: more.uploadId })
+    expect(added.payload.summary).toBe('Attached more.xml (FatturaPA XML, 1 KB) to the cost "Upload replace"; it now holds 2 files.')
+    expect((await storedCost(c.id)).files).toHaveLength(2)
+    await callOk("remove_file", { target: "cost", id: c.id, fileId: fileIdOf((await storedCost(c.id)).files[1].path), confirm: true })
 
     const made = await link({ target: "cost", id: c.id, name: "new.xml", replace: true })
     expect((await put(made.uploadUrl, Buffer.from("<new/>"))).status).toBe(201)
     expect(await exists(old.path)).toBe(true)
-    expect((await storedCost(c.id)).file).toEqual(old)
+    expect((await storedCost(c.id)).files).toEqual([old])
 
     await callOk("complete_upload", { uploadId: made.uploadId })
-    const next = (await storedCost(c.id)).file!
+    const [next, ...rest] = (await storedCost(c.id)).files
+    expect(rest).toEqual([])
     expect(await exists(old.path)).toBe(false)
     expect(await bytesAt(next.path)).toEqual(Buffer.from("<new/>"))
+  })
+
+  it("three links for one row, completed in parallel, all land with their own sha256", async () => {
+    const c = await cost("Three at once")
+    const bodies = ["<a-one/>", "<b-two/>", "<c-three/>"].map((x) => Buffer.from(x))
+    const made = await Promise.all(bodies.map((_, n) => link({ target: "cost", id: c.id, name: `p${n}.xml`, sha256: sha(bodies[n]) })))
+    for (const [n, m] of made.entries()) expect((await put(m.uploadUrl, bodies[n])).status).toBe(201)
+    const done = await Promise.all(made.map((m) => call("complete_upload", { uploadId: m.uploadId })))
+    expect(done.map((d) => d.isError)).toEqual([false, false, false])
+    expect(done.map((d) => d.payload.file.sha256).sort()).toEqual(bodies.map(sha).sort())
+    expect((await storedCost(c.id)).files.map((f) => f.name).sort()).toEqual(["p0.xml", "p1.xml", "p2.xml"])
+  })
+
+  it("a duplicate, or a row that filled up meanwhile, discards the object and marks the upload failed, leaving the row", async () => {
+    const c = await cost("Complete refusals")
+    await callOk("attach_file", { target: "cost", id: c.id, name: "dup.xml", content_base64: b64("<a/>") })
+    const row = (await storedCost(c.id)).files
+    const dup = await link({ target: "cost", id: c.id, name: "dup.xml" })
+    expect((await put(dup.uploadUrl, Buffer.from("<b/>"))).status).toBe(201)
+    const before = await objectCount()
+    expect(await refusal("complete_upload", { uploadId: dup.uploadId })).toBe(
+      'The cost "Complete refusals" already holds dup.xml (FatturaPA XML, 1 KB). Nothing was attached and the upload was discarded.',
+    )
+    expect(await objectCount()).toBe(before - 1)
+    expect((await admin.getUpload(dup.uploadId))!.status).toBe("failed")
+    expect((await storedCost(c.id)).files).toEqual(row)
+
+    const late = await link({ target: "cost", id: c.id, name: "late.xml" })
+    expect((await put(late.uploadUrl, Buffer.from("<late/>"))).status).toBe(201)
+    for (let n = 1; n < INVOICE_FILES_MAX; n++) await callOk("attach_file", { target: "cost", id: c.id, name: `x${n}.xml`, content_base64: b64(`<${n}/>`) })
+    expect(await refusal("complete_upload", { uploadId: late.uploadId })).toContain(`already holds ${INVOICE_FILES_MAX} files, the most a cost can hold. Nothing was attached and the upload was discarded`)
+    expect((await storedCost(c.id)).files).toHaveLength(INVOICE_FILES_MAX)
+
+    const rep = await cost("Replace meanwhile")
+    await callOk("attach_file", { target: "cost", id: rep.id, name: "r1.xml", content_base64: b64("<1/>") })
+    const swap = await link({ target: "cost", id: rep.id, name: "r.xml", replace: true })
+    expect((await put(swap.uploadUrl, Buffer.from("<r/>"))).status).toBe(201)
+    await callOk("attach_file", { target: "cost", id: rep.id, name: "r2.xml", content_base64: b64("<2/>") })
+    expect(await refusal("complete_upload", { uploadId: swap.uploadId })).toBe(
+      'The cost "Replace meanwhile" now holds 2 files, so replace: true cannot pick one. Nothing was attached and the upload was discarded; remove the wrong file with remove_file, then start again without replace.',
+    )
+    expect((await storedCost(rep.id)).files).toHaveLength(2)
   })
 
   it("a wrong sha256, a used link and a body over the declared size each leave the row and Storage unchanged", async () => {
@@ -406,7 +536,7 @@ describe("create_upload_url, PUT, complete_upload against Firestore and Storage"
     const small = await link({ target: "cost", id: c.id, name: "c.xml", size: 4 })
     expect((await put(small.uploadUrl, Buffer.from("<too-long/>"))).status).toBe(413)
 
-    expect((await storedCost(c.id)).file).toBeNull()
+    expect((await storedCost(c.id)).files).toEqual([])
     expect(await objectCount()).toBe(before)
   })
 
@@ -424,6 +554,6 @@ describe("attach_file from a url", () => {
       "That address is private or internal, so it is not fetched.",
     )
     expect(await refusal("attach_file", { target: "cost", id: c.id, name: "a.xml", url: "http://files.example.com/a.xml" })).toBe("Only https addresses are accepted.")
-    expect((await storedCost(c.id)).file).toBeNull()
+    expect((await storedCost(c.id)).files).toEqual([])
   })
 })

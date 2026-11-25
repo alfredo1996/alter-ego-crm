@@ -34,7 +34,7 @@ beforeEach(() => {
   off.clear()
   rows.getCompanyAccounts = [{ id: "a1", name: "Bank", openingBalance: 0, openingDate: new Date(`${last}-01T00:00:00`), statementBalance: null, statementDate: null }]
   rows.getCompanyExpenses = [
-    { id: "e1", description: "Laptop", amount: 900, date: new Date(`${last}-10T00:00:00`), isRecurring: false, accountId: "a1", file: null },
+    { id: "e1", description: "Laptop", amount: 900, date: new Date(`${last}-10T00:00:00`), isRecurring: false, accountId: "a1", files: [] },
   ]
   rows.getInvoices = []
 })

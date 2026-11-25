@@ -27,6 +27,7 @@ import {
   type RevenueSource,
 } from "@/lib/engagement-burndown"
 import { contractDays, contractUnit, engagementLabel, HOURS_PER_DAY, hoursToDays, inContractUnit, perDay, toContractUnit } from "@/lib/engagements"
+import { fileIdOf } from "@/lib/invoice-files"
 import {
   clientBilling,
   eurCents,
@@ -1398,10 +1399,15 @@ export function planMonths(entries: { date: Date; recurringExpenseId?: string | 
   return [...out].sort()
 }
 
-/** What a read says of a row's invoice file: enough to see it is there; get_file fetches it. null = none. */
+/** What a read says of one invoice file: enough to see it is there and to name it to get_file and remove_file. */
 export function fileSummary(
-  file: InvoiceFile | null | undefined,
+  file: InvoiceFile,
   sha256?: string,
-): { name: string; kind: InvoiceFile["kind"]; size: number; sha256?: string } | null {
-  return file ? { name: file.name, kind: file.kind, size: file.size, ...(sha256 && { sha256 }) } : null
+): { fileId: string; name: string; kind: InvoiceFile["kind"]; size: number; sha256?: string } {
+  return { fileId: fileIdOf(file.path), name: file.name, kind: file.kind, size: file.size, ...(sha256 && { sha256 }) }
+}
+
+/** What a read says of a row's invoice files, in the row's order; [] = none (also on a row that is not a document). */
+export function filesOf(files: InvoiceFile[] | undefined): ReturnType<typeof fileSummary>[] {
+  return (files ?? []).map((f) => fileSummary(f))
 }
