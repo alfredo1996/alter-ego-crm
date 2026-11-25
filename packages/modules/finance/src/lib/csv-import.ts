@@ -1,3 +1,5 @@
+import { parseDDMMYYYY } from "./money-manager-import"
+
 export interface ParsedCSV {
   headers: string[]
   rows: string[][]
@@ -94,52 +96,59 @@ export function parseCSV(text: string): ParsedCSV {
 
 // ─── Date Parsing ─────────────────────────────────────────────────────────────
 
-const DATE_PARSERS: Array<{ pattern: RegExp; parse: (s: string) => Date }> = [
-  // ISO 8601: 2024-01-15 or 2024-01-15T10:30:00
-  {
-    pattern: /^\d{4}-\d{2}-\d{2}([ T]\d{2}:\d{2}(:\d{2})?.*)?$/,
-    parse: (s) => new Date(s.includes("T") || s.includes(" ") ? s : s + "T00:00:00"),
-  },
-  // MM/DD/YYYY
-  {
-    pattern: /^\d{1,2}\/\d{1,2}\/\d{4}$/,
-    parse: (s) => {
-      const [m, d, y] = s.split("/").map(Number)
-      return new Date(y, m - 1, d)
-    },
-  },
-  // MM/DD/YY
-  {
-    pattern: /^\d{1,2}\/\d{1,2}\/\d{2}$/,
-    parse: (s) => {
-      const [m, d, y] = s.split("/").map(Number)
-      return new Date(2000 + y, m - 1, d)
-    },
-  },
-  // MM-DD-YYYY
-  {
-    pattern: /^\d{1,2}-\d{1,2}-\d{4}$/,
-    parse: (s) => {
-      const [m, d, y] = s.split("-").map(Number)
-      return new Date(y, m - 1, d)
-    },
-  },
-  // YYYYMMDD
-  {
-    pattern: /^\d{8}$/,
-    parse: (s) =>
-      new Date(parseInt(s.slice(0, 4)), parseInt(s.slice(4, 6)) - 1, parseInt(s.slice(6, 8))),
-  },
-]
+export type DateOrder = "dmy" | "mdy"
 
-export function tryParseDate(value: string): Date | null {
+const ISO_PATTERN = /^\d{4}-\d{2}-\d{2}([ T]\d{2}:\d{2}(:\d{2})?.*)?$/
+const SLASH_PATTERN = /^(\d{1,2})\/(\d{1,2})\/(\d{4}|\d{2})$/
+const DASH_PATTERN = /^(\d{1,2})-(\d{1,2})-(\d{4})$/
+const COMPACT_PATTERN = /^\d{8}$/
+
+// Build a Date and reject impossible values (month 13, Feb 30) instead of letting
+// Date roll them over into the next month
+function makeDate(year: number, month: number, day: number): Date | null {
+  if (month < 1 || month > 12 || day < 1 || day > 31) return null
+  const d = new Date(year, month - 1, day)
+  if (d.getFullYear() !== year || d.getMonth() !== month - 1 || d.getDate() !== day) return null
+  return d
+}
+
+export function tryParseDate(value: string, order: DateOrder = "mdy"): Date | null {
   const v = value.trim()
-  for (const { pattern, parse } of DATE_PARSERS) {
-    if (pattern.test(v)) {
-      const d = parse(v)
-      if (!isNaN(d.getTime())) return d
-    }
+
+  // ISO 8601: 2024-01-15 or 2024-01-15T10:30:00
+  if (ISO_PATTERN.test(v)) {
+    const d = new Date(v.includes("T") || v.includes(" ") ? v : v + "T00:00:00")
+    if (!isNaN(d.getTime())) return d
   }
+
+  // a/b/yyyy or a/b/yy: the order is ambiguous, so it depends on `order`. An impossible
+  // date returns null here and must not reach the native fallback, which rolls it over too
+  const slash = v.match(SLASH_PATTERN)
+  if (slash) {
+    const a = parseInt(slash[1], 10)
+    const b = parseInt(slash[2], 10)
+    const year = slash[3].length === 4 ? parseInt(slash[3], 10) : 2000 + parseInt(slash[3], 10)
+    if (order === "dmy" && slash[3].length === 4) return parseDDMMYYYY(v)
+    return order === "dmy" ? makeDate(year, b, a) : makeDate(year, a, b)
+  }
+
+  // MM-DD-YYYY
+  const dash = v.match(DASH_PATTERN)
+  if (dash) {
+    const d = makeDate(parseInt(dash[3], 10), parseInt(dash[1], 10), parseInt(dash[2], 10))
+    if (d) return d
+  }
+
+  // YYYYMMDD
+  if (COMPACT_PATTERN.test(v)) {
+    const d = makeDate(
+      parseInt(v.slice(0, 4), 10),
+      parseInt(v.slice(4, 6), 10),
+      parseInt(v.slice(6, 8), 10),
+    )
+    if (d) return d
+  }
+
   // Fallback to native Date parsing
   const d = new Date(v)
   return isNaN(d.getTime()) ? null : d
@@ -147,14 +156,48 @@ export function tryParseDate(value: string): Date | null {
 
 // ─── Amount Parsing ───────────────────────────────────────────────────────────
 
-export function tryParseAmount(value: string): number | null {
+export type DecimalSeparator = "." | ","
+
+export function tryParseAmount(value: string, decimalSeparator: DecimalSeparator = "."): number | null {
   // Handle parentheses as negatives: (1,234.56) → -1234.56
   const withParens = value.trim().replace(/^\((.+)\)$/, "-$1")
-  // Remove currency symbols and thousand separators
-  const cleaned = withParens.replace(/[$€£¥₹,\s]/g, "").trim()
+  // Remove currency symbols and thousand separators; with a comma decimal the
+  // period and spaces are the thousand separators
+  const cleaned =
+    decimalSeparator === ","
+      ? withParens.replace(/[$€£¥₹.\s]/g, "").replace(",", ".").trim()
+      : withParens.replace(/[$€£¥₹,\s]/g, "").trim()
   if (!cleaned) return null
   const n = parseFloat(cleaned)
   return isNaN(n) ? null : n
+}
+
+// ─── Format Auto-Detection ────────────────────────────────────────────────────
+
+// a/b/yyyy values: a first part over 12 means day-first, a second part over 12 means
+// month-first. null when nothing decides it.
+export function detectDateOrder(values: string[]): DateOrder | null {
+  for (const raw of values) {
+    const m = raw.trim().match(/^(\d{1,2})\/(\d{1,2})\/\d{4}$/)
+    if (!m) continue
+    const a = parseInt(m[1], 10)
+    const b = parseInt(m[2], 10)
+    if (a > 12 && b <= 12) return "dmy"
+    if (b > 12 && a <= 12) return "mdy"
+  }
+  return null
+}
+
+// Values ending in ",dd" with none ending in ".dd" mean a comma decimal. null otherwise.
+export function detectDecimalSeparator(values: string[]): DecimalSeparator | null {
+  let endsComma = false
+  let endsPeriod = false
+  for (const raw of values) {
+    const v = raw.trim()
+    if (/,\d{1,2}$/.test(v)) endsComma = true
+    if (/\.\d{1,2}$/.test(v)) endsPeriod = true
+  }
+  return endsComma && !endsPeriod ? "," : null
 }
 
 // ─── Auto-Suggest Column Mapping ──────────────────────────────────────────────

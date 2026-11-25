@@ -4,6 +4,8 @@ import {
   parseCSV,
   tryParseDate,
   tryParseAmount,
+  detectDateOrder,
+  detectDecimalSeparator,
   autoSuggestColumns,
   inferTransactionType,
   typeFromString,
@@ -179,6 +181,30 @@ describe("tryParseDate", () => {
     // 7-digit number doesn't match any pattern
     expect(tryParseDate("2024011")).toBeNull()
   })
+
+  it.each([
+    ["15/01/2024", "dmy", new Date(2024, 0, 15)],
+    ["05/01/2024", "dmy", new Date(2024, 0, 5)],
+    ["05/01/24", "dmy", new Date(2024, 0, 5)],
+    ["01/15/2024", "mdy", new Date(2024, 0, 15)],
+    ["2024-01-15", "dmy", new Date(2024, 0, 15)],
+    ["20240115", "dmy", new Date(2024, 0, 15)],
+    ["2024-01-15", "mdy", new Date(2024, 0, 15)],
+    ["20240115", "mdy", new Date(2024, 0, 15)],
+  ] as const)("parses %s in %s order as %s", (value, order, expected) => {
+    expect(tryParseDate(value, order)).toEqual(expected)
+  })
+
+  it.each([
+    ["15/01/2024", "mdy"],
+    ["31/02/2024", "dmy"],
+    ["02/30/2024", "mdy"],
+    ["02/30/2024", undefined],
+    ["15/01/2024", undefined],
+    ["13-45-2024", undefined],
+  ] as const)("returns null for the impossible date %s (order %s)", (value, order) => {
+    expect(tryParseDate(value, order)).toBeNull()
+  })
 })
 
 // ─── tryParseAmount ───────────────────────────────────────────────────────────
@@ -234,6 +260,64 @@ describe("tryParseAmount", () => {
 
   it("handles negative with currency symbol", () => {
     expect(tryParseAmount("-$42.00")).toBe(-42)
+  })
+
+  it.each([
+    ["12,50", 12.5],
+    ["1.234,56", 1234.56],
+    ["-3,50", -3.5],
+    ["1 234,56", 1234.56],
+    ["€12,50", 12.5],
+    ["(1.234,56)", -1234.56],
+  ])("parses %s as %s with a comma decimal separator", (value, expected) => {
+    expect(tryParseAmount(value, ",")).toBe(expected)
+  })
+
+  it("keeps the period default: 12,50 reads as 1250", () => {
+    expect(tryParseAmount("12,50")).toBe(1250)
+  })
+})
+
+// ─── detectDateOrder ──────────────────────────────────────────────────────────
+
+describe("detectDateOrder", () => {
+  it.each([
+    ["a day-first column", ["15/01/2024", "20/12/2024", "03/11/2024"], "dmy"],
+    ["a month-first column", ["01/15/2024", "12/20/2024", "11/03/2024"], "mdy"],
+    ["an ambiguous column", ["05/01/2024", "12/11/2024"], null],
+    ["a column without slash dates", ["2024-01-15", "20240115"], null],
+    ["an empty column", [], null],
+  ])("%s", (_name, values, expected) => {
+    expect(detectDateOrder(values)).toBe(expected)
+  })
+})
+
+// ─── detectDecimalSeparator ───────────────────────────────────────────────────
+
+describe("detectDecimalSeparator", () => {
+  it.each([
+    ["a comma column", ["-3,50", "1.234,56", "12,00"], ","],
+    ["a period column", ["3.50", "1,234.56", "12.00"], null],
+    ["a mixed column", ["3,50", "4.20"], null],
+    ["integers only", ["100", "250"], null],
+    ["an empty column", [], null],
+  ])("%s", (_name, values, expected) => {
+    expect(detectDecimalSeparator(values)).toBe(expected)
+  })
+})
+
+describe("day-first CSV with decimal-comma amounts (Auto detection)", () => {
+  it("imports 15/01/2024,Coffee,\"-3,50\" as one 3.50 expense on 15 January 2024", () => {
+    const parsed = parseCSV('Date,Description,Amount\n15/01/2024,Coffee,"-3,50"')
+    const dates = parsed.rows.map((r) => r[parsed.headers.indexOf("Date")])
+    const amounts = parsed.rows.map((r) => r[parsed.headers.indexOf("Amount")])
+    const order = detectDateOrder(dates) ?? "mdy"
+    const sep = detectDecimalSeparator(amounts) ?? "."
+    const amount = tryParseAmount(amounts[0], sep)
+
+    expect(tryParseDate(dates[0], order)).toEqual(new Date(2024, 0, 15))
+    expect(amount).toBe(-3.5)
+    expect(inferTransactionType(amount!, false)).toBe("expense")
   })
 })
 

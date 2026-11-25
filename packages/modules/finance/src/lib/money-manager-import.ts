@@ -105,7 +105,7 @@ export function inferAccountType(name: string): AccountType {
 // hash keys on the day, so keeping it would shift the hash and re-import rows
 // already brought in from date-only exports.
 
-function parseDDMMYYYY(value: string): Date | null {
+export function parseDDMMYYYY(value: string): Date | null {
   const m = value.trim().match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:\s+\d{1,2}:\d{2}(?::\d{2})?)?$/)
   if (!m) return null
   const day = parseInt(m[1], 10)
@@ -113,7 +113,10 @@ function parseDDMMYYYY(value: string): Date | null {
   const year = parseInt(m[3], 10)
   if (month < 1 || month > 12 || day < 1 || day > 31) return null
   const d = new Date(year, month - 1, day)
-  return isNaN(d.getTime()) ? null : d
+  if (isNaN(d.getTime())) return null
+  // Round-trip check: reject impossible dates like 31/02/2024 that Date would roll over
+  if (d.getDate() !== day || d.getMonth() !== month - 1) return null
+  return d
 }
 
 // ─── Amount Parsing (comma decimal: "412,37" → 412.37) ──────────────────────
