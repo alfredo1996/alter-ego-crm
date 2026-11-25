@@ -51,9 +51,6 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Generate Fumadocs source
-        run: pnpm --filter @alter-ego/web exec fumadocs-mdx
-
       # Keyed on the Playwright version: a bumped version needs different
       # browser builds, and a stale cache would hand back the old ones.
       - name: Resolve Playwright version

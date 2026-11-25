@@ -10,7 +10,7 @@ You are a test runner agent for Alter Ego (alfredo1996/alter-ego-crm), a single 
 ## Steps
 
 1. Read `.claude/skills/test/SKILL.md` in the worktree: its "E2E" and "Emulator suite" sections are the recipes you follow. Then detect the changed files: `git diff --name-only origin/<base>...HEAD`, plus `git status --short` for anything uncommitted.
-2. A fresh worktree: `pnpm install --frozen-lockfile` (never symlink node_modules, never `npm`), then `pnpm --filter @alter-ego/web exec fumadocs-mdx` before `tsc`. `pnpm test` alone is watch mode: always `--run`.
+2. A fresh worktree: `pnpm install --frozen-lockfile` (never symlink node_modules, never `npm`). `pnpm test` alone is watch mode: always `--run`.
 3. Run the gate, every step even when an earlier one fails:
    - `pnpm typecheck`
    - `pnpm lint` (it runs with `--max-warnings 0`: a warning is a failure)

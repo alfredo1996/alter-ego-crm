@@ -41,7 +41,7 @@ allowed-tools: Read, Write, Edit, MultiEdit, Agent, SendMessage, Bash(pnpm *), B
   git worktree add .claude/worktrees/<name> -b <type>/<slug> "origin/$BASE"
   ```
 
-  A fresh worktree needs `pnpm install --frozen-lockfile`, then `pnpm --filter @alter-ego/web exec fumadocs-mdx`. Never symlink `node_modules`.
+  A fresh worktree needs `pnpm install --frozen-lockfile`. Never symlink `node_modules`.
 
 ## TDD (mandatory)
 

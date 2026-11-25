@@ -11,7 +11,7 @@ You implement ONE issue, or ONE planned PR, of alfredo1996/alter-ego-crm (Alter 
 ## Setup
 
 1. `git fetch origin <base> && git checkout -b <type>/<slug> origin/<base>`.
-2. `pnpm install --frozen-lockfile` (never symlink node_modules, never `npm`), then `pnpm --filter @alter-ego/web exec fumadocs-mdx`: it writes the gitignored `.source/` that `tsc` and some tests import.
+2. `pnpm install --frozen-lockfile` (never symlink node_modules, never `npm`). Its postinstall writes the gitignored `.source/` that `tsc` and some tests import.
 3. An issue: `gh issue view <N> --repo alfredo1996/alter-ego-crm --json title,body,labels,comments` — owner decisions live in the comments, each opening `**Decision (owner, YYYY-MM-DD, where):**`. Without `--json`, `gh issue view` fails on this repo. You never edit an issue or a PR (`gh issue edit` and `gh pr edit` fail here; the lead uses `gh api -X PATCH`).
 4. A planned PR: the plan section and the boards the lead names are the spec. Build what they draw and nothing the owner has not approved; where a board and the code disagree, take the most conservative reading and list it under owner questions.
 
