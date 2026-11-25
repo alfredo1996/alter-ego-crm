@@ -33,6 +33,7 @@ import {
 import { useState, useRef, useMemo, useEffect } from "react"
 
 
+import { useCategories } from "../../hooks/use-categories"
 import { useMerchantNormalization } from "../../hooks/use-merchant-normalization"
 import { useAuth } from "../../host"
 import { getBackend } from "../../host"
@@ -41,12 +42,16 @@ import {
   autoSuggestColumns,
   tryParseDate,
   tryParseAmount,
+  detectDateOrder,
+  detectDecimalSeparator,
   inferTransactionType,
   typeFromString,
   computeImportHash,
 } from "../../lib/csv-import"
+import { matchCategorizationRule } from "../../lib/merchants"
 import { useImportStore } from "../../stores/import-store"
 
+import type { DateOrder, DecimalSeparator } from "../../lib/csv-import"
 import type { Account, TransactionType } from "../../types"
 
 type Step = "upload" | "map" | "review"
@@ -66,6 +71,7 @@ interface MappedRow {
   amount: number | null
   type: TransactionType
   notes: string | null
+  categoryId: string | null
   error: string | null
 }
 
@@ -82,7 +88,8 @@ export function ImportDialog({ open, onOpenChange, accounts }: ImportDialogProps
   const { user } = useAuth()
   const queryClient = useQueryClient()
   const importStore = useImportStore()
-  const { normalize } = useMerchantNormalization(user?.id)
+  const { normalize, rules } = useMerchantNormalization(user?.id)
+  const { data: categories } = useCategories(user?.id)
 
   const [step, setStep] = useState<Step>("upload")
   const [accountId, setAccountId] = useState("")
@@ -96,6 +103,8 @@ export function ImportDialog({ open, onOpenChange, accounts }: ImportDialogProps
     notes: "",
   })
   const [flipSigns, setFlipSigns] = useState(false)
+  const [dateFormat, setDateFormat] = useState<"auto" | DateOrder>("auto")
+  const [decimalSeparator, setDecimalSeparator] = useState<"auto" | DecimalSeparator>("auto")
   const [rowHashes, setRowHashes] = useState<Map<number, string>>(new Map())
   const [importProgress, setImportProgress] = useState<{ done: number; total: number } | null>(null)
   const [importDone, setImportDone] = useState(false)
@@ -110,6 +119,8 @@ export function ImportDialog({ open, onOpenChange, accounts }: ImportDialogProps
     setFileName("")
     setColumnMap({ date: "", description: "", amount: "", type: "", notes: "" })
     setFlipSigns(false)
+    setDateFormat("auto")
+    setDecimalSeparator("auto")
     setRowHashes(new Map())
     setImportProgress(null)
     setImportDone(false)
@@ -158,6 +169,25 @@ export function ImportDialog({ open, onOpenChange, accounts }: ImportDialogProps
     e.target.value = ""
   }
 
+  // Auto reads the mapped column; when nothing decides it, keep month-first and period
+  const resolvedDateOrder = useMemo((): DateOrder => {
+    if (dateFormat !== "auto") return dateFormat
+    if (parsed && columnMap.date) {
+      const idx = parsed.headers.indexOf(columnMap.date)
+      return detectDateOrder(parsed.rows.map((r) => r[idx] ?? "")) ?? "mdy"
+    }
+    return "mdy"
+  }, [parsed, columnMap.date, dateFormat])
+
+  const resolvedDecimalSeparator = useMemo((): DecimalSeparator => {
+    if (decimalSeparator !== "auto") return decimalSeparator
+    if (parsed && columnMap.amount) {
+      const idx = parsed.headers.indexOf(columnMap.amount)
+      return detectDecimalSeparator(parsed.rows.map((r) => r[idx] ?? "")) ?? "."
+    }
+    return "."
+  }, [parsed, columnMap.amount, decimalSeparator])
+
   const rows = useMemo((): MappedRow[] => {
     if (!parsed || !columnMap.date || !columnMap.description || !columnMap.amount) return []
 
@@ -174,8 +204,8 @@ export function ImportDialog({ open, onOpenChange, accounts }: ImportDialogProps
       const typeVal = typeIdx >= 0 ? (row[typeIdx] ?? "") : ""
       const notesVal = notesIdx >= 0 ? (row[notesIdx] ?? "") : ""
 
-      const date = tryParseDate(dateVal)
-      const rawAmount = tryParseAmount(amtVal)
+      const date = tryParseDate(dateVal, resolvedDateOrder)
+      const rawAmount = tryParseAmount(amtVal, resolvedDecimalSeparator)
 
       let error: string | null = null
       if (!date) error = `Invalid date: "${dateVal}"`
@@ -190,17 +220,26 @@ export function ImportDialog({ open, onOpenChange, accounts }: ImportDialogProps
             : inferTransactionType(rawAmount, flipSigns)
           : "expense"
 
+      const description = descVal.trim()
+      const matchedCategoryId = matchCategorizationRule(rules ?? [], description)
+      // Ignore a match whose category is not in the user's categories
+      const categoryId =
+        matchedCategoryId && categories?.some((c) => c.id === matchedCategoryId)
+          ? matchedCategoryId
+          : null
+
       return {
         index,
         date,
-        description: descVal.trim(),
+        description,
         amount,
         type,
         notes: notesVal || null,
+        categoryId,
         error,
       }
     })
-  }, [parsed, columnMap, flipSigns])
+  }, [parsed, columnMap, flipSigns, resolvedDateOrder, resolvedDecimalSeparator, rules, categories])
 
   // Asynchronously compute hashes for all valid rows whenever inputs change
   useEffect(() => {
@@ -252,7 +291,7 @@ export function ImportDialog({ open, onOpenChange, accounts }: ImportDialogProps
             rawDescription: normalizedDesc !== row.description ? row.description : null,
             date: row.date!,
             notes: row.notes,
-            categoryId: null,
+            categoryId: row.categoryId,
             importHash: rowHashes.get(row.index) ?? null,
           })
         }),
@@ -439,6 +478,40 @@ export function ImportDialog({ open, onOpenChange, accounts }: ImportDialogProps
                   </Select>
                 </div>
               ))}
+
+              <div className="space-y-1.5">
+                <Label htmlFor="csv-date-format">Date format</Label>
+                <Select
+                  value={dateFormat}
+                  onValueChange={(v) => setDateFormat(v as "auto" | DateOrder)}
+                >
+                  <SelectTrigger id="csv-date-format">
+                    <SelectValue placeholder="Auto" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="auto">Auto</SelectItem>
+                    <SelectItem value="dmy">Day first (DD/MM/YYYY)</SelectItem>
+                    <SelectItem value="mdy">Month first (MM/DD/YYYY)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="csv-decimal-separator">Decimal separator</Label>
+                <Select
+                  value={decimalSeparator}
+                  onValueChange={(v) => setDecimalSeparator(v as "auto" | DecimalSeparator)}
+                >
+                  <SelectTrigger id="csv-decimal-separator">
+                    <SelectValue placeholder="Auto" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="auto">Auto</SelectItem>
+                    <SelectItem value=".">Period (1,234.56)</SelectItem>
+                    <SelectItem value=",">Comma (1.234,56)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
 
             {!columnMap.type && (
@@ -468,6 +541,7 @@ export function ImportDialog({ open, onOpenChange, accounts }: ImportDialogProps
                         <th className="px-3 py-1.5 text-left font-medium">Description</th>
                         <th className="px-3 py-1.5 text-right font-medium">Amount</th>
                         <th className="px-3 py-1.5 text-left font-medium">Type</th>
+                        <th className="px-3 py-1.5 text-left font-medium">Category</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -511,6 +585,9 @@ export function ImportDialog({ open, onOpenChange, accounts }: ImportDialogProps
                             >
                               {row.type}
                             </span>
+                          </td>
+                          <td className="px-3 py-1.5 text-muted-foreground">
+                            {categories?.find((c) => c.id === row.categoryId)?.name ?? "—"}
                           </td>
                         </tr>
                       ))}

@@ -31,5 +31,5 @@ export function useMerchantNormalization(userId: string | undefined) {
     },
   })
 
-  return { normalize, renormalize }
+  return { normalize, renormalize, rules }
 }

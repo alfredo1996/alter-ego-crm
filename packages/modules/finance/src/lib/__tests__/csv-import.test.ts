@@ -4,6 +4,8 @@ import {
   parseCSV,
   tryParseDate,
   tryParseAmount,
+  detectDateOrder,
+  detectDecimalSeparator,
   autoSuggestColumns,
   inferTransactionType,
   typeFromString,
@@ -13,6 +15,16 @@ import {
 // ─── parseCSV ─────────────────────────────────────────────────────────────────
 
 describe("parseCSV", () => {
+  it("keeps a stray quote inside a field on its own line", () => {
+    const result = parseCSV('Date,Description,Amount\n2024-01-15,TV 55" SCREEN,-500\n2024-01-16,COFFEE,-3\n2024-01-17,BOOKS,-20\n2024-01-18,RENT,-900')
+    expect(result.rows).toHaveLength(4)
+    expect(result.rows.slice(1)).toEqual([
+      ["2024-01-16", "COFFEE", "-3"],
+      ["2024-01-17", "BOOKS", "-20"],
+      ["2024-01-18", "RENT", "-900"],
+    ])
+  })
+
   it("parses a simple CSV with one data row", () => {
     const result = parseCSV("date,amount,description\n2024-01-15,100.00,Salary")
     expect(result.headers).toEqual(["date", "amount", "description"])
@@ -81,6 +93,28 @@ describe("parseCSV", () => {
   it("preserves whitespace inside quoted fields", () => {
     const result = parseCSV('note\n"  spaced  "')
     expect(result.rows[0]).toEqual(["spaced"])
+  })
+
+  it("parses semicolon-delimited CSV and keeps the decimal comma in its field", () => {
+    const result = parseCSV("Data;Importo\n15/01/2024;-12,50")
+    expect(result.headers).toEqual(["Data", "Importo"])
+    expect(result.rows).toEqual([["15/01/2024", "-12,50"]])
+  })
+
+  it("parses tab-delimited CSV", () => {
+    const result = parseCSV("Date\tAmount\n2024-01-15\t-5")
+    expect(result.headers).toEqual(["Date", "Amount"])
+    expect(result.rows).toEqual([["2024-01-15", "-5"]])
+  })
+
+  it("keeps a line break inside a quoted field in a single row", () => {
+    const result = parseCSV('date,desc,amount\n2024-01-15,"line one\nline two",-5')
+    expect(result.rows).toEqual([["2024-01-15", "line one\nline two", "-5"]])
+  })
+
+  it("keeps a comma inside quotes in a semicolon-delimited file", () => {
+    const result = parseCSV('Data;Note\n2024-01-15;"a, b"')
+    expect(result.rows).toEqual([["2024-01-15", "a, b"]])
   })
 })
 
@@ -157,6 +191,43 @@ describe("tryParseDate", () => {
     // 7-digit number doesn't match any pattern
     expect(tryParseDate("2024011")).toBeNull()
   })
+
+  it.each([
+    ["15/01/2024", "dmy", new Date(2024, 0, 15)],
+    ["05/01/2024", "dmy", new Date(2024, 0, 5)],
+    ["05/01/24", "dmy", new Date(2024, 0, 5)],
+    ["01/15/2024", "mdy", new Date(2024, 0, 15)],
+    ["2024-01-15", "dmy", new Date(2024, 0, 15)],
+    ["20240115", "dmy", new Date(2024, 0, 15)],
+    ["2024-01-15", "mdy", new Date(2024, 0, 15)],
+    ["20240115", "mdy", new Date(2024, 0, 15)],
+    ["05-01-2024", "dmy", new Date(2024, 0, 5)],
+    ["15-01-2024", "dmy", new Date(2024, 0, 15)],
+    ["05-01-2024", "mdy", new Date(2024, 4, 1)],
+    ["05-01-2024", undefined, new Date(2024, 4, 1)],
+    ["01-15-2024", "mdy", new Date(2024, 0, 15)],
+    ["05-01-99", "dmy", new Date(1999, 4, 1)], // a two-digit-year dash date is the native parser's, as before
+    ["05-01-99", "mdy", new Date(1999, 4, 1)],
+  ] as const)("parses %s in %s order as %s", (value, order, expected) => {
+    expect(tryParseDate(value, order)).toEqual(expected)
+  })
+
+  it.each([
+    ["15/01/2024", "mdy"],
+    ["31/02/2024", "dmy"],
+    ["02/30/2024", "mdy"],
+    ["02/30/2024", undefined],
+    ["15/01/2024", undefined],
+    ["13-45-2024", undefined],
+    ["02-30-2024", undefined],
+    ["02-30-2024", "mdy"],
+    ["2024-02-30", undefined],
+    ["15-01-2024", "mdy"],
+    ["30-02-2024", "dmy"],
+    ["24-01-15", "dmy"], // YY-MM-DD is not day-first: the native parser rejects it, as before
+  ] as const)("returns null for the impossible date %s (order %s)", (value, order) => {
+    expect(tryParseDate(value, order)).toBeNull()
+  })
 })
 
 // ─── tryParseAmount ───────────────────────────────────────────────────────────
@@ -212,6 +283,70 @@ describe("tryParseAmount", () => {
 
   it("handles negative with currency symbol", () => {
     expect(tryParseAmount("-$42.00")).toBe(-42)
+  })
+
+  it.each([
+    ["12,50", 12.5],
+    ["1.234,56", 1234.56],
+    ["-3,50", -3.5],
+    ["1 234,56", 1234.56],
+    ["€12,50", 12.5],
+    ["(1.234,56)", -1234.56],
+  ])("parses %s as %s with a comma decimal separator", (value, expected) => {
+    expect(tryParseAmount(value, ",")).toBe(expected)
+  })
+
+  it("keeps the period default: 12,50 reads as 1250", () => {
+    expect(tryParseAmount("12,50")).toBe(1250)
+  })
+})
+
+// ─── detectDateOrder ──────────────────────────────────────────────────────────
+
+describe("detectDateOrder", () => {
+  it.each([
+    ["a day-first column", ["15/01/2024", "20/12/2024", "03/11/2024"], "dmy"],
+    ["a two-digit-year day-first column", ["15/01/24"], "dmy"],
+    ["a month-first column", ["01/15/2024", "12/20/2024", "11/03/2024"], "mdy"],
+    ["an ambiguous column", ["05/01/2024", "12/11/2024"], null],
+    ["a column without slash dates", ["2024-01-15", "20240115"], null],
+    ["a day-first dash column", ["15-01-2024", "05-01-2024"], "dmy"],
+    ["a month-first dash column", ["01-15-2024"], "mdy"],
+    ["an ambiguous dash column", ["05-01-2024", "12-11-2024"], null],
+    ["a mixed-separator value", ["15/01-2024"], null],
+    ["a YY-MM-DD column", ["24-01-15", "24-03-20"], null],
+    ["an empty column", [], null],
+  ])("%s", (_name, values, expected) => {
+    expect(detectDateOrder(values)).toBe(expected)
+  })
+})
+
+// ─── detectDecimalSeparator ───────────────────────────────────────────────────
+
+describe("detectDecimalSeparator", () => {
+  it.each([
+    ["a comma column", ["-3,50", "1.234,56", "12,00"], ","],
+    ["a period column", ["3.50", "1,234.56", "12.00"], null],
+    ["a mixed column", ["3,50", "4.20"], null],
+    ["integers only", ["100", "250"], null],
+    ["an empty column", [], null],
+  ])("%s", (_name, values, expected) => {
+    expect(detectDecimalSeparator(values)).toBe(expected)
+  })
+})
+
+describe("day-first CSV with decimal-comma amounts (Auto detection)", () => {
+  it("imports 15/01/2024,Coffee,\"-3,50\" as one 3.50 expense on 15 January 2024", () => {
+    const parsed = parseCSV('Date,Description,Amount\n15/01/2024,Coffee,"-3,50"')
+    const dates = parsed.rows.map((r) => r[parsed.headers.indexOf("Date")])
+    const amounts = parsed.rows.map((r) => r[parsed.headers.indexOf("Amount")])
+    const order = detectDateOrder(dates) ?? "mdy"
+    const sep = detectDecimalSeparator(amounts) ?? "."
+    const amount = tryParseAmount(amounts[0], sep)
+
+    expect(tryParseDate(dates[0], order)).toEqual(new Date(2024, 0, 15))
+    expect(amount).toBe(-3.5)
+    expect(inferTransactionType(amount!, false)).toBe("expense")
   })
 })
 

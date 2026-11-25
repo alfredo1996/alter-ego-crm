@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest"
 
 import {
   parseMoneyManagerCSV,
+  parseDDMMYYYY,
   isMoneyManagerFormat,
   inferAccountType,
   normalizeAccountName,
@@ -340,6 +341,23 @@ describe("parseMoneyManagerCSV", () => {
     const result = parseMoneyManagerCSV(csv)
     expect(result.rows).toHaveLength(1)
     expect(result.rows[0].currency).toBe("EUR")
+  })
+})
+
+// ─── parseDDMMYYYY ────────────────────────────────────────────────────────────
+
+describe("parseDDMMYYYY", () => {
+  it.each([
+    ["15/01/2024", new Date(2024, 0, 15)],
+    ["04/09/2026 16:05:48", new Date(2026, 8, 4)],
+    ["31/02/2024", null],
+    ["29/02/2024", new Date(2024, 1, 29)],
+    ["29/02/2023", null],
+    ["01/13/2024", null],
+    ["00/01/2024", null],
+    ["2024-01-15", null],
+  ])("%s gives %s", (value, expected) => {
+    expect(parseDDMMYYYY(value)).toEqual(expected)
   })
 })
 
