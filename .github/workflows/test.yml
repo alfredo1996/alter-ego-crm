@@ -50,9 +50,6 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Generate Fumadocs source
-        run: pnpm --filter @alter-ego/web exec fumadocs-mdx
-
       - name: Lint
         run: pnpm lint
 

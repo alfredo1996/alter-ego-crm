@@ -26,7 +26,7 @@ Try hard to find REAL defects; style nits do not count. Check:
 - **The emulator suite:** the diff touches `apps/web/src/lib/backend/`, `apps/web/src/lib/mcp/` or the rules, so the implementer's report must say it ran, with its result. Do not run it on the shared emulator; if you run it, use your own container on alternate ports through the env vars in the test skill (no file edits). A missing result is a major finding.
 - **Test bloat:** tests that pass without the fix, duplicated cases, a unit test repeating an E2E assertion, a new harness where an existing one fits. These are minor findings.
 
-Run the touched test files yourself: `pnpm -C <worktree> test --run <files> --reporter=dot 2>&1 | tail -40`. A fresh worktree needs `pnpm --filter @alter-ego/web exec fumadocs-mdx` once; it writes only the gitignored `.source/`. Keep output short.
+Run the touched test files yourself: `pnpm -C <worktree> test --run <files> --reporter=dot 2>&1 | tail -40`. Keep output short.
 
 Report:
 

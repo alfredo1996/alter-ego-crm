@@ -23,7 +23,7 @@ git diff --name-only "origin/$BASE...HEAD"
 
 ## 2. Before the first run in a fresh worktree
 
-Run `pnpm install --frozen-lockfile`, then `pnpm --filter @alter-ego/web exec fumadocs-mdx`. It writes the gitignored `.source/`; without it `tsc` and the tests that import the docs fail. Never symlink `node_modules` into a worktree.
+Run `pnpm install --frozen-lockfile`. Its postinstall writes the gitignored `.source/`; without it `tsc` and the tests that import the docs fail. Never symlink `node_modules` into a worktree.
 
 ## 3. Run, by what changed
 

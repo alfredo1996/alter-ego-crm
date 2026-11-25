@@ -14,6 +14,7 @@ the UI and the MCP server see the same data.
 ```bash
 pnpm install
 pnpm local:start     # emulator, restoring ./.emulator-data if present
+pnpm local:seed      # default categories (safe to run again: it skips when they exist)
 pnpm dev:emulator    # the app, on http://localhost:3003
 ```
 
