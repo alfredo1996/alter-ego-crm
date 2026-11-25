@@ -104,6 +104,7 @@ export function SplitEditor({
             type="button"
             variant="ghost"
             size="icon"
+            aria-label={`Remove split ${index + 1}`}
             className="h-9 w-9 shrink-0 text-muted-foreground hover:text-destructive"
             onClick={() => removeSplit(index)}
           >
