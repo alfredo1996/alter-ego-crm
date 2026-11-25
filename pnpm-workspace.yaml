@@ -20,7 +20,9 @@ peerDependencyRules:
 overrides:
   # vitest, vite-tsconfig-paths and fumadocs-mdx take vite as a dependency or peer, and
   # `pnpm update` never moved it off 7.3.1 (fs.deny bypass, arbitrary file read).
-  "vite@<7.3.7": "7.3.8"
-  # @firebase/firestore pins @grpc/grpc-js to ~1.9.0 in every release, up to the latest, and the
-  # 1.9 line is below the patched 1.13.6 (malformed request crashes the server).
+  "vite@<7.3.7": "^7.3.8"
+  # @firebase/firestore pins @grpc/grpc-js to ~1.9.0 in every release, up to the latest. That line
+  # holds the server-side mTLS flaw (getAuthContext accepts unauthorized certificates, GHSA-m9gg-hp2v-232j,
+  # fixed in 1.13.6). The crash advisory (GHSA-99f4-grh7-6pcq) is fixed in 1.9.16, but ~1.9.16 would
+  # leave the first one open, so the whole tree takes the 1.14 line google-gax already uses.
   "@firebase/firestore>@grpc/grpc-js": "^1.14.7"
