@@ -163,8 +163,22 @@ describe("InvoiceFileSlot", () => {
       expect(within(slot()).getByText("IT01_00121.xml.p7m is removed when you save.")).toBeInTheDocument()
       expect(within(slot()).getByRole("button", { name: "Download IT01_00118.xml" })).toBeInTheDocument()
       expect(within(slot()).queryByRole("button", { name: "Download IT01_00121.xml.p7m" })).toBeNull()
-      fireEvent.click(within(slot()).getByRole("button", { name: "Undo" }))
+      fireEvent.click(within(slot()).getByRole("button", { name: "Undo removing IT01_00121.xml.p7m" }))
       expect(within(slot()).getByRole("button", { name: "Download IT01_00121.xml.p7m" })).toBeInTheDocument()
+    })
+
+    it("names each Undo after its file, so with two removed each restores only its own", async () => {
+      render(<Harness files={three} />)
+      fireEvent.click((await more("IT01_00118.xml"))[1])
+      fireEvent.click((await more("IT01_00121.xml.p7m"))[1])
+      expect(within(slot()).getAllByRole("button", { name: /^Undo/ }).map((b) => b.getAttribute("aria-label"))).toEqual([
+        "Undo removing IT01_00118.xml",
+        "Undo removing IT01_00121.xml.p7m",
+      ])
+      expect(within(slot()).getAllByRole("button", { name: /^Undo/ }).map((b) => b.textContent)).toEqual(["Undo", "Undo"])
+      fireEvent.click(within(slot()).getByRole("button", { name: "Undo removing IT01_00118.xml" }))
+      expect(within(slot()).getByRole("button", { name: "Download IT01_00118.xml" })).toBeInTheDocument()
+      expect(within(slot()).getByText("IT01_00121.xml.p7m is removed when you save.")).toBeInTheDocument()
     })
 
     it("Replace File… marks the old file only once a new one is picked, and the new one goes last; cancelling changes nothing", async () => {

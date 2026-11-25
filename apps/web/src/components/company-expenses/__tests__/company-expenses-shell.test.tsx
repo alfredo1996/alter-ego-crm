@@ -829,7 +829,7 @@ describe("CompanyExpensesShell", () => {
         fireEvent.click(await screen.findByRole("menuitem", { name: "Remove File" }))
         expect(within(dialog).getByText("IT09876543210_00014.xml.p7m is removed when you save.")).toBeInTheDocument()
         expect(removeFile).not.toHaveBeenCalled()
-        fireEvent.click(within(dialog).getByRole("button", { name: "Undo" }))
+        fireEvent.click(within(dialog).getByRole("button", { name: "Undo removing IT09876543210_00014.xml.p7m" }))
         expect(within(dialog).getByRole("button", { name: "Download IT09876543210_00014.xml.p7m" })).toBeInTheDocument()
         fireEvent.keyDown(within(dialog).getByRole("button", { name: menu }), { key: "Enter" })
         fireEvent.click(await screen.findByRole("menuitem", { name: "Remove File" }))

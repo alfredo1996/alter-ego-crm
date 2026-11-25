@@ -154,6 +154,7 @@ export function InvoiceFileSlot({
               variant="link"
               size="sm"
               className="h-auto p-0 text-xs"
+              aria-label={`Undo removing ${file.name}`}
               onClick={() => onDraftChange({ ...draft, removed: draft.removed.filter((p) => p !== file.path) })}
             >
               Undo
