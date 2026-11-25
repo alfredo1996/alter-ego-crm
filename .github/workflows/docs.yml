@@ -6,12 +6,22 @@ on:
   pull_request:
     branches: [main]
     paths:
+      # What decides the installed dependency versions: a lockfile-only change must run this too.
+      - "pnpm-lock.yaml"
+      - "package.json"
+      - "apps/web/package.json"
+      - "pnpm-workspace.yaml"
       - "content/docs/**"
       - "docs-site/**"
       - ".github/workflows/docs.yml"
   push:
     branches: [main]
     paths:
+      # What decides the installed dependency versions: a lockfile-only change must run this too.
+      - "pnpm-lock.yaml"
+      - "package.json"
+      - "apps/web/package.json"
+      - "pnpm-workspace.yaml"
       - "content/docs/**"
       - "docs-site/**"
       - ".github/workflows/docs.yml"

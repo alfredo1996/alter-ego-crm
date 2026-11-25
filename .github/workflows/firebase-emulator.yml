@@ -7,6 +7,12 @@ on:
   push:
     branches: [main, dev]
     paths:
+      # What decides the installed dependency versions: a lockfile-only change must run this too.
+      - "pnpm-lock.yaml"
+      - "package.json"
+      - "apps/web/package.json"
+      - "pnpm-workspace.yaml"
+      - ".github/workflows/firebase-emulator.yml"
       - "apps/web/src/lib/backend/firebase.ts"
       - "apps/web/src/lib/backend/firebase-admin.ts"
       # The interface every adapter implements, and the types it is written in:
@@ -53,6 +59,12 @@ on:
       - "docker-compose.yml"
   pull_request:
     paths:
+      # What decides the installed dependency versions: a lockfile-only change must run this too.
+      - "pnpm-lock.yaml"
+      - "package.json"
+      - "apps/web/package.json"
+      - "pnpm-workspace.yaml"
+      - ".github/workflows/firebase-emulator.yml"
       - "apps/web/src/lib/backend/firebase.ts"
       - "apps/web/src/lib/backend/firebase-admin.ts"
       # The interface every adapter implements, and the types it is written in:
