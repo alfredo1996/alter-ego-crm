@@ -14,3 +14,13 @@ peerDependencyRules:
   allowedVersions:
     react-debounce-input>react: "19"
     react-inspector>react: "19"
+
+# Security overrides (Dependabot alerts, #2). Each holds until its dependent releases a version
+# that takes the fix on its own; drop the entry then.
+overrides:
+  # vitest, vite-tsconfig-paths and fumadocs-mdx take vite as a dependency or peer, and
+  # `pnpm update` never moved it off 7.3.1 (fs.deny bypass, arbitrary file read).
+  "vite@<7.3.7": "7.3.8"
+  # @firebase/firestore pins @grpc/grpc-js to ~1.9.0 in every release, up to the latest, and the
+  # 1.9 line is below the patched 1.13.6 (malformed request crashes the server).
+  "@firebase/firestore>@grpc/grpc-js": "^1.14.7"
