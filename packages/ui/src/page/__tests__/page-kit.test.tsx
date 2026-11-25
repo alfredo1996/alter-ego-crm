@@ -4,6 +4,7 @@ import { join } from "node:path"
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react"
 import Link from "next/link"
 import { useState } from "react"
+import { renderToStaticMarkup } from "react-dom/server"
 import { describe, expect, it, vi } from "vitest"
 
 import { BrandMark } from "../brand-mark"
@@ -397,8 +398,14 @@ describe("SegmentedProgress, in percent", () => {
     const segments = [...container.querySelectorAll("[aria-hidden] > span")] as HTMLElement[]
     expect(segments).toHaveLength(10)
     expect(segments.filter((s) => s.classList.contains("bg-primary"))).toHaveLength(1)
-    expect(segments[1].style.background).toContain("50%")
-    expect(segments[2].style.background).toBe("")
+    // happy-dom 21 drops a background it cannot parse, and rejects var() inside hsl(), which a browser
+    // accepts: read the style React wrote from the markup, segment by segment, not from the DOM node.
+    const tags = renderToStaticMarkup(<SegmentedProgress done={1.5} total={10} />).match(/<span class="h-\[5px\][^"]*"[^>]*>/g) ?? []
+    const styles = tags.map((t) => /style="([^"]*)"/.exec(t)?.[1])
+    expect(styles).toHaveLength(10)
+    // Segment 0 is full, segment 1 is half, the other eight are empty: only the half one carries a style.
+    expect(styles.map((st, i) => (st ? i : -1)).filter((i) => i >= 0)).toEqual([1])
+    expect(styles[1]).toBe("background:linear-gradient(90deg, hsl(var(--primary)) 50%, hsl(var(--border)) 0)")
     expect(screen.getByText("15%")).toHaveAttribute("aria-hidden")
     expect(screen.queryByText("1.5/10")).toBeNull()
   })

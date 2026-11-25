@@ -36,6 +36,6 @@
     "react": "19.2.3",
     "react-dom": "19.2.3",
     "typescript": "^5",
-    "vitest": "^4.0.18"
+    "vitest": "^4.1.12"
   }
 }

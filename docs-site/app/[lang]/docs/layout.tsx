@@ -33,7 +33,7 @@ export default async function Layout({
     >
       <DocsLayout
         tree={source.getPageTree(lang)}
-        i18n={i18n}
+        i18n
         nav={{ title: "Alter Ego" }}
       >
         {children}

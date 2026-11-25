@@ -9,9 +9,16 @@ vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
   useSearchParams: () => new URLSearchParams(query.value),
 }))
-vi.mock("@/hooks/use-auth", () => ({
-  useAuth: () => ({ user: { id: "u1", email: "marta@nordwind.example" }, loading: false, signIn, signUp: vi.fn(), getIdToken: vi.fn() }),
+// One stable object: a fresh `user` each render re-runs the consent's lookup effect, which sets state, which
+// renders again, so the lookups never stop and one outlives the test's fetch stub (a real request, in happy-dom 21).
+const auth = vi.hoisted(() => ({
+  user: { id: "u1", email: "marta@nordwind.example" },
+  loading: false,
+  signIn,
+  signUp: vi.fn(),
+  getIdToken: vi.fn(),
 }))
+vi.mock("@/hooks/use-auth", () => ({ useAuth: () => auth }))
 
 import { AuthShell } from "../auth-shell"
 import { AuthorizeConsent } from "../authorize-consent"
@@ -107,6 +114,8 @@ describe("the OAuth consent", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Deny" }))
     await waitFor(() => expect(assigned).toHaveBeenCalledWith("https://claude.ai/cb?error=access_denied&state=s1"))
     expect(lookup).toHaveBeenCalledWith(`/api/oauth/client?client_id=c1&redirect_uri=${encodeURIComponent("https://claude.ai/cb")}`)
+    // Once: a fresh `user` per render would re-run the lookup effect on every render.
+    expect(lookup).toHaveBeenCalledTimes(1)
   })
 
   it("drops the verdict when the link changes, so Deny can never go to the unchecked URI", async () => {
