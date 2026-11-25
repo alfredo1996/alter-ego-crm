@@ -40,7 +40,7 @@ function pick(trigger: HTMLElement, option: string | RegExp) {
   fireEvent.click(screen.getByRole("option", { name: option }))
 }
 
-async function toMapStep() {
+async function toMapStep(csv = CSV) {
   render(
     <QueryClientProvider client={new QueryClient()}>
       <ImportDialog open onOpenChange={() => {}} accounts={[account]} />
@@ -48,7 +48,7 @@ async function toMapStep() {
   )
   pick(screen.getByRole("combobox"), "Main Checking")
   const input = document.querySelector('input[type="file"]') as HTMLInputElement
-  fireEvent.change(input, { target: { files: [new File([CSV], "bank.csv", { type: "text/csv" })] } })
+  fireEvent.change(input, { target: { files: [new File([csv], "bank.csv", { type: "text/csv" })] } })
   await screen.findByText("2 rows · 3 columns")
   fireEvent.click(screen.getByRole("button", { name: /Next/ }))
   await screen.findByText("Map CSV Columns")
@@ -80,5 +80,16 @@ describe("ImportDialog, a day-first file with decimal-comma amounts", () => {
     pick(screen.getByRole("combobox", { name: "Date format" }), /Month first/)
     expect(screen.getAllByText("Invalid")).toHaveLength(2) // neither 15/01 nor 20/01 has a month 15 or 20
     expect(screen.getByRole("combobox", { name: "Decimal separator" })).toBeInTheDocument()
+  })
+
+  it("reads a dash day-first column under Auto, previews 15 January and imports it", async () => {
+    await toMapStep('Date,Description,Amount\n15-01-2024,COFFEE BAR,"-3,50"\n05-01-2024,GHOST SHOP,"-10,00"\n')
+    const rows = screen.getAllByRole("row")
+    expect(rows[1]).toHaveTextContent(new Date(2024, 0, 15).toLocaleDateString())
+    expect(rows[2]).toHaveTextContent(new Date(2024, 0, 5).toLocaleDateString())
+    fireEvent.click(screen.getByRole("button", { name: /Next/ }))
+    fireEvent.click(await screen.findByRole("button", { name: /Import 2 transactions/ }))
+    await waitFor(() => expect(createTransaction).toHaveBeenCalledTimes(2))
+    expect(createTransaction.mock.calls.map(([, tx]) => tx.date)).toEqual([new Date(2024, 0, 15), new Date(2024, 0, 5)])
   })
 })

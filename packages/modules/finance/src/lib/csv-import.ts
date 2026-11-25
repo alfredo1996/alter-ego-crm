@@ -1,5 +1,3 @@
-import { parseDDMMYYYY } from "./money-manager-import"
-
 export interface ParsedCSV {
   headers: string[]
   rows: string[][]
@@ -114,8 +112,8 @@ export function parseCSV(text: string): ParsedCSV {
 export type DateOrder = "dmy" | "mdy"
 
 const ISO_PATTERN = /^\d{4}-\d{2}-\d{2}([ T]\d{2}:\d{2}(:\d{2})?.*)?$/
-const SLASH_PATTERN = /^(\d{1,2})\/(\d{1,2})\/(\d{4}|\d{2})$/
-const DASH_PATTERN = /^(\d{1,2})-(\d{1,2})-(\d{4})$/
+// a/b/yyyy, a-b-yyyy and the two-digit-year forms; one separator per value, so 05/01-2024 is not a date
+const NUMERIC_DATE_PATTERN = /^(\d{1,2})([/-])(\d{1,2})\2(\d{4}|\d{2})$/
 const COMPACT_PATTERN = /^\d{8}$/
 
 // Build a Date and reject impossible values (month 13, Feb 30) instead of letting
@@ -137,21 +135,14 @@ export function tryParseDate(value: string, order: DateOrder = "mdy"): Date | nu
     return isNaN(d.getTime()) ? null : d
   }
 
-  // a/b/yyyy or a/b/yy: the order is ambiguous, so it depends on `order`. An impossible
+  // a/b/yyyy or a-b-yyyy (or yy): the order is ambiguous, so it depends on `order`. An impossible
   // date returns null here and must not reach the native fallback, which rolls it over too
-  const slash = v.match(SLASH_PATTERN)
-  if (slash) {
-    const a = parseInt(slash[1], 10)
-    const b = parseInt(slash[2], 10)
-    const year = slash[3].length === 4 ? parseInt(slash[3], 10) : 2000 + parseInt(slash[3], 10)
-    if (order === "dmy" && slash[3].length === 4) return parseDDMMYYYY(v)
+  const num = v.match(NUMERIC_DATE_PATTERN)
+  if (num) {
+    const a = parseInt(num[1], 10)
+    const b = parseInt(num[3], 10)
+    const year = num[4].length === 4 ? parseInt(num[4], 10) : 2000 + parseInt(num[4], 10)
     return order === "dmy" ? makeDate(year, b, a) : makeDate(year, a, b)
-  }
-
-  // MM-DD-YYYY
-  const dash = v.match(DASH_PATTERN)
-  if (dash) {
-    return makeDate(parseInt(dash[3], 10), parseInt(dash[1], 10), parseInt(dash[2], 10))
   }
 
   // YYYYMMDD
@@ -188,14 +179,14 @@ export function tryParseAmount(value: string, decimalSeparator: DecimalSeparator
 
 // ─── Format Auto-Detection ────────────────────────────────────────────────────
 
-// a/b/yyyy or a/b/yy values: a first part over 12 means day-first, a second part over 12 means
+// a/b/yyyy, a-b-yyyy or two-digit-year values: a first part over 12 means day-first, a second part over 12 means
 // month-first. null when nothing decides it.
 export function detectDateOrder(values: string[]): DateOrder | null {
   for (const raw of values) {
-    const m = raw.trim().match(/^(\d{1,2})\/(\d{1,2})\/(\d{2}|\d{4})$/)
+    const m = raw.trim().match(NUMERIC_DATE_PATTERN)
     if (!m) continue
     const a = parseInt(m[1], 10)
-    const b = parseInt(m[2], 10)
+    const b = parseInt(m[3], 10)
     if (a > 12 && b <= 12) return "dmy"
     if (b > 12 && a <= 12) return "mdy"
   }
