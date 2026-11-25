@@ -33,6 +33,7 @@ import {
 import { useState, useRef, useMemo, useEffect } from "react"
 
 
+import { useCategories } from "../../hooks/use-categories"
 import { useMerchantNormalization } from "../../hooks/use-merchant-normalization"
 import { useAuth } from "../../host"
 import { getBackend } from "../../host"
@@ -47,6 +48,7 @@ import {
   typeFromString,
   computeImportHash,
 } from "../../lib/csv-import"
+import { matchCategorizationRule } from "../../lib/merchants"
 import { useImportStore } from "../../stores/import-store"
 
 import type { DateOrder, DecimalSeparator } from "../../lib/csv-import"
@@ -69,6 +71,7 @@ interface MappedRow {
   amount: number | null
   type: TransactionType
   notes: string | null
+  categoryId: string | null
   error: string | null
 }
 
@@ -85,7 +88,8 @@ export function ImportDialog({ open, onOpenChange, accounts }: ImportDialogProps
   const { user } = useAuth()
   const queryClient = useQueryClient()
   const importStore = useImportStore()
-  const { normalize } = useMerchantNormalization(user?.id)
+  const { normalize, rules } = useMerchantNormalization(user?.id)
+  const { data: categories } = useCategories(user?.id)
 
   const [step, setStep] = useState<Step>("upload")
   const [accountId, setAccountId] = useState("")
@@ -216,17 +220,26 @@ export function ImportDialog({ open, onOpenChange, accounts }: ImportDialogProps
             : inferTransactionType(rawAmount, flipSigns)
           : "expense"
 
+      const description = descVal.trim()
+      const matchedCategoryId = matchCategorizationRule(rules ?? [], description)
+      // Ignore a match whose category is not in the user's categories
+      const categoryId =
+        matchedCategoryId && categories?.some((c) => c.id === matchedCategoryId)
+          ? matchedCategoryId
+          : null
+
       return {
         index,
         date,
-        description: descVal.trim(),
+        description,
         amount,
         type,
         notes: notesVal || null,
+        categoryId,
         error,
       }
     })
-  }, [parsed, columnMap, flipSigns, resolvedDateOrder, resolvedDecimalSeparator])
+  }, [parsed, columnMap, flipSigns, resolvedDateOrder, resolvedDecimalSeparator, rules, categories])
 
   // Asynchronously compute hashes for all valid rows whenever inputs change
   useEffect(() => {
@@ -278,7 +291,7 @@ export function ImportDialog({ open, onOpenChange, accounts }: ImportDialogProps
             rawDescription: normalizedDesc !== row.description ? row.description : null,
             date: row.date!,
             notes: row.notes,
-            categoryId: null,
+            categoryId: row.categoryId,
             importHash: rowHashes.get(row.index) ?? null,
           })
         }),
@@ -528,6 +541,7 @@ export function ImportDialog({ open, onOpenChange, accounts }: ImportDialogProps
                         <th className="px-3 py-1.5 text-left font-medium">Description</th>
                         <th className="px-3 py-1.5 text-right font-medium">Amount</th>
                         <th className="px-3 py-1.5 text-left font-medium">Type</th>
+                        <th className="px-3 py-1.5 text-left font-medium">Category</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -571,6 +585,9 @@ export function ImportDialog({ open, onOpenChange, accounts }: ImportDialogProps
                             >
                               {row.type}
                             </span>
+                          </td>
+                          <td className="px-3 py-1.5 text-muted-foreground">
+                            {categories?.find((c) => c.id === row.categoryId)?.name ?? "—"}
                           </td>
                         </tr>
                       ))}

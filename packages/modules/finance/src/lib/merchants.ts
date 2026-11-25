@@ -206,6 +206,23 @@ export function normalizeMerchant(raw: string): string {
 }
 
 /**
+ * Match a raw description against the user's categorization rules.
+ * Active rules only, case-insensitive substring, first match wins.
+ * Returns the matched rule's categoryId, or null when nothing matches.
+ */
+export function matchCategorizationRule(
+  rules: CategorizationRule[],
+  description: string,
+): string | null {
+  const lowerDesc = description.toLowerCase()
+  for (const rule of rules) {
+    if (!rule.isActive) continue
+    if (lowerDesc.includes(rule.pattern.toLowerCase())) return rule.categoryId
+  }
+  return null
+}
+
+/**
  * Normalize a description using built-in rules + user-defined categorization rules
  * that have a `displayAs` value.
  */

@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest"
 
-import { normalizeMerchant, normalizeDescription } from "../merchants"
+import { matchCategorizationRule, normalizeMerchant, normalizeDescription } from "../merchants"
 
 import type { CategorizationRule } from "../../types"
 
@@ -129,5 +129,37 @@ describe("normalizeDescription", () => {
       },
     ]
     expect(normalizeDescription("JOE'S [PIZZA DOWNTOWN", rules)).toBe("Joe's Pizza")
+  })
+})
+
+describe("matchCategorizationRule", () => {
+  const makeRule = (overrides: Partial<CategorizationRule>): CategorizationRule => ({
+    id: "r1",
+    userId: "u1",
+    pattern: "COFFEE",
+    categoryId: "cat-coffee",
+    displayAs: null,
+    isActive: true,
+    createdAt: new Date(),
+    ...overrides,
+  })
+
+  it.each([
+    ["a match", [makeRule({})], "COFFEE BAR 42", "cat-coffee"],
+    ["no match", [makeRule({})], "BOOKSTORE", null],
+    ["an inactive rule", [makeRule({ isActive: false })], "COFFEE BAR 42", null],
+    ["a lower-case pattern", [makeRule({ pattern: "coffee" })], "COFFEE BAR 42", "cat-coffee"],
+    ["a lower-case description", [makeRule({})], "Coffee Bar 42", "cat-coffee"],
+    ["no rules", [], "COFFEE BAR 42", null],
+  ])("%s", (_name, rules, description, expected) => {
+    expect(matchCategorizationRule(rules, description)).toBe(expected)
+  })
+
+  it("the first matching rule wins", () => {
+    const rules = [
+      makeRule({ id: "r1", pattern: "COFFEE", categoryId: "cat-coffee" }),
+      makeRule({ id: "r2", pattern: "BAR", categoryId: "cat-bar" }),
+    ]
+    expect(matchCategorizationRule(rules, "COFFEE BAR 42")).toBe("cat-coffee")
   })
 })
