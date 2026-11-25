@@ -82,6 +82,28 @@ describe("parseCSV", () => {
     const result = parseCSV('note\n"  spaced  "')
     expect(result.rows[0]).toEqual(["spaced"])
   })
+
+  it("parses semicolon-delimited CSV and keeps the decimal comma in its field", () => {
+    const result = parseCSV("Data;Importo\n15/01/2024;-12,50")
+    expect(result.headers).toEqual(["Data", "Importo"])
+    expect(result.rows).toEqual([["15/01/2024", "-12,50"]])
+  })
+
+  it("parses tab-delimited CSV", () => {
+    const result = parseCSV("Date\tAmount\n2024-01-15\t-5")
+    expect(result.headers).toEqual(["Date", "Amount"])
+    expect(result.rows).toEqual([["2024-01-15", "-5"]])
+  })
+
+  it("keeps a line break inside a quoted field in a single row", () => {
+    const result = parseCSV('date,desc,amount\n2024-01-15,"line one\nline two",-5')
+    expect(result.rows).toEqual([["2024-01-15", "line one\nline two", "-5"]])
+  })
+
+  it("keeps a comma inside quotes in a semicolon-delimited file", () => {
+    const result = parseCSV('Data;Note\n2024-01-15;"a, b"')
+    expect(result.rows).toEqual([["2024-01-15", "a, b"]])
+  })
 })
 
 // ─── tryParseDate ─────────────────────────────────────────────────────────────
