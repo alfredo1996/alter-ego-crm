@@ -220,6 +220,17 @@ function BalanceChartInner({
   const firstPoint = svgPoints[0]
   const lastPoint = svgPoints[svgPoints.length - 1]
 
+  // The text alternative for the picture: the range, the endpoints and the lowest month,
+  // amounts in the same abbreviation as the y-axis ticks.
+  const firstDate = points[0].date
+  const lastDate = points[points.length - 1].date
+  const lowest = points.reduce((a, b) => (b.balance < a.balance ? b : a))
+  const span =
+    firstDate.getFullYear() === lastDate.getFullYear()
+      ? `${fmtDate(firstDate, "MMMM")} to ${fmtDate(lastDate, "MMMM yyyy")}`
+      : `${fmtDate(firstDate, "MMMM yyyy")} to ${fmtDate(lastDate, "MMMM yyyy")}`
+  const chartLabel = `Balance from ${span}: from ${abbreviate(points[0].balance)} to ${abbreviate(points[points.length - 1].balance)}, lowest ${abbreviate(lowest.balance)} in ${fmtDate(lowest.date, "MMMM")}.`
+
   // Convert client x-coord to a date on the timeline
   function xToDate(clientX: number): Date {
     if (!svgRef.current) return points[0].date
@@ -292,6 +303,8 @@ function BalanceChartInner({
       <svg
         ref={svgRef}
         viewBox={`0 0 ${totalW} ${totalH}`}
+        role="img"
+        aria-label={chartLabel}
         className="w-full h-auto"
         preserveAspectRatio="xMidYMid meet"
         onPointerDown={handlePointerDown}
