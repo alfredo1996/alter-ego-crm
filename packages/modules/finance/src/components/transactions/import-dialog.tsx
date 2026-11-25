@@ -480,12 +480,12 @@ export function ImportDialog({ open, onOpenChange, accounts }: ImportDialogProps
               ))}
 
               <div className="space-y-1.5">
-                <Label>Date format</Label>
+                <Label htmlFor="csv-date-format">Date format</Label>
                 <Select
                   value={dateFormat}
                   onValueChange={(v) => setDateFormat(v as "auto" | DateOrder)}
                 >
-                  <SelectTrigger>
+                  <SelectTrigger id="csv-date-format">
                     <SelectValue placeholder="Auto" />
                   </SelectTrigger>
                   <SelectContent>
@@ -497,12 +497,12 @@ export function ImportDialog({ open, onOpenChange, accounts }: ImportDialogProps
               </div>
 
               <div className="space-y-1.5">
-                <Label>Decimal separator</Label>
+                <Label htmlFor="csv-decimal-separator">Decimal separator</Label>
                 <Select
                   value={decimalSeparator}
                   onValueChange={(v) => setDecimalSeparator(v as "auto" | DecimalSeparator)}
                 >
-                  <SelectTrigger>
+                  <SelectTrigger id="csv-decimal-separator">
                     <SelectValue placeholder="Auto" />
                   </SelectTrigger>
                   <SelectContent>
