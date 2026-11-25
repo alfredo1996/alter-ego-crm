@@ -114,6 +114,8 @@ describe("the OAuth consent", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Deny" }))
     await waitFor(() => expect(assigned).toHaveBeenCalledWith("https://claude.ai/cb?error=access_denied&state=s1"))
     expect(lookup).toHaveBeenCalledWith(`/api/oauth/client?client_id=c1&redirect_uri=${encodeURIComponent("https://claude.ai/cb")}`)
+    // Once: a fresh `user` per render would re-run the lookup effect on every render.
+    expect(lookup).toHaveBeenCalledTimes(1)
   })
 
   it("drops the verdict when the link changes, so Deny can never go to the unchecked URI", async () => {
