@@ -206,6 +206,8 @@ describe("tryParseDate", () => {
     ["05-01-2024", "mdy", new Date(2024, 4, 1)],
     ["05-01-2024", undefined, new Date(2024, 4, 1)],
     ["01-15-2024", "mdy", new Date(2024, 0, 15)],
+    ["05-01-99", "dmy", new Date(1999, 4, 1)], // a two-digit-year dash date is the native parser's, as before
+    ["05-01-99", "mdy", new Date(1999, 4, 1)],
   ] as const)("parses %s in %s order as %s", (value, order, expected) => {
     expect(tryParseDate(value, order)).toEqual(expected)
   })
@@ -221,7 +223,8 @@ describe("tryParseDate", () => {
     ["02-30-2024", "mdy"],
     ["2024-02-30", undefined],
     ["15-01-2024", "mdy"],
-    ["31-02-2024", "dmy"],
+    ["30-02-2024", "dmy"],
+    ["24-01-15", "dmy"], // YY-MM-DD is not day-first: the native parser rejects it, as before
   ] as const)("returns null for the impossible date %s (order %s)", (value, order) => {
     expect(tryParseDate(value, order)).toBeNull()
   })
@@ -311,6 +314,7 @@ describe("detectDateOrder", () => {
     ["a month-first dash column", ["01-15-2024"], "mdy"],
     ["an ambiguous dash column", ["05-01-2024", "12-11-2024"], null],
     ["a mixed-separator value", ["15/01-2024"], null],
+    ["a YY-MM-DD column", ["24-01-15", "24-03-20"], null],
     ["an empty column", [], null],
   ])("%s", (_name, values, expected) => {
     expect(detectDateOrder(values)).toBe(expected)

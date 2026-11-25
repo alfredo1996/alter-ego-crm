@@ -112,8 +112,14 @@ export function parseCSV(text: string): ParsedCSV {
 export type DateOrder = "dmy" | "mdy"
 
 const ISO_PATTERN = /^\d{4}-\d{2}-\d{2}([ T]\d{2}:\d{2}(:\d{2})?.*)?$/
-// a/b/yyyy, a-b-yyyy and the two-digit-year forms; one separator per value, so 05/01-2024 is not a date
+// a/b/yyyy, a/b/yy and a-b-yyyy. The pattern and detectDateOrder take one separator per value and
+// never a two-digit year with dashes (that is YY-MM-DD); the native fallback still reads mixed ones
 const NUMERIC_DATE_PATTERN = /^(\d{1,2})([/-])(\d{1,2})\2(\d{4}|\d{2})$/
+
+function matchNumericDate(v: string): RegExpMatchArray | null {
+  const m = v.match(NUMERIC_DATE_PATTERN)
+  return m && m[2] === "-" && m[4].length === 2 ? null : m
+}
 const COMPACT_PATTERN = /^\d{8}$/
 
 // Build a Date and reject impossible values (month 13, Feb 30) instead of letting
@@ -135,9 +141,9 @@ export function tryParseDate(value: string, order: DateOrder = "mdy"): Date | nu
     return isNaN(d.getTime()) ? null : d
   }
 
-  // a/b/yyyy or a-b-yyyy (or yy): the order is ambiguous, so it depends on `order`. An impossible
+  // a/b/yyyy or a-b-yyyy (or a/b/yy): the order is ambiguous, so it depends on `order`. An impossible
   // date returns null here and must not reach the native fallback, which rolls it over too
-  const num = v.match(NUMERIC_DATE_PATTERN)
+  const num = matchNumericDate(v)
   if (num) {
     const a = parseInt(num[1], 10)
     const b = parseInt(num[3], 10)
@@ -179,11 +185,11 @@ export function tryParseAmount(value: string, decimalSeparator: DecimalSeparator
 
 // ─── Format Auto-Detection ────────────────────────────────────────────────────
 
-// a/b/yyyy, a-b-yyyy or two-digit-year values: a first part over 12 means day-first, a second part over 12 means
+// a/b/yyyy, a/b/yy or a-b-yyyy values: a first part over 12 means day-first, a second part over 12 means
 // month-first. null when nothing decides it.
 export function detectDateOrder(values: string[]): DateOrder | null {
   for (const raw of values) {
-    const m = raw.trim().match(NUMERIC_DATE_PATTERN)
+    const m = matchNumericDate(raw.trim())
     if (!m) continue
     const a = parseInt(m[1], 10)
     const b = parseInt(m[3], 10)
