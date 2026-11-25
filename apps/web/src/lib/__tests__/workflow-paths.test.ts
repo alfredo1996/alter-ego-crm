@@ -13,7 +13,11 @@ const ROOT = join(process.cwd(), "../..")
 // No YAML parser is a dependency, so read the `paths:` list under one trigger of `on:` as text.
 // It relies on the files' layout: triggers at two spaces, `paths:` at four, items at six.
 function paths(workflow: string, trigger: "push" | "pull_request"): string[] {
-  const lines = readFileSync(join(ROOT, ".github/workflows", workflow), "utf8").split("\n")
+  return pathsIn(readFileSync(join(ROOT, ".github/workflows", workflow), "utf8"), workflow, trigger)
+}
+
+function pathsIn(text: string, workflow: string, trigger: "push" | "pull_request"): string[] {
+  const lines = text.split("\n")
   const start = lines.indexOf(`  ${trigger}:`)
   if (start < 0) throw new Error(`${workflow} has no ${trigger} trigger`)
   const out: string[] = []
@@ -23,7 +27,7 @@ function paths(workflow: string, trigger: "push" | "pull_request"): string[] {
     if (/^ {4}paths:/.test(line)) inPaths = true
     else if (/^ {4}\S/.test(line)) inPaths = false // a sibling key such as branches:
     else if (inPaths) {
-      const item = /^ {6}- "(.+)"/.exec(line)
+      const item = /^ {6}- "([^"]+)"/.exec(line)
       if (item) out.push(item[1])
     }
   }
@@ -40,6 +44,11 @@ describe("the slow workflows run on dependency-only changes (#69)", () => {
     expect(paths(workflow, trigger).filter((p) => DEPENDENCY_FILES.includes(p)).sort()).toEqual(
       [...DEPENDENCY_FILES].sort(),
     )
+  })
+
+  it("reads a quoted item followed by a quoted comment as the item", () => {
+    const text = '  push:\n    paths:\n      - "a" # "b"\n'
+    expect(pathsIn(text, "x.yml", "push")).toEqual(["a"])
   })
 
   it.each(["pull_request", "push"] as const)("firebase-emulator.yml lists itself under %s", (trigger) => {
