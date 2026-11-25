@@ -5,6 +5,7 @@
 # command and a volume.
 #
 #   pnpm local:start   # emulator up, data restored from ./.emulator-data
+#   pnpm local:seed    # default categories into the emulator
 #   pnpm dev:emulator  # the app, pointed at it
 #   pnpm local:stop    # emulator down, data exported on the way out
 #
