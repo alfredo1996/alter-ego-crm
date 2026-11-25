@@ -15,6 +15,16 @@ import {
 // ─── parseCSV ─────────────────────────────────────────────────────────────────
 
 describe("parseCSV", () => {
+  it("keeps a stray quote inside a field on its own line", () => {
+    const result = parseCSV('Date,Description,Amount\n2024-01-15,TV 55" SCREEN,-500\n2024-01-16,COFFEE,-3\n2024-01-17,BOOKS,-20\n2024-01-18,RENT,-900')
+    expect(result.rows).toHaveLength(4)
+    expect(result.rows.slice(1)).toEqual([
+      ["2024-01-16", "COFFEE", "-3"],
+      ["2024-01-17", "BOOKS", "-20"],
+      ["2024-01-18", "RENT", "-900"],
+    ])
+  })
+
   it("parses a simple CSV with one data row", () => {
     const result = parseCSV("date,amount,description\n2024-01-15,100.00,Salary")
     expect(result.headers).toEqual(["date", "amount", "description"])
@@ -202,6 +212,9 @@ describe("tryParseDate", () => {
     ["02/30/2024", undefined],
     ["15/01/2024", undefined],
     ["13-45-2024", undefined],
+    ["02-30-2024", undefined],
+    ["02-30-2024", "mdy"],
+    ["2024-02-30", undefined],
   ] as const)("returns null for the impossible date %s (order %s)", (value, order) => {
     expect(tryParseDate(value, order)).toBeNull()
   })
@@ -283,6 +296,7 @@ describe("tryParseAmount", () => {
 describe("detectDateOrder", () => {
   it.each([
     ["a day-first column", ["15/01/2024", "20/12/2024", "03/11/2024"], "dmy"],
+    ["a two-digit-year day-first column", ["15/01/24"], "dmy"],
     ["a month-first column", ["01/15/2024", "12/20/2024", "11/03/2024"], "mdy"],
     ["an ambiguous column", ["05/01/2024", "12/11/2024"], null],
     ["a column without slash dates", ["2024-01-15", "20240115"], null],

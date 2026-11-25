@@ -45,8 +45,14 @@ function parseLine(line: string, delimiter: string): string[] {
       if (inQuotes && line[i + 1] === '"') {
         current += '"'
         i++
+      } else if (inQuotes) {
+        inQuotes = false
+      } else if (current.trim() === "") {
+        // a quote opens a quoted section only at the start of a field; elsewhere it is literal
+        inQuotes = true
+        current = ""
       } else {
-        inQuotes = !inQuotes
+        current += ch
       }
     } else if (ch === delimiter && !inQuotes) {
       result.push(current.trim())
@@ -63,8 +69,11 @@ export function parseCSV(text: string): ParsedCSV {
   const normalized = text.replace(/\r\n/g, "\n").replace(/\r/g, "\n")
 
   // Split into records on newlines outside quotes, so a quoted line break stays in its field
+  // (a quote opens a quoted section only at the start of a field, so a stray one stays on its line)
+  const delimiter = detectDelimiter(normalized.split("\n")[0])
   const records: string[] = []
   let current = ""
+  let fieldStart = 0
   let inQuotes = false
   for (let i = 0; i < normalized.length; i++) {
     const ch = normalized[i]
@@ -72,13 +81,20 @@ export function parseCSV(text: string): ParsedCSV {
       if (inQuotes && normalized[i + 1] === '"') {
         current += '""'
         i++
+      } else if (inQuotes) {
+        inQuotes = false
+        current += ch
       } else {
-        inQuotes = !inQuotes
+        if (current.slice(fieldStart).trim() === "") inQuotes = true
         current += ch
       }
     } else if (ch === "\n" && !inQuotes) {
       records.push(current)
       current = ""
+      fieldStart = 0
+    } else if (ch === delimiter && !inQuotes) {
+      current += ch
+      fieldStart = current.length
     } else {
       current += ch
     }
@@ -88,7 +104,6 @@ export function parseCSV(text: string): ParsedCSV {
   const lines = records.filter((l) => l.trim().length > 0)
   if (lines.length === 0) return { headers: [], rows: [] }
 
-  const delimiter = detectDelimiter(lines[0])
   const headers = parseLine(lines[0], delimiter)
   const rows = lines.slice(1).map((l) => parseLine(l, delimiter))
   return { headers, rows }
@@ -117,8 +132,9 @@ export function tryParseDate(value: string, order: DateOrder = "mdy"): Date | nu
 
   // ISO 8601: 2024-01-15 or 2024-01-15T10:30:00
   if (ISO_PATTERN.test(v)) {
+    if (!makeDate(parseInt(v.slice(0, 4), 10), parseInt(v.slice(5, 7), 10), parseInt(v.slice(8, 10), 10))) return null
     const d = new Date(v.includes("T") || v.includes(" ") ? v : v + "T00:00:00")
-    if (!isNaN(d.getTime())) return d
+    return isNaN(d.getTime()) ? null : d
   }
 
   // a/b/yyyy or a/b/yy: the order is ambiguous, so it depends on `order`. An impossible
@@ -135,18 +151,16 @@ export function tryParseDate(value: string, order: DateOrder = "mdy"): Date | nu
   // MM-DD-YYYY
   const dash = v.match(DASH_PATTERN)
   if (dash) {
-    const d = makeDate(parseInt(dash[3], 10), parseInt(dash[1], 10), parseInt(dash[2], 10))
-    if (d) return d
+    return makeDate(parseInt(dash[3], 10), parseInt(dash[1], 10), parseInt(dash[2], 10))
   }
 
   // YYYYMMDD
   if (COMPACT_PATTERN.test(v)) {
-    const d = makeDate(
+    return makeDate(
       parseInt(v.slice(0, 4), 10),
       parseInt(v.slice(4, 6), 10),
       parseInt(v.slice(6, 8), 10),
     )
-    if (d) return d
   }
 
   // Fallback to native Date parsing
@@ -174,11 +188,11 @@ export function tryParseAmount(value: string, decimalSeparator: DecimalSeparator
 
 // ─── Format Auto-Detection ────────────────────────────────────────────────────
 
-// a/b/yyyy values: a first part over 12 means day-first, a second part over 12 means
+// a/b/yyyy or a/b/yy values: a first part over 12 means day-first, a second part over 12 means
 // month-first. null when nothing decides it.
 export function detectDateOrder(values: string[]): DateOrder | null {
   for (const raw of values) {
-    const m = raw.trim().match(/^(\d{1,2})\/(\d{1,2})\/\d{4}$/)
+    const m = raw.trim().match(/^(\d{1,2})\/(\d{1,2})\/(\d{2}|\d{4})$/)
     if (!m) continue
     const a = parseInt(m[1], 10)
     const b = parseInt(m[2], 10)
