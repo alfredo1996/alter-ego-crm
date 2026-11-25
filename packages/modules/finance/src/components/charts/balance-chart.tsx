@@ -225,11 +225,12 @@ function BalanceChartInner({
   const firstDate = points[0].date
   const lastDate = points[points.length - 1].date
   const lowest = points.reduce((a, b) => (b.balance < a.balance ? b : a))
+  const sameYear = firstDate.getFullYear() === lastDate.getFullYear()
   const span =
-    firstDate.getFullYear() === lastDate.getFullYear()
+    sameYear
       ? `${fmtDate(firstDate, "MMMM")} to ${fmtDate(lastDate, "MMMM yyyy")}`
       : `${fmtDate(firstDate, "MMMM yyyy")} to ${fmtDate(lastDate, "MMMM yyyy")}`
-  const chartLabel = `Balance from ${span}: from ${abbreviate(points[0].balance)} to ${abbreviate(points[points.length - 1].balance)}, lowest ${abbreviate(lowest.balance)} in ${fmtDate(lowest.date, "MMMM")}.`
+  const chartLabel = `Balance from ${span}: from ${abbreviate(points[0].balance)} to ${abbreviate(points[points.length - 1].balance)}, lowest ${abbreviate(lowest.balance)} in ${fmtDate(lowest.date, sameYear ? "MMMM" : "MMMM yyyy")}.`
 
   // Convert client x-coord to a date on the timeline
   function xToDate(clientX: number): Date {

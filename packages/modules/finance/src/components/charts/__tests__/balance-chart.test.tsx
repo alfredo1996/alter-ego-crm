@@ -68,6 +68,24 @@ describe("BalanceChart", () => {
     expect(second).not.toBe(first)
   })
 
+  it("names the year of the lowest month when the data spans two years", () => {
+    // Balances walk 1,000 → 1,500 → 200 → 1,100: the lowest, 200, is December 2025.
+    render(
+      <BalanceChart
+        transactions={[
+          tx("t1", new Date(2025, 10, 5), "income", 500),
+          tx("t2", new Date(2025, 11, 10), "expense", 1300),
+          tx("t3", new Date(2026, 1, 3), "income", 900),
+        ]}
+        currentBalance={1100}
+        accountId="a1"
+      />,
+    )
+    expect(screen.getByRole("img").getAttribute("aria-label")).toBe(
+      "Balance from November 2025 to February 2026: from 1.0K to 1.1K, lowest 200 in December 2025.",
+    )
+  })
+
   it("keeps the empty-data branch as plain text with no picture", () => {
     render(<BalanceChart transactions={[]} currentBalance={0} accountId="a1" />)
     expect(screen.getByText("No transactions yet for this account.")).toBeTruthy()
