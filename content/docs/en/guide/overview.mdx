@@ -12,14 +12,24 @@ Alter Ego CRM runs the company side of a small Italian SRL. Every area below is 
 | **Accounting** | Invoices and credit notes, unbilled hours, invoice files and the accountant's package, the cash book (with its workbook import), costs, cost centres and the Month End close. The Plan shows the runway and the quarters when it is on. Needs Consulting. |
 | **Rent** | Tenants and yearly leases, with rent payments linked to the month they cover. Needs Accounting. |
 
-## Getting around
+## Getting Around
 
 The sidebar lists the pages of the plugins that are on; on a phone it opens from the menu button. Pages sit in one group per plugin, Personal Finance first when it is on, then Consulting, Accounting and Rent; the group of the page you are on is open, and the others are headings that open in place. **Settings** is pinned below the links.
 
-## MCP connector
+## The Guide
 
-The app serves an MCP server at `/api/mcp`, with OAuth 2.1 and API keys, so an AI assistant can read and write the same data. Connect it from **Settings, Data**. The tools of a plugin that is not listed are not offered.
+- [Consulting](/en/docs/guide/crm): pipeline, clients, contracts and amendments, the Contracts timeline, collaborators, tasks and deadlines.
+- [Plan](/en/docs/guide/plan): capacity, hours, revenue and costs, the runway and the quarters.
+- [Invoices](/en/docs/guide/invoicing): invoices and credit notes, what is still to invoice, invoice files.
+- [Books](/en/docs/guide/books): the cash book and its workbook import, costs, Month End.
+- [Solutions](/en/docs/guide/solutions): the catalog and its data model graph.
+- [Rent](/en/docs/guide/rent): tenants, leases and payments.
+- [Connector](/en/docs/guide/connector): how to connect an assistant, and every tool.
 
-## Cash flow only
+## MCP Connector
+
+The app serves an MCP server at `/api/mcp`, with OAuth 2.1 and API keys, so an AI assistant can read and write the same data. Connect it from **Settings, Data**; the [Connector](/en/docs/guide/connector) page lists every tool. The tools of a plugin that is not listed are not offered.
+
+## Cash Flow Only
 
 The app never computes taxes. It keeps the cash flow, the contracts and the books; the tax return is the accountant's job.

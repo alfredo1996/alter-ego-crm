@@ -1,0 +1,136 @@
+---
+title: Connettore
+description: Collega un assistente AI con OAuth, una chiave API o stdio, e tutti gli strumenti che ottiene.
+---
+
+Alter Ego espone un server MCP, così un assistente AI può leggere e scrivere gli stessi dati che vedi nell'app. L'app funziona completamente anche senza: l'AI è opzionale.
+
+## Collegarsi
+
+Tre modi, a scelta.
+
+- **OAuth**: aggiungi `/api/mcp` della tua installazione come connettore remoto nel tuo assistente. Trova da solo l'accesso e gli scope (OAuth 2.1 con PKCE), accedi come proprietario e approvi cosa può fare. **Settings, Data, Connectors** ha **Disconnect All Connectors**, che toglie l'accesso a tutte le app collegate insieme.
+- **Chiave API**: per un client che invia un'intestazione fissa. Creala in **Settings, Data, API Keys** con **Generate New API Key**: la chiave si vede una sola volta. Inviala come `Authorization: Bearer <chiave>` a `/api/mcp`. Una chiave porta entrambi gli scope. Revocarla interrompe subito ogni uso e non si può annullare.
+- **stdio**: l'assistente avvia il server come processo locale con `pnpm mcp:stdio`, senza accesso: il confine di fiducia è il processo, quindi non ci sono scope. `ALTER_EGO_USER_ID` indica di chi sono i dati ed è obbligatorio: senza, il server esce subito. Per la configurazione di un client vedi la guida all'auto-installazione nel repository.
+
+## Scope
+
+OAuth concede due scope, che la schermata di consenso mostra:
+
+| Scope | Cosa consente |
+|---|---|
+| `data:read` | Viene concesso e mostrato, ma non è mai controllato: qualunque token o chiave API valida può chiamare gli strumenti di lettura |
+| `data:write` | Richiesto da ogni strumento di scrittura; non include la lettura |
+
+Un token senza `data:write` riceve un rifiuto chiaro su uno strumento di scrittura, e il client può chiedere di nuovo lo scope mancante. Una chiave API porta entrambi gli scope. Gli strumenti disponibili dipendono anche dai plugin che l'installazione elenca in `NEXT_PUBLIC_PLUGINS`: quelli di un plugin non elencato non vengono offerti. `get_quarters` è offerto solo se è attivo anche Accounting.
+
+Alcuni strumenti di scrittura **mostrano prima l'anteprima**, come indicano le tabelle sotto: chiamati senza `confirm` non cambiano nulla e dicono esattamente cosa cambierebbe, e all'assistente è detto di mostrartelo; solo una seconda chiamata con `confirm: true` scrive.
+
+## Strumenti
+
+### Solo Collegamento Remoto
+
+| Strumento | Scope | Cosa fa |
+|---|---|---|
+| `ping` | lettura | Verifica che il collegamento funzioni. Offerto con OAuth e chiave API; il server stdio non lo registra. |
+
+### Personal Finance
+
+| Strumento | Scope | Cosa fa |
+|---|---|---|
+| `list_categories` | lettura | Le categorie in cui si può classificare una transazione. |
+| `list_accounts` | lettura | I tuoi conti personali con il saldo, divisi in attività e passività, e il patrimonio netto. |
+| `list_tags` | lettura | I tag che hai creato. |
+| `list_transactions` | lettura | Le tue transazioni personali, dalla più recente, con ricerca e filtri. |
+| `get_spending` | lettura | Spese ed entrate personali per un intervallo di mesi, per categoria o per mese. |
+| `get_budget_status` | lettura | Ogni budget personale nel periodo corrente: speso, rimanente e stato. |
+| `add_transaction` | scrittura | Registra una spesa, un'entrata o un trasferimento personale. |
+| `update_transaction` | scrittura | Corregge una transazione personale; i saldi si adeguano; prima mostra l'anteprima. |
+| `delete_transaction` | scrittura | Elimina una transazione personale e ripristina il saldo; prima mostra l'anteprima. |
+| `create_account` | scrittura | Apre un portafoglio, conto, carta o prestito personale. |
+| `archive_account` | scrittura | Chiude (archivia) o riapre un conto personale. |
+
+### Consulting
+
+| Strumento | Scope | Cosa fa |
+|---|---|---|
+| `list_clients` | lettura | I clienti con il valore mensile dei contratti e le opportunità aperte. |
+| `get_client` | lettura | Un cliente per intero: contratti, addendum, trattative aperte, stato e giornate recenti. |
+| `get_pipeline` | lettura | La pipeline per fase con valori mensili e pesati per probabilità. |
+| `get_revenue` | lettura | Ricavi per un intervallo di mesi, per mese, trimestre o cliente: maturati, fatturati o incassati. |
+| `list_deadlines` | lettura | Le scadenze che hai inserito, la più vicina prima, con indicatore di ritardo. |
+| `get_plan` | lettura | Il piano dei prossimi mesi come lo mostra la pagina Plan: giornate, ricavi, costi e netto. |
+| `get_quarters` | lettura | Ricavi, costi e netto per trimestre e mese (richiede Accounting). |
+| `get_capacity` | lettura | Giorni disponibili e allocati per mese, con ferie e mesi in sovraccarico. |
+| `list_tasks` | lettura | Le attività per colonna, cliente e contratto, con indicatore di ritardo. |
+| `list_time` | lettura | Le ore lavorate dai timesheet, con giornate da 8 ore. |
+| `get_hours_left` | lettura | Lo spazio per le ore su un contratto in un giorno, prima di registrarle. |
+| `list_meetings` | lettura | Le call, dalla più recente, e lo stato di salute di ogni contratto. |
+| `list_solutions` | lettura | Il catalogo delle soluzioni, una riga per soluzione, con il suo percorso a tappe. |
+| `get_solution` | lettura | Una soluzione per intero: sezioni, percorso, modello dati e sezioni mancanti. |
+| `log_allocation` | scrittura | Imposta o aggiunge le giornate lavorate o pianificate per un cliente in un mese. |
+| `move_opportunity` | scrittura | Sposta un'opportunità in un'altra fase; persa richiede un motivo. |
+| `create_opportunity` | scrittura | Crea un'opportunità in pipeline per un cliente. |
+| `create_client` | scrittura | Crea un cliente; un nome duplicato viene rifiutato. |
+| `block_capacity` | scrittura | Blocca giorni di ferie in un mese prima di venderli. |
+| `convert_to_engagement` | scrittura | Trasforma un'opportunità vinta in un contratto attivo. |
+| `create_contract` | scrittura | Crea un contratto per un cliente direttamente, senza trattativa. |
+| `update_engagement` | scrittura | Modifica o chiude un contratto; una nuova tariffa o più giornate sono un addendum. |
+| `amend_contract` | scrittura | Registra una modifica datata a un contratto firmato: tariffa, giornate, fine. |
+| `add_note` | scrittura | Aggiunge una nota datata a un cliente o a un'opportunità. |
+| `add_task` | scrittura | Aggiunge un'attività per un cliente, facoltativamente su un contratto. |
+| `complete_task` | scrittura | Segna un'attività aperta come fatta. |
+| `update_task` | scrittura | Modifica un'attività, ne sposta la scadenza o la riapre. |
+| `delete_task` | scrittura | Elimina un'attività inserita per errore. |
+| `add_deadline` | scrittura | Salva una data che l'app non può ricavare da sola. |
+| `complete_deadline` | scrittura | Spunta una scadenza salvata, o la riapre. |
+| `schedule_follow_up` | scrittura | Imposta o sposta la prossima azione su un'opportunità aperta. |
+| `log_time` | scrittura | Registra le ore lavorate su un contratto in un giorno. |
+| `log_meeting` | scrittura | Registra il verbale di una call e, se vuoi, lo stato di salute del contratto. |
+| `update_meeting` | scrittura | Corregge una call: ora, data, stato di salute o testo. |
+| `create_solution` | scrittura | Aggiunge una soluzione al catalogo. |
+| `update_solution` | scrittura | Modifica una sezione, il modello dati, il percorso o lo stato di una soluzione. |
+| `log_work` | scrittura | Registra una sessione di lavoro nel diario di una soluzione. |
+| `add_collaborator` | scrittura | Aggiunge un collaboratore, con un compenso fisso facoltativo. |
+| `update_collaborator` | scrittura | Modifica un collaboratore o il suo compenso; prima mostra l'anteprima. |
+| `assign_collaborator` | scrittura | Assegna un collaboratore a un contratto, o ne modifica l'assegnazione; prima mostra l'anteprima. |
+| `unassign_collaborator` | scrittura | Toglie un collaboratore da un contratto; rifiutato finché ha giornate registrate; prima mostra l'anteprima. |
+
+### Accounting
+
+| Strumento | Scope | Cosa fa |
+|---|---|---|
+| `get_file` | lettura | Scarica un file di fattura di un costo o di una fattura. |
+| `list_invoices` | lettura | Le fatture emesse, prima le non pagate, con indicatore di ritardo e totale dovuto. |
+| `get_unbilled` | lettura | Quanto resta da fatturare dalle ore registrate, per cliente e mese. |
+| `get_cash_book` | lettura | La prima nota dell'azienda: saldi, entrate e uscite, dovuti, depositi e da sistemare. |
+| `get_month_end` | lettura | La checklist di Month End per un mese concluso, passo per passo. |
+| `create_invoice` | scrittura | Registra una fattura o una nota di credito già emessa. |
+| `mark_invoice_paid` | scrittura | Imposta la data di incasso di una fattura. |
+| `update_invoice` | scrittura | Modifica una fattura o nota di credito; prima mostra l'anteprima. |
+| `delete_invoice` | scrittura | Elimina una fattura o nota di credito registrata per errore; prima mostra l'anteprima. |
+| `add_movement` | scrittura | Registra denaro in entrata o uscita da un conto aziendale che non è fattura, costo o finanziamento. |
+| `add_expense` | scrittura | Registra un costo aziendale, una fattura fornitore da pagare o un rimborso. |
+| `record_loan` | scrittura | Registra un finanziamento soci o il suo rimborso. |
+| `check_balance` | scrittura | Verifica un conto aziendale con la banca e lo salva come ultimo controllo. |
+| `update_movement` | scrittura | Corregge un movimento della prima nota tramite id; prima mostra l'anteprima. |
+| `delete_movement` | scrittura | Elimina un movimento della prima nota tramite id; prima mostra l'anteprima. |
+| `update_expense` | scrittura | Corregge un costo una tantum tramite id; prima mostra l'anteprima. |
+| `delete_expense` | scrittura | Elimina un costo una tantum tramite id; prima mostra l'anteprima. |
+| `attach_file` | scrittura | Aggiunge un file di fattura a un costo o a una fattura: fino a 4 file da 10 MB per riga. |
+| `create_upload_url` | scrittura | Crea un link temporaneo per caricare un file di fattura più grande. |
+| `complete_upload` | scrittura | Conclude un caricamento fatto con create_upload_url e aggiunge il file. |
+| `remove_file` | scrittura | Rimuove un file di fattura e lo elimina dall'archivio; prima mostra l'anteprima. |
+| `update_loan` | scrittura | Corregge un finanziamento soci o un rimborso tramite id; prima mostra l'anteprima. |
+| `delete_loan` | scrittura | Elimina un finanziamento soci o un rimborso registrato per errore; prima mostra l'anteprima. |
+
+### Rent
+
+| Strumento | Scope | Cosa fa |
+|---|---|---|
+| `get_rent` | lettura | L'affitto di un mese per immobile e stanza: pagato, parziale, mancante, arretrato. |
+| `get_tenant` | lettura | I dati di un inquilino per la fattura, e i suoi contratti. |
+| `create_tenant` | scrittura | Aggiunge un inquilino. |
+| `update_tenant` | scrittura | Corregge i dati di un inquilino; prima mostra l'anteprima. |
+| `create_lease` | scrittura | Assegna una stanza a un inquilino per un anno, o rinnova un contratto. |
+| `update_lease` | scrittura | Modifica un contratto o imposta l'importo concordato di un mese; prima mostra l'anteprima. |

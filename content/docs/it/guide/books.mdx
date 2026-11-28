@@ -1,0 +1,56 @@
+---
+title: Books
+description: La prima nota e l'importazione della cartella di lavoro, costi e centri di costo, la chiusura di Month End.
+---
+
+Il plugin **Accounting** tiene la cassa dell'azienda, non la dichiarazione dei redditi. Nulla qui calcola imposte.
+
+## Cash Book
+
+**Cash Book** riguarda solo i conti bancari dell'azienda (SRL). Aggiungi prima i conti (**Accounts**, dal menu **More**): ognuno ha un saldo e una data di apertura. L'unica eccezione è l'importazione della cartella di lavoro qui sotto, che li crea da sola. Le righe datate prima dell'apertura del conto, o su un conto che non esiste più, finiscono in **To Chase** invece di essere contate.
+
+La pagina ha cinque viste:
+
+- **Movements**: ogni riga, con ricerca e filtro per conto. **Add Movement** registra denaro in entrata o uscita che non è una fattura, un costo o un finanziamento soci: un giroconto tra due conti aziendali (né ricavo né costo), affitti e altri incassi, denaro di un cliente senza fattura nell'app, il deposito di un inquilino trattenuto o restituito, un deposito pagato dall'azienda, le righe di un F24 per IVA o imposte (una riga per voce), il compenso netto dell'amministratore e il capitale sociale.
+- **Summary**: entrate e uscite del periodo, con le cifre **Clients owe you**, **You owe suppliers**, **SRL owes you** (finanziamenti soci e costi pagati con la carta del titolare, meno i rimborsi) e **Deposits to give back**.
+- **Cost Centres**: ricavi, costi e utile o perdita di ogni centro di costo.
+- **Owed & Held**: chi deve cosa, e i depositi che non sono davvero dell'azienda.
+- **To Chase**: cosa sistemare. Un saldo sotto zero, una fattura pagata senza conto, un costo pagato senza documento (una commissione bancaria non ne ha bisogno), una data stimata, una riga prima dell'apertura del conto.
+
+**Check Balance** confronta il saldo della banca con il registro a fine della stessa giornata: risponde **Matches the bank**, oppure «Missing IN/OUT» con le righe dall'ultimo controllo. Si salva come ultimo controllo del conto, salvo che ne esista uno più recente. **Export** scarica il registro.
+
+### Importazione della Cartella di Lavoro
+
+**Import Excel** legge la tua cartella di lavoro della prima nota (un `.xlsx`) nella Cash Book, una volta; è offerto anche quando non hai ancora un conto. Il file resta nel tuo browser: nulla viene caricato, e nulla viene scritto finché non premi **Import**. Legge il foglio **Saldo** e un foglio per mese, e salta il foglio **Verifica** perché l'app rifà le somme. Crea ogni conto bancario della cartella, a €0 il 1° del primo mese, oppure usa un tuo conto vuoto con lo stesso nome. La finestra mostra cosa c'è nel file, poi **What Import will do**: ogni riga diventa ciò che l'app registra (costi, finanziamenti, movimenti, fatture segnate pagate), e il saldo di ogni conto è confrontato con il foglio Saldo. **Import** resta spento finché ogni saldo non coincide e ogni riga che l'app non sa risolvere da sola è decisa. I costi e i finanziamenti già nell'app senza conto, con lo stesso importo entro un mese da una riga della cartella, sono elencati sotto **Already in the App**: di base la riga dell'app viene eliminata e quella della cartella tenuta, così nulla conta due volte, e il rapporto con le righe eliminate è salvato nei download prima di scrivere qualsiasi cosa. Un file che non è una cartella `.xlsx` leggibile lo dice; un errore nella sua struttura cita foglio, riga e colonna, mai il contenuto di una cella. **Undo Import** lo annulla: le righe cambiate dopo l'importazione restano, salvo che tu spunti la casella.
+
+## Costi
+
+**Costs** è ciò che l'azienda spende, una tantum e ricorrente, al netto dell'IVA che recupera.
+
+- **Add Cost** registra un pagamento una volta. **Amount Before VAT** è ciò che l'azienda ha pagato; l'IVA si inserisce solo quando lo scontrino mostra IVA italiana recuperabile, e 0 per reverse charge, fornitori esteri o i costi di un appartamento affittato.
+- Chi ha pagato: un conto aziendale, la carta personale del titolare (la SRL la deve al titolare), oppure **non ancora pagato**, una fattura fornitore da pagare. Una fattura fornitore richiede il numero del documento e compare in **You Owe Suppliers**; si paga con il pagamento della fattura fornitore, in tutto o in parte, mai come secondo costo.
+- Un **rimborso** è denaro che un fornitore ha restituito su un conto aziendale.
+- **Add Recurring Cost** è una stima che il Plan conta a ogni periodo. **Record Payment** registra ogni pagamento reale: il Plan conta poi il pagamento al posto della stima di quel mese. Le variazioni di prezzo sono datate, e una non può cadere fuori dalle date del costo.
+- Un costo di un collaboratore indica il mese di lavoro che paga.
+- Un costo può avere fino a 4 file di fattura (vedi [Invoices](/it/docs/guide/invoicing)).
+- I **finanziamenti soci** hanno una sezione propria: il titolare presta denaro alla SRL, o la SRL lo restituisce. Un rimborso oltre quanto la SRL deve è segnalato. `record_loan` del connettore rifiuta anche lo stesso finanziamento due volte nello stesso giorno, a meno che non gli si dica di forzarlo.
+
+## Month End
+
+**Month End** chiude un mese concluso, passo per passo. Ogni passo legge i tuoi dati; nulla viene salvato nella pagina, e **la chiusura è calcolata**: una modifica successiva al mese lo riapre. Il mese corrente e i successivi non si possono chiudere. Dall'alto, nell'ordine di chiusura:
+
+| Passo | Blocca la chiusura |
+|---|---|
+| Hours | Sì: ogni contratto pianificato nel mese ha le sue ore e il piano le contiene (nessun **Use** in attesa, nessun mese oltre 31 giorni), e nessuna è fuori dai mesi di un contratto |
+| Invoices | Sì: nessun cliente ha ore da fatturare nel mese o prima |
+| Waiting for Payment | No, un promemoria: fatture scadute, fatture senza scadenza, note di credito aperte |
+| Supplier Invoices Owed | No, un promemoria |
+| Recurring Costs | No, un promemoria: ognuno dovrebbe avere un pagamento collegato che copre il mese |
+| Invoice Files | No, un promemoria: ogni costo una tantum e ogni fattura emessa dovrebbe avere il suo file |
+| Bank | Sì: ogni conto aperto coincide con la banca, controllato l'ultimo giorno del mese o dopo |
+| To Chase | Sì: nulla da sistemare datato fino a fine mese |
+| Deadlines | Sì: nessuna tua scadenza datata fino a fine mese è ancora aperta |
+
+**Download Package** costruisce il pacchetto per il commercialista: uno zip con i file delle fatture del mese e due CSV, la prima nota e i suoi pagamenti.
+
+Strumenti: `get_cash_book`, `get_month_end`, `add_movement`, `add_expense`, `update_expense`, `delete_expense`, `update_movement`, `delete_movement`, `record_loan`, `update_loan`, `delete_loan`, `check_balance`.

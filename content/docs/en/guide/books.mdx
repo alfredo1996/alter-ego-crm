@@ -1,0 +1,56 @@
+---
+title: Books
+description: The cash book and its workbook import, costs and cost centres, and the Month End close.
+---
+
+The **Accounting** plugin keeps the company's cash, not its tax return. Nothing here computes taxes.
+
+## Cash Book
+
+**Cash Book** covers the company (SRL) bank accounts only. Add the accounts first (**Accounts**, from the **More** menu): each has an opening balance and date. The one exception is the workbook import below, which creates them itself. Rows dated before the account opened, or on an account that is gone, are listed in **To Chase** rather than counted.
+
+The page has five views:
+
+- **Movements**: every row, searchable, filtered by account. **Add Movement** records money in or out that is not an invoice, a cost or a shareholder loan: a transfer between two company accounts (neither income nor a cost), rent and other income, client money with no invoice in the app, a tenant's deposit held or given back, a deposit the company paid, VAT or tax lines of an F24 (one row per line), the administrator's net pay and share capital.
+- **Summary**: money in and out for the period, with the figures **Clients owe you**, **You owe suppliers**, **SRL owes you** (shareholder loans and costs paid with the owner's card, less repayments) and **Deposits to give back**.
+- **Cost Centres**: income, costs and the gain or loss of each cost centre.
+- **Owed & Held**: who owes what, and the deposits that are not really the company's.
+- **To Chase**: what to fix. A balance below zero, a paid invoice with no account, a cost paid with no document (a bank fee needs none), an estimated date, a row before its account opened.
+
+**Check Balance** compares the bank's balance with the book at the end of the same day: it answers **Matches the bank**, or "Missing IN/OUT" with the rows since the last check. It saves as the account's last check unless a later one exists. **Export** downloads the book.
+
+### Workbook Import
+
+**Import Excel** reads your cash book workbook (an `.xlsx`) into the Cash Book, once; it is also offered when you have no account yet. The file stays in your browser: nothing is uploaded, and nothing is written until you press **Import**. It reads the **Saldo** sheet and one sheet per month, and skips the **Verifica** sheet because the app redoes its sums. It creates each bank account of the workbook, at €0 on the 1st of the first month, or uses an empty account of yours with the same name. The dialog shows what is in the file, then **What Import will do**: each row becomes what the app records (costs, loans, movements, invoices marked paid), and every account's balance is checked against the Saldo sheet. **Import** stays off until every balance matches and every row the app cannot settle alone is decided. Costs and loans already in the app with no account, with the same amount within a month of a workbook row, are listed under **Already in the App**: by default the app's row is deleted and the workbook's kept, so nothing counts twice, and the report holding the deleted rows is saved to your downloads before anything is written. A file that is not a readable `.xlsx` workbook says so; an error in its layout names the sheet, row and column, never a cell's content. **Undo Import** takes it back: rows changed since the import are kept unless you tick the box.
+
+## Costs
+
+**Costs** is what the company spends, one-off and recurring, net of the VAT you recover.
+
+- **Add Cost** records a payment once. **Amount Before VAT** is what the company paid; the VAT is entered only when the receipt shows Italian VAT the company recovers, and 0 for reverse charge, foreign suppliers or a rented flat's costs.
+- Who paid: a company account, the owner's personal card (the SRL then owes it to the owner), or **not paid yet**, a supplier invoice to pay later. A supplier invoice needs its document number and shows in **You Owe Suppliers**; pay it with the supplier invoice payment, all or part, never a second cost.
+- A **refund** is money a supplier gave back into a company account.
+- **Add Recurring Cost** is an estimate the Plan counts every period. **Record Payment** logs each real payment: the Plan then counts the payment instead of the estimate that month. Price changes are dated, and one cannot fall outside the cost's own dates.
+- A cost for a collaborator names the month of work it pays.
+- A cost can carry up to 4 invoice files (see [Invoices](/en/docs/guide/invoicing)).
+- **Shareholder loans** have their own section: the owner lends the SRL money, or the SRL pays the owner back. A repayment past what the SRL owes is warned about. The connector's `record_loan` also refuses the same loan twice on one day, unless it is told to force it.
+
+## Month End
+
+**Month End** closes a month that has ended, step by step. Every step reads your data; nothing is saved on the page, and **closed is computed**: a later edit to the month opens it again. The current month and later ones cannot be closed. From the top, in closing order:
+
+| Step | Blocks the close |
+|---|---|
+| Hours | Yes: every contract planned in the month has its hours and the plan holds them (no **Use** waiting, no month over 31 days), and none is outside a contract's months |
+| Invoices | Yes: no client has hours left to invoice in the month or before |
+| Waiting for Payment | No, a reminder: overdue invoices, invoices with no due date, open credit notes |
+| Supplier Invoices Owed | No, a reminder |
+| Recurring Costs | No, a reminder: each should have a payment linked that covers the month |
+| Invoice Files | No, a reminder: every one-off cost and issued invoice should have its file |
+| Bank | Yes: every open account matches the bank, checked on the last day of the month or later |
+| To Chase | Yes: nothing to fix dated up to the month end |
+| Deadlines | Yes: no deadline of yours dated up to the month end is still open |
+
+**Download Package** builds the accountant's package: a zip with the month's invoice files and two CSV files, the cash book and its payments.
+
+Tools: `get_cash_book`, `get_month_end`, `add_movement`, `add_expense`, `update_expense`, `delete_expense`, `update_movement`, `delete_movement`, `record_loan`, `update_loan`, `delete_loan`, `check_balance`.
