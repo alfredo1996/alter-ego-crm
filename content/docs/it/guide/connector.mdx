@@ -9,7 +9,7 @@ Alter Ego espone un server MCP, così un assistente AI può leggere e scrivere g
 
 Tre modi, a scelta.
 
-- **OAuth**: aggiungi `/api/mcp` della tua installazione come connettore remoto nel tuo assistente. Trova da solo l'accesso e gli scope (OAuth 2.1 con PKCE), accedi come proprietario e approvi cosa può fare. **Settings, Data, Connectors** elenca le app collegate e **Disconnect All Connectors** toglie l'accesso a tutte insieme.
+- **OAuth**: aggiungi `/api/mcp` della tua installazione come connettore remoto nel tuo assistente. Trova da solo l'accesso e gli scope (OAuth 2.1 con PKCE), accedi come proprietario e approvi cosa può fare. **Settings, Data, Connectors** ha **Disconnect All Connectors**, che toglie l'accesso a tutte le app collegate insieme.
 - **Chiave API**: per un client che invia un'intestazione fissa. Creala in **Settings, Data, API Keys** con **Generate New API Key**: la chiave si vede una sola volta. Inviala come `Authorization: Bearer <chiave>` a `/api/mcp`. Una chiave porta entrambi gli scope. Revocarla interrompe subito ogni uso e non si può annullare.
 - **stdio**: l'assistente avvia il server come processo locale con `pnpm mcp:stdio`, senza accesso: il confine di fiducia è il processo, quindi non ci sono scope. `ALTER_EGO_USER_ID` indica di chi sono i dati ed è obbligatorio: senza, il server esce subito. Per la configurazione di un client vedi la guida all'auto-installazione nel repository.
 
@@ -19,20 +19,20 @@ OAuth concede due scope, che la schermata di consenso mostra:
 
 | Scope | Cosa consente |
 |---|---|
-| `data:read` | Gli strumenti di lettura |
-| `data:write` | Gli strumenti di scrittura; non include la lettura |
+| `data:read` | Viene concesso e mostrato, ma non è mai controllato: qualunque token o chiave API valida può chiamare gli strumenti di lettura |
+| `data:write` | Richiesto da ogni strumento di scrittura; non include la lettura |
 
-Un token senza `data:write` riceve un rifiuto chiaro su uno strumento di scrittura, e il client può chiedere di nuovo lo scope mancante. La schermata di consenso mostra la lettura accanto alla scrittura perché un token di sola scrittura legge comunque, ma non la aggiunge mai al permesso. Gli strumenti disponibili dipendono anche dai plugin che l'installazione elenca in `NEXT_PUBLIC_PLUGINS`: quelli di un plugin non elencato non vengono offerti. `get_quarters` è offerto solo se è attivo anche Accounting.
+Un token senza `data:write` riceve un rifiuto chiaro su uno strumento di scrittura, e il client può chiedere di nuovo lo scope mancante. Una chiave API porta entrambi gli scope. Gli strumenti disponibili dipendono anche dai plugin che l'installazione elenca in `NEXT_PUBLIC_PLUGINS`: quelli di un plugin non elencato non vengono offerti. `get_quarters` è offerto solo se è attivo anche Accounting.
 
-Alcuni strumenti di scrittura **mostrano prima l'anteprima**: chiamati senza `confirm` non cambiano nulla e dicono esattamente cosa cambierebbe, e l'assistente dovrebbe mostrartelo; solo una seconda chiamata con `confirm: true` scrive.
+Alcuni strumenti di scrittura **mostrano prima l'anteprima**, come indicano le tabelle sotto: chiamati senza `confirm` non cambiano nulla e dicono esattamente cosa cambierebbe, e all'assistente è detto di mostrartelo; solo una seconda chiamata con `confirm: true` scrive.
 
 ## Strumenti
 
-### Ogni plugin
+### Solo Collegamento Remoto
 
 | Strumento | Scope | Cosa fa |
 |---|---|---|
-| `ping` | lettura | Verifica che il collegamento funzioni. |
+| `ping` | lettura | Verifica che il collegamento funzioni. Offerto con OAuth e chiave API; il server stdio non lo registra. |
 
 ### Personal Finance
 
@@ -45,8 +45,8 @@ Alcuni strumenti di scrittura **mostrano prima l'anteprima**: chiamati senza `co
 | `get_spending` | lettura | Spese ed entrate personali per un intervallo di mesi, per categoria o per mese. |
 | `get_budget_status` | lettura | Ogni budget personale nel periodo corrente: speso, rimanente e stato. |
 | `add_transaction` | scrittura | Registra una spesa, un'entrata o un trasferimento personale. |
-| `update_transaction` | scrittura | Corregge una transazione personale; i saldi si adeguano. |
-| `delete_transaction` | scrittura | Elimina una transazione personale e ripristina il saldo. |
+| `update_transaction` | scrittura | Corregge una transazione personale; i saldi si adeguano; prima mostra l'anteprima. |
+| `delete_transaction` | scrittura | Elimina una transazione personale e ripristina il saldo; prima mostra l'anteprima. |
 | `create_account` | scrittura | Apre un portafoglio, conto, carta o prestito personale. |
 | `archive_account` | scrittura | Chiude (archivia) o riapre un conto personale. |
 
@@ -94,7 +94,7 @@ Alcuni strumenti di scrittura **mostrano prima l'anteprima**: chiamati senza `co
 | `add_collaborator` | scrittura | Aggiunge un collaboratore, con un compenso fisso facoltativo. |
 | `update_collaborator` | scrittura | Modifica un collaboratore o il suo compenso; prima mostra l'anteprima. |
 | `assign_collaborator` | scrittura | Assegna un collaboratore a un contratto, o ne modifica l'assegnazione; prima mostra l'anteprima. |
-| `unassign_collaborator` | scrittura | Toglie un collaboratore da un contratto; rifiutato finché ha giornate registrate. |
+| `unassign_collaborator` | scrittura | Toglie un collaboratore da un contratto; rifiutato finché ha giornate registrate; prima mostra l'anteprima. |
 
 ### Accounting
 
@@ -108,21 +108,21 @@ Alcuni strumenti di scrittura **mostrano prima l'anteprima**: chiamati senza `co
 | `create_invoice` | scrittura | Registra una fattura o una nota di credito già emessa. |
 | `mark_invoice_paid` | scrittura | Imposta la data di incasso di una fattura. |
 | `update_invoice` | scrittura | Modifica una fattura o nota di credito; prima mostra l'anteprima. |
-| `delete_invoice` | scrittura | Elimina una fattura o nota di credito registrata per errore. |
+| `delete_invoice` | scrittura | Elimina una fattura o nota di credito registrata per errore; prima mostra l'anteprima. |
 | `add_movement` | scrittura | Registra denaro in entrata o uscita da un conto aziendale che non è fattura, costo o finanziamento. |
 | `add_expense` | scrittura | Registra un costo aziendale, una fattura fornitore da pagare o un rimborso. |
 | `record_loan` | scrittura | Registra un finanziamento soci o il suo rimborso. |
 | `check_balance` | scrittura | Verifica un conto aziendale con la banca e lo salva come ultimo controllo. |
-| `update_movement` | scrittura | Corregge un movimento della prima nota tramite id. |
-| `delete_movement` | scrittura | Elimina un movimento della prima nota tramite id. |
-| `update_expense` | scrittura | Corregge un costo una tantum tramite id. |
-| `delete_expense` | scrittura | Elimina un costo una tantum tramite id. |
+| `update_movement` | scrittura | Corregge un movimento della prima nota tramite id; prima mostra l'anteprima. |
+| `delete_movement` | scrittura | Elimina un movimento della prima nota tramite id; prima mostra l'anteprima. |
+| `update_expense` | scrittura | Corregge un costo una tantum tramite id; prima mostra l'anteprima. |
+| `delete_expense` | scrittura | Elimina un costo una tantum tramite id; prima mostra l'anteprima. |
 | `attach_file` | scrittura | Aggiunge un file di fattura a un costo o a una fattura: fino a 4 file da 10 MB per riga. |
 | `create_upload_url` | scrittura | Crea un link temporaneo per caricare un file di fattura più grande. |
 | `complete_upload` | scrittura | Conclude un caricamento fatto con create_upload_url e aggiunge il file. |
-| `remove_file` | scrittura | Rimuove un file di fattura e lo elimina dall'archivio. |
-| `update_loan` | scrittura | Corregge un finanziamento soci o un rimborso tramite id. |
-| `delete_loan` | scrittura | Elimina un finanziamento soci o un rimborso registrato per errore. |
+| `remove_file` | scrittura | Rimuove un file di fattura e lo elimina dall'archivio; prima mostra l'anteprima. |
+| `update_loan` | scrittura | Corregge un finanziamento soci o un rimborso tramite id; prima mostra l'anteprima. |
+| `delete_loan` | scrittura | Elimina un finanziamento soci o un rimborso registrato per errore; prima mostra l'anteprima. |
 
 ### Rent
 
@@ -131,6 +131,6 @@ Alcuni strumenti di scrittura **mostrano prima l'anteprima**: chiamati senza `co
 | `get_rent` | lettura | L'affitto di un mese per immobile e stanza: pagato, parziale, mancante, arretrato. |
 | `get_tenant` | lettura | I dati di un inquilino per la fattura, e i suoi contratti. |
 | `create_tenant` | scrittura | Aggiunge un inquilino. |
-| `update_tenant` | scrittura | Corregge i dati di un inquilino. |
+| `update_tenant` | scrittura | Corregge i dati di un inquilino; prima mostra l'anteprima. |
 | `create_lease` | scrittura | Assegna una stanza a un inquilino per un anno, o rinnova un contratto. |
 | `update_lease` | scrittura | Modifica un contratto o imposta l'importo concordato di un mese; prima mostra l'anteprima. |

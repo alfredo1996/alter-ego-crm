@@ -3,23 +3,23 @@ title: Plan
 description: Capacità, giornate e ore pianificate, ricavi e costi, il runway e i trimestri.
 ---
 
-**Plan** (Consulting) proietta i mesi successivi dai tuoi contratti firmati. È solo flusso di cassa: al netto dell'IVA, senza imposte.
+**Plan** (Consulting) proietta i mesi successivi dai tuoi contratti firmati. È solo flusso di cassa: ricavi e costi sono al netto dell'IVA e l'app non calcola imposte (il runway qui sotto è l'unica cifra non al netto dell'IVA).
 
-## La proiezione
+## La Proiezione
 
 Per ogni mese mostra le giornate pianificate e fatturabili di ogni contratto, il budget rimasto dopo il mese, i ricavi (giornate fatturabili per la tariffa in vigore quel mese; un contratto a ore è in ore) e i costi divisi in **collaboratori** (compensi fissi e giornate pianificate per la loro tariffa) e **altri** (dalla pagina [Costs](/it/docs/guide/books)). Il netto è ricavi meno costi. **With Weighted Pipeline** aggiunge le trattative aperte alla loro probabilità; di base ci sono solo i contratti impegnati.
 
-- Un mese senza giornate registrate conta le giornate predefinite del contratto, finché durano il suo budget e il mese di fine. Le giornate che registri per un mese sostituiscono il valore predefinito; con **set** scrivi il totale del mese, con **add** sommi a un totale già registrato (rifiutato su un mese senza nulla registrato, per non sostituire il predefinito per sbaglio).
-- Ore oltre le giornate di un contratto sono rifiutate; ore oltre il piano del mese sono accettate con un avviso. Le ore non cambiano mai il piano: si pianifica in giornate.
+- Un mese senza giornate registrate conta le giornate predefinite del contratto, finché durano il suo budget e il mese di fine. Le giornate che registri per un mese sostituiscono il valore predefinito. Dal connettore, `log_allocation` o imposta il totale del mese o somma a un totale già registrato (la somma è rifiutata su un mese senza nulla registrato, per non sostituire il predefinito per sbaglio).
+- Ore oltre le giornate di un contratto sono rifiutate; ore oltre il piano del mese sono accettate con un avviso. Le ore non cambiano mai il piano da sole: le registri per settimana in questa pagina, e **Use** su un contratto-mese (o **Use All** per il mese) le scrive come giornate di quel mese, per un mese chiuso o per il mese aperto quando le sue ore coprono abbastanza giorni feriali. Si pianifica in giornate.
 - Le ferie si bloccano per mese prima di venderle: i giorni disponibili sono i giorni feriali del mese meno i giorni di ferie. Un mese con più giornate pianificate è segnalato come sovraccarico, e la scrittura va comunque a buon fine.
 
-## Contratto rimanente e rischio ricavi
+## Contratto Rimanente e Rischio Ricavi
 
-**Contract remaining** mostra, per contratto, le giornate o ore rimaste nel budget. Il pannello sui ricavi dice quando la fatturazione cala: **Before billing stops** e **When billing drops**; segnala anche quando nessun budget si esaurisce nei prossimi 12 mesi.
+Sotto ogni contratto la griglia mostra righe **Contract remaining**: le giornate o ore rimaste nel suo budget. Il pannello sui ricavi dice quando la fatturazione cala: **Before billing stops** e **When billing drops**; segnala anche quando nessun budget si esaurisce nei prossimi 12 mesi.
 
 ## Runway
 
-Con Accounting attivo, il Plan mostra il **Runway**: il saldo dei conti aziendali a fine mese, pari al mese prima più il netto del piano. Imposta una **soglia** (0 o più, vuota per nessuna soglia) e viene indicato il primo mese in cui il saldo scende **Under Your Floor**. La soglia è salvata per l'azienda, così telefono e portatile concordano. Senza conti aziendali, la pagina rimanda alla Cash Book.
+Con Accounting attivo, il Plan mostra il **Runway**: il saldo dei conti aziendali oggi, poi a fine di ogni mese successivo, pari al mese prima più il netto del piano. Il saldo di partenza è quello della Cash Book, IVA compresa, e il tuo compenso, i rimborsi di finanziamenti, l'IVA e le imposte pagate non ci sono: leggilo come copertura prima di queste voci, non dopo le imposte. Il mese corrente è escluso, perché quanto è successo è già nel saldo. La pagina indica il mese in cui il saldo scenderebbe sotto €0 (**Money runs out**). Imposta una **soglia** (0 o più, vuota per nessuna soglia) e viene indicato anche il primo mese in cui il saldo scende **Under Your Floor**. La soglia è salvata per l'azienda, così telefono e portatile concordano. Senza conti aziendali, la pagina rimanda alla Cash Book.
 
 ## Trimestri
 

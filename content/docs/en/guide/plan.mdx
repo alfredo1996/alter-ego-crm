@@ -3,23 +3,23 @@ title: Plan
 description: Capacity, planned days and hours, revenue and costs, the runway and the quarters.
 ---
 
-**Plan** (Consulting) projects the next months from your signed contracts. It is cash flow only: net of VAT, no taxes.
+**Plan** (Consulting) projects the next months from your signed contracts. It is cash flow only: revenue and costs are net of VAT, and the app computes no taxes (the runway below is the one figure that is not net of VAT).
 
-## The projection
+## The Projection
 
 For each month it shows every contract's planned and billable days, the budget left after the month, revenue (billable days times the day rate in force that month; an hourly contract is in hours), and the costs split into **collaborators** (their fixed fees and planned days times their rate) and **other** (from the [Costs](/en/docs/guide/books) page). Net is revenue less costs. **With Weighted Pipeline** adds the open deals at their probability; the default is committed contracts only.
 
-- A month with no days recorded counts the contract's default days, as long as its budget and end month last. Days you record for a month replace the default; with **set** you write the month's total, with **add** you sum onto a total already recorded (refused on a month with nothing recorded, so that the default is not replaced by accident).
-- Hours past a contract's days are refused; hours past the month's plan are accepted with a warning. Hours never change the plan: planning is done in days.
+- A month with no days recorded counts the contract's default days, as long as its budget and end month last. Days you record for a month replace the default. Through the connector, `log_allocation` either sets the month's total or adds onto a total already recorded (the add is refused on a month with nothing recorded, so that the default is not replaced by accident).
+- Hours past a contract's days are refused; hours past the month's plan are accepted with a warning. Hours never change the plan by themselves: you log them by the week on this page, and **Use** on a contract-month (or **Use All** for the month) writes its hours as that month's days, for a closed month or for the open month once its hours cover enough of its weekdays. Planning is done in days.
 - Time off is blocked per month before it is sold: the available days are the month's weekdays minus the days off. A month whose planned days exceed that is flagged as overbooked, and the write still lands.
 
-## Contract remaining and the revenue cliff
+## Contract Remaining and the Revenue Cliff
 
-**Contract remaining** shows, per contract, the days or hours left in the budget. The revenue cliff panel says when billing drops: **Before billing stops** and **When billing drops**; it says so when no budget runs out in the next 12 months.
+Under each contract the grid shows **Contract remaining** lines: the days or hours left in its budget. The revenue cliff panel says when billing drops: **Before billing stops** and **When billing drops**; it says so when no budget runs out in the next 12 months.
 
 ## Runway
 
-When Accounting is on, the Plan shows the **Runway**: the balance of the company accounts at the end of each month, equal to the month before plus the plan's net. Set a **floor** (0 or more, or empty for no floor) and the first month the balance goes **Under Your Floor** is named. The floor is saved for the company, so the phone and the laptop agree. With no company account yet, the page points you to the Cash Book.
+When Accounting is on, the Plan shows the **Runway**: the balance of the company accounts today, then at the end of each later month, equal to the month before plus the plan's net. The starting balance is the Cash Book's, VAT included, and your pay, loan repayments, VAT and taxes paid are not in it: read it as cover before those, not after tax. The current month is left out, because what has happened in it is already in the balance. The page names the month the balance would go under €0 (**Money runs out**). Set a **floor** (0 or more, or empty for no floor) and the first month the balance goes **Under Your Floor** is named too. The floor is saved for the company, so the phone and the laptop agree. With no company account yet, the page points you to the Cash Book.
 
 ## Quarters
 

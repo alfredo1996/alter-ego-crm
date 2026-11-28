@@ -9,7 +9,7 @@ Alter Ego serves an MCP server, so an AI assistant can read and write the same d
 
 Pick one of three ways.
 
-- **OAuth**: add `/api/mcp` of your deployment as a remote connector in your assistant. It finds the sign-in and the scopes by itself (OAuth 2.1 with PKCE), you sign in as the owner and approve what it may do. **Settings, Data, Connectors** lists the connected apps and **Disconnect All Connectors** takes access away from all of them at once.
+- **OAuth**: add `/api/mcp` of your deployment as a remote connector in your assistant. It finds the sign-in and the scopes by itself (OAuth 2.1 with PKCE), you sign in as the owner and approve what it may do. **Settings, Data, Connectors** has **Disconnect All Connectors**, which takes access away from every connected app at once.
 - **API key**: for a client that sends a fixed header. Create one in **Settings, Data, API Keys** with **Generate New API Key**: the key is shown once. Send it as `Authorization: Bearer <key>` to `/api/mcp`. A key carries both scopes. Revoking it cuts off anything using it at once, and cannot be undone.
 - **stdio**: the assistant starts the server as a local process with `pnpm mcp:stdio`, with no sign-in: the process is the trust boundary, so there are no scopes. `ALTER_EGO_USER_ID` names whose data it serves and is required; the server exits at once without it. See the self-hosting guide in the repository for a client configuration.
 
@@ -19,20 +19,20 @@ OAuth grants two scopes, which the consent screen shows:
 
 | Scope | What it allows |
 |---|---|
-| `data:read` | The read tools |
-| `data:write` | The write tools; it does not include reading |
+| `data:read` | Issued and shown, but never checked: any valid token or API key can call the read tools |
+| `data:write` | Required by every write tool; it does not include reading |
 
-A token without `data:write` gets a clear refusal on a write tool, and a client can ask again for the missing scope. The consent screen shows the read scope next to write because a write-only token reads too, but it never adds one to the grant. Which tools exist also depends on the plugins the deployment lists in `NEXT_PUBLIC_PLUGINS`: the tools of a plugin that is not listed are not offered. `get_quarters` is offered only when Accounting is on as well.
+A token without `data:write` gets a clear refusal on a write tool, and a client can ask again for the missing scope. An API key carries both scopes. Which tools exist also depends on the plugins the deployment lists in `NEXT_PUBLIC_PLUGINS`: the tools of a plugin that is not listed are not offered. `get_quarters` is offered only when Accounting is on as well.
 
-Some write tools **preview first**: called without `confirm` they change nothing and say exactly what would change, and the assistant should show that to you; only a second call with `confirm: true` writes.
+Some write tools **preview first**, as the tables below mark: called without `confirm` they change nothing and say exactly what would change, and the assistant is told to show that to you; only a second call with `confirm: true` writes.
 
 ## Tools
 
-### Every plugin
+### Remote Connection Only
 
 | Tool | Scope | What it does |
 |---|---|---|
-| `ping` | read | Checks that the connection works. |
+| `ping` | read | Checks that the connection works. Offered over OAuth and API key; the stdio server does not register it. |
 
 ### Personal Finance
 
@@ -45,8 +45,8 @@ Some write tools **preview first**: called without `confirm` they change nothing
 | `get_spending` | read | Personal spending and income for a window of months, by category or by month. |
 | `get_budget_status` | read | Every personal budget for its current period: spent, remaining and status. |
 | `add_transaction` | write | Records a personal expense, income or transfer. |
-| `update_transaction` | write | Corrects a personal transaction; balances follow. |
-| `delete_transaction` | write | Deletes a personal transaction and restores the balance. |
+| `update_transaction` | write | Corrects a personal transaction; balances follow; previews first. |
+| `delete_transaction` | write | Deletes a personal transaction and restores the balance; previews first. |
 | `create_account` | write | Opens a personal wallet, bank account, card or loan. |
 | `archive_account` | write | Closes (archives) or reopens a personal account. |
 
@@ -94,7 +94,7 @@ Some write tools **preview first**: called without `confirm` they change nothing
 | `add_collaborator` | write | Adds a collaborator, with an optional fixed fee. |
 | `update_collaborator` | write | Changes a collaborator or their fee; previews first. |
 | `assign_collaborator` | write | Puts a collaborator on a contract, or edits the assignment; previews first. |
-| `unassign_collaborator` | write | Takes a collaborator off a contract; refused while their days are logged. |
+| `unassign_collaborator` | write | Takes a collaborator off a contract; refused while their days are logged; previews first. |
 
 ### Accounting
 
@@ -108,21 +108,21 @@ Some write tools **preview first**: called without `confirm` they change nothing
 | `create_invoice` | write | Records an invoice or credit note already issued. |
 | `mark_invoice_paid` | write | Stamps the cash date on an invoice. |
 | `update_invoice` | write | Edits an invoice or credit note; previews first. |
-| `delete_invoice` | write | Deletes an invoice or credit note recorded by mistake. |
+| `delete_invoice` | write | Deletes an invoice or credit note recorded by mistake; previews first. |
 | `add_movement` | write | Records money in or out of a company account that is not an invoice, a cost or a loan. |
 | `add_expense` | write | Records a company cost, a supplier invoice to pay later, or a refund. |
 | `record_loan` | write | Records a shareholder loan or its repayment. |
 | `check_balance` | write | Checks a company account against the bank and saves it as the last check. |
-| `update_movement` | write | Corrects a cash book movement by id. |
-| `delete_movement` | write | Deletes a cash book movement by id. |
-| `update_expense` | write | Corrects a one-off cost by id. |
-| `delete_expense` | write | Deletes a one-off cost by id. |
+| `update_movement` | write | Corrects a cash book movement by id; previews first. |
+| `delete_movement` | write | Deletes a cash book movement by id; previews first. |
+| `update_expense` | write | Corrects a one-off cost by id; previews first. |
+| `delete_expense` | write | Deletes a one-off cost by id; previews first. |
 | `attach_file` | write | Adds an invoice file to a cost or invoice: up to 4 files of 10 MB a row. |
 | `create_upload_url` | write | Makes a temporary link to upload a larger invoice file. |
 | `complete_upload` | write | Finishes an upload made with create_upload_url and adds the file. |
-| `remove_file` | write | Removes one invoice file and deletes it from storage. |
-| `update_loan` | write | Corrects a shareholder loan or repayment by id. |
-| `delete_loan` | write | Deletes a shareholder loan or repayment recorded by mistake. |
+| `remove_file` | write | Removes one invoice file and deletes it from storage; previews first. |
+| `update_loan` | write | Corrects a shareholder loan or repayment by id; previews first. |
+| `delete_loan` | write | Deletes a shareholder loan or repayment recorded by mistake; previews first. |
 
 ### Rent
 
@@ -131,6 +131,6 @@ Some write tools **preview first**: called without `confirm` they change nothing
 | `get_rent` | read | Rent for a month per property and room: paid, partial, missing, owed. |
 | `get_tenant` | read | A tenant's details for an invoice, and their leases. |
 | `create_tenant` | write | Adds a tenant. |
-| `update_tenant` | write | Corrects a tenant's details. |
+| `update_tenant` | write | Corrects a tenant's details; previews first. |
 | `create_lease` | write | Gives a tenant a room for a year, or renews a lease. |
 | `update_lease` | write | Changes a lease or sets a month's agreed amount; previews first. |

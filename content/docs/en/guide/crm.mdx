@@ -9,8 +9,8 @@ These pages belong to the **Consulting** plugin. They hold who you work for, wha
 
 **Pipeline** lists the open opportunities and what they would be worth if they closed. A deal sits in one stage: lead, proposal or negotiation, then won or lost. Moving a deal to a stage seeds its probability (lead 20, proposal 50, negotiation 75), and you can set another. The weighted pipeline is the monthly value times the probability.
 
-- A deal marked **lost** needs a reason.
-- Marking a deal **won** does not create the contract. Use **Mark as won and create the contract** (or **Create Contract** from the Won column): it fills the rate, days per month, budget and dates from the deal.
+- A **lost** deal can carry a reason (the list shows "No reason given" when it has none); the connector's `move_opportunity` refuses to mark a deal lost without one.
+- Press **Won** on an open deal (its tooltip reads "Mark as won and create the contract"): the **Create Contract** dialog opens with the rate, days per month, budget and dates filled in from the deal. Won deals sit under **Closed**, each with a link to the contract it became.
 - A deal that only adds to a contract already signed (more days, a new rate, a renewal) is not converted: record it as an amendment, or its days count twice.
 - **Next follow-up** is the date that shows on the Deadlines calendar. A follow-up is never done: it happens and moves, or it goes overdue.
 
@@ -18,11 +18,11 @@ Tools: `get_pipeline`, `create_opportunity`, `move_opportunity`, `convert_to_eng
 
 ## Clients
 
-**Clients** lists who you work for and what is signed and owed. A client name is unique, in any case. Open a client for its contracts, open opportunities, notes and the calls logged with it. Logging an opportunity for a name that does not exist creates the client.
+**Clients** lists who you work for and what is signed and owed. The connector refuses a second client with the same name, in any case. Open a client for its contracts, open opportunities, notes and the calls logged with it. Logging an opportunity for a name that does not exist creates the client.
 
 Tools: `list_clients`, `get_client`, `create_client`, `add_note`, `log_meeting`, `update_meeting`, `list_meetings`.
 
-## Contracts and amendments
+## Contracts and Amendments
 
 A contract belongs to a client and is signed in **days** or in **hours** (a day rate or an hourly rate). It has:
 
@@ -35,7 +35,7 @@ Editing a contract corrects it. A change the client signed (a new rate, more day
 
 - one amendment per month: a second one for the same month replaces it;
 - an amendment can only extend the end, never shorten it; to shorten, edit the contract;
-- hours-based contracts have no day budget to add to;
+- a contract with no budget (time and materials) has nothing to add to; one with a budget takes **Add Days**, or **Add Hours** when it is hourly;
 - a change that would reprice a month already invoiced is refused with the difference per month; **Save and Reprice** confirms it. A rise is a top-up invoice, a cut a credit note;
 - an amendment is removed with **Remove Amendment**, latest first.
 
@@ -45,7 +45,7 @@ Hours worked go in a timecard, by week. The 8-hour day holds: at most 8 hours a 
 
 Tools: `convert_to_engagement`, `create_contract`, `update_engagement`, `amend_contract`, `log_time`, `list_time`, `get_hours_left`.
 
-## Contracts timeline
+## Contracts Timeline
 
 **Contracts** (`/contracts`) draws every contract of every client on one timeline. Click a bar for the contract's days and money by quarter. It shows each contract's health (green, yellow or red, from the latest call that states one), the days logged and left, and flags a contract that is **Nearly full**. **Show Pipeline** adds the open deals, not signed yet. **Earlier** and **Later** move the window. From a bar you can open the contract's client, its opportunity or its solution.
 
@@ -53,7 +53,7 @@ Tools: `get_client` and `list_meetings` read the same health and calls.
 
 ## Collaborators
 
-**Collaborators** lists the freelancers and companies the company pays on invoice, and what they cost. An employee is a company with a fixed fee taken from the accountant's figure: there is no payroll. Names are unique, in any case.
+**Collaborators** lists the freelancers and companies the company pays on invoice, and what they cost. An employee is a company with a fixed fee taken from the accountant's figure: there is no payroll.
 
 - An optional **fixed fee** is a monthly amount net of VAT, from a first month to an optional last month, with dated changes (one per month, after the start, not past the end).
 - **Inactive** keeps the person listed but takes their fee and days out of the plan.
@@ -72,6 +72,6 @@ Tools: `list_tasks`, `add_task`, `update_task`, `complete_task`, `delete_task`.
 
 ## Deadlines
 
-**Deadlines** is a calendar of the dates the company has to remember. Some you type in (the accountant's fee, an F24 the accountant gave you, a contract renewal, a bank formality), and the app shows the rest from your data every time: invoice due dates (**To collect**), pipeline follow-ups and budget exhaustion. Only the typed ones can be ticked off with **Mark Done** and reopened. The app computes no taxes: an F24 is there only if you stored it.
+**Deadlines** is a calendar of the dates the company has to remember. Some you type in (the accountant's fee, an F24 the accountant gave you, a contract renewal, a bank formality), and the app shows the rest from your data every time: invoice due dates (**To collect**), tasks with a due date, pipeline follow-ups and budget exhaustion. Each kind is closed where it lives: a typed deadline with **Mark Done** (and reopened), a task with **Mark Done** or **Reopen**, an invoice with **Mark Paid** or **Mark Unpaid**. The app computes no taxes: an F24 is there only if you stored it.
 
 Tools: `list_deadlines`, `add_deadline`, `complete_deadline`.

@@ -7,7 +7,7 @@ The **Accounting** plugin keeps the company's cash, not its tax return. Nothing 
 
 ## Cash Book
 
-**Cash Book** covers the company (SRL) bank accounts only. Add the accounts first (**Accounts**, from the **More** menu): each has an opening balance and date. Rows dated before the account opened, or on an account that is gone, are listed in **To Chase** rather than counted.
+**Cash Book** covers the company (SRL) bank accounts only. Add the accounts first (**Accounts**, from the **More** menu): each has an opening balance and date. The one exception is the workbook import below, which creates them itself. Rows dated before the account opened, or on an account that is gone, are listed in **To Chase** rather than counted.
 
 The page has five views:
 
@@ -19,9 +19,9 @@ The page has five views:
 
 **Check Balance** compares the bank's balance with the book at the end of the same day: it answers **Matches the bank**, or "Missing IN/OUT" with the rows since the last check. It saves as the account's last check unless a later one exists. **Export** downloads the book.
 
-### Workbook import
+### Workbook Import
 
-**Import** reads your cash book workbook (an `.xlsx`) into the Cash Book, once. The file stays in your browser: nothing is uploaded, and nothing is written until you press **Import**. It reads the **Saldo** sheet and one sheet per month, and skips the **Verifica** sheet because the app redoes its sums. The dialog shows what is in the file, then **What Import will do**: each row becomes what the app records (costs, loans, movements, invoices marked paid). Rows that overlap costs or loans already in the app are listed to decide, and the report can be downloaded before you import. A file that cannot be read as an `.xlsx` workbook is refused with the sheet, row and column, never a cell's content. **Undo Import** takes it back: rows changed since the import are kept unless you tick the box.
+**Import Excel** reads your cash book workbook (an `.xlsx`) into the Cash Book, once; it is also offered when you have no account yet. The file stays in your browser: nothing is uploaded, and nothing is written until you press **Import**. It reads the **Saldo** sheet and one sheet per month, and skips the **Verifica** sheet because the app redoes its sums. It creates each bank account of the workbook, at €0 on the 1st of the first month, or uses an empty account of yours with the same name. The dialog shows what is in the file, then **What Import will do**: each row becomes what the app records (costs, loans, movements, invoices marked paid), and every account's balance is checked against the Saldo sheet. **Import** stays off until every balance matches and every row the app cannot settle alone is decided. Costs and loans already in the app with no account, with the same amount within a month of a workbook row, are listed under **Already in the App**: by default the app's row is deleted and the workbook's kept, so nothing counts twice, and the report holding the deleted rows is saved to your downloads before anything is written. A file that is not a readable `.xlsx` workbook says so; an error in its layout names the sheet, row and column, never a cell's content. **Undo Import** takes it back: rows changed since the import are kept unless you tick the box.
 
 ## Costs
 
@@ -33,7 +33,7 @@ The page has five views:
 - **Add Recurring Cost** is an estimate the Plan counts every period. **Record Payment** logs each real payment: the Plan then counts the payment instead of the estimate that month. Price changes are dated, and one cannot fall outside the cost's own dates.
 - A cost for a collaborator names the month of work it pays.
 - A cost can carry up to 4 invoice files (see [Invoices](/en/docs/guide/invoicing)).
-- **Shareholder loans** have their own section: the owner lends the SRL money, or the SRL pays the owner back. A repayment past what the SRL owes is warned about, and the same loan twice on one day is refused.
+- **Shareholder loans** have their own section: the owner lends the SRL money, or the SRL pays the owner back. A repayment past what the SRL owes is warned about. The connector's `record_loan` also refuses the same loan twice on one day, unless it is told to force it.
 
 ## Month End
 
@@ -41,7 +41,7 @@ The page has five views:
 
 | Step | Blocks the close |
 |---|---|
-| Hours | Yes: every contract planned in the month has its hours, and none is outside a contract's months |
+| Hours | Yes: every contract planned in the month has its hours and the plan holds them (no **Use** waiting, no month over 31 days), and none is outside a contract's months |
 | Invoices | Yes: no client has hours left to invoice in the month or before |
 | Waiting for Payment | No, a reminder: overdue invoices, invoices with no due date, open credit notes |
 | Supplier Invoices Owed | No, a reminder |

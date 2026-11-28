@@ -59,7 +59,7 @@ jobs:
         run: |
           count=$(find out -name index.html | wc -l)
           echo "$count pages"
-          # 50 MDX files across two languages (16 of them Personal Finance's), plus the root and language redirects.
+          # 50 MDX files across two languages (16 of them Personal Finance's), plus three more pages the export writes: /index.html, /404 and /_not-found.
           # Change this when a page is added or removed.
           if [ "$count" -ne 53 ]; then
             echo "::error::Expected 53 pages, found $count"

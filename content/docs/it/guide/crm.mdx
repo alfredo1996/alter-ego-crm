@@ -9,8 +9,8 @@ Queste pagine appartengono al plugin **Consulting**: chi sono i tuoi clienti, co
 
 **Pipeline** elenca le opportunità aperte e quanto varrebbero se si chiudessero. Una trattativa è in una fase: lead, proposal o negotiation, poi won o lost. Spostarla in una fase ne imposta la probabilità (lead 20, proposal 50, negotiation 75), e puoi indicarne un'altra. La pipeline pesata è il valore mensile per la probabilità.
 
-- Una trattativa **persa** richiede un motivo.
-- Segnarla **vinta** non crea il contratto. Usa **Mark as won and create the contract** (o **Create Contract** dalla colonna Won): compila tariffa, giornate al mese, budget e date dalla trattativa.
+- Una trattativa **persa** può avere un motivo (l'elenco mostra «No reason given» se manca); `move_opportunity` del connettore rifiuta di segnare persa una trattativa senza motivo.
+- Premi **Won** su una trattativa aperta (il suggerimento dice «Mark as won and create the contract»): si apre la finestra **Create Contract** con tariffa, giornate al mese, budget e date già compilati dalla trattativa. Le trattative vinte stanno sotto **Closed**, ciascuna con il link al contratto che è diventata.
 - Una trattativa che aggiunge solo a un contratto già firmato (più giornate, una nuova tariffa, un rinnovo) non si converte: registrala come addendum, altrimenti le sue giornate contano due volte.
 - **Next follow-up** è la data che compare nel calendario Deadlines. Un follow-up non è mai «fatto»: avviene e si sposta, oppure va in ritardo.
 
@@ -18,11 +18,11 @@ Strumenti: `get_pipeline`, `create_opportunity`, `move_opportunity`, `convert_to
 
 ## Clienti
 
-**Clients** elenca per chi lavori, cosa è firmato e cosa è dovuto. Il nome di un cliente è unico, maiuscole comprese. Aprendo un cliente trovi contratti, opportunità aperte, note e le call registrate. Registrando un'opportunità per un nome che non esiste, il cliente viene creato.
+**Clients** elenca per chi lavori, cosa è firmato e cosa è dovuto. Il connettore rifiuta un secondo cliente con lo stesso nome, senza distinguere maiuscole e minuscole. Aprendo un cliente trovi contratti, opportunità aperte, note e le call registrate. Registrando un'opportunità per un nome che non esiste, il cliente viene creato.
 
 Strumenti: `list_clients`, `get_client`, `create_client`, `add_note`, `log_meeting`, `update_meeting`, `list_meetings`.
 
-## Contratti e addendum
+## Contratti e Addendum
 
 Un contratto appartiene a un cliente ed è firmato in **giornate** o in **ore** (tariffa giornaliera o oraria). Ha:
 
@@ -35,7 +35,7 @@ Modificare un contratto lo corregge. Una modifica firmata dal cliente (nuova tar
 
 - un addendum per mese: un secondo per lo stesso mese lo sostituisce;
 - un addendum può solo allungare la fine, mai accorciarla; per accorciare si modifica il contratto;
-- i contratti a ore non hanno un budget di giornate a cui aggiungere;
+- un contratto senza budget (a tempo e materiali) non ha nulla a cui aggiungere; uno con budget accetta **Add Days**, oppure **Add Hours** se è a ore;
 - una modifica che riprezzerebbe un mese già fatturato viene rifiutata con la differenza per mese; **Save and Reprice** la conferma. Un aumento è una fattura integrativa, una riduzione una nota di credito;
 - un addendum si toglie con **Remove Amendment**, dall'ultimo.
 
@@ -45,7 +45,7 @@ Le ore lavorate vanno nel timesheet, per settimana. Vale la giornata di 8 ore: a
 
 Strumenti: `convert_to_engagement`, `create_contract`, `update_engagement`, `amend_contract`, `log_time`, `list_time`, `get_hours_left`.
 
-## Timeline dei contratti
+## Timeline dei Contratti
 
 **Contracts** (`/contracts`) disegna ogni contratto di ogni cliente su un'unica timeline. Clicca una barra per vedere giornate e importi del contratto per trimestre. Mostra la salute di ogni contratto (verde, giallo o rosso, dall'ultima call che la indica), le giornate registrate e rimaste, e segnala un contratto **Nearly full**. **Show Pipeline** aggiunge le trattative aperte, non ancora firmate. **Earlier** e **Later** spostano la finestra. Da una barra puoi aprire il cliente, l'opportunità o la soluzione.
 
@@ -53,7 +53,7 @@ Strumenti: `get_client` e `list_meetings` leggono la stessa salute e le stesse c
 
 ## Collaboratori
 
-**Collaborators** elenca i freelancer e le società che l'azienda paga a fattura, e quanto costano. Un dipendente è una società con un compenso fisso preso dalla cifra del commercialista: non c'è la busta paga. I nomi sono unici, maiuscole comprese.
+**Collaborators** elenca i freelancer e le società che l'azienda paga a fattura, e quanto costano. Un dipendente è una società con un compenso fisso preso dalla cifra del commercialista: non c'è la busta paga.
 
 - Un **compenso fisso** facoltativo è un importo mensile al netto dell'IVA, da un primo mese a un ultimo facoltativo, con variazioni datate (una per mese, dopo l'inizio, non oltre la fine).
 - **Inactive** lascia la persona in elenco ma toglie compenso e giornate dal piano.
@@ -72,6 +72,6 @@ Strumenti: `list_tasks`, `add_task`, `update_task`, `complete_task`, `delete_tas
 
 ## Scadenze
 
-**Deadlines** è un calendario delle date che l'azienda deve ricordare. Alcune le inserisci tu (il compenso del commercialista, un F24 che ti ha dato il commercialista, un rinnovo di contratto, una pratica bancaria), le altre l'app le ricava dai tuoi dati ogni volta: scadenze delle fatture (**To collect**), follow-up della pipeline ed esaurimento dei budget. Solo quelle inserite si spuntano con **Mark Done** e si riaprono. L'app non calcola imposte: un F24 c'è solo se l'hai inserito.
+**Deadlines** è un calendario delle date che l'azienda deve ricordare. Alcune le inserisci tu (il compenso del commercialista, un F24 che ti ha dato il commercialista, un rinnovo di contratto, una pratica bancaria), le altre l'app le ricava dai tuoi dati ogni volta: scadenze delle fatture (**To collect**), attività con una scadenza, follow-up della pipeline ed esaurimento dei budget. Ognuna si chiude dove vive: una scadenza inserita con **Mark Done** (e si riapre), un'attività con **Mark Done** o **Reopen**, una fattura con **Mark Paid** o **Mark Unpaid**. L'app non calcola imposte: un F24 c'è solo se l'hai inserito.
 
 Strumenti: `list_deadlines`, `add_deadline`, `complete_deadline`.

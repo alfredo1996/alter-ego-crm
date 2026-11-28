@@ -7,7 +7,7 @@ Il plugin **Accounting** tiene la cassa dell'azienda, non la dichiarazione dei r
 
 ## Cash Book
 
-**Cash Book** riguarda solo i conti bancari dell'azienda (SRL). Aggiungi prima i conti (**Accounts**, dal menu **More**): ognuno ha un saldo e una data di apertura. Le righe datate prima dell'apertura del conto, o su un conto che non esiste più, finiscono in **To Chase** invece di essere contate.
+**Cash Book** riguarda solo i conti bancari dell'azienda (SRL). Aggiungi prima i conti (**Accounts**, dal menu **More**): ognuno ha un saldo e una data di apertura. L'unica eccezione è l'importazione della cartella di lavoro qui sotto, che li crea da sola. Le righe datate prima dell'apertura del conto, o su un conto che non esiste più, finiscono in **To Chase** invece di essere contate.
 
 La pagina ha cinque viste:
 
@@ -19,9 +19,9 @@ La pagina ha cinque viste:
 
 **Check Balance** confronta il saldo della banca con il registro a fine della stessa giornata: risponde **Matches the bank**, oppure «Missing IN/OUT» con le righe dall'ultimo controllo. Si salva come ultimo controllo del conto, salvo che ne esista uno più recente. **Export** scarica il registro.
 
-### Importazione della cartella di lavoro
+### Importazione della Cartella di Lavoro
 
-**Import** legge la tua cartella di lavoro della prima nota (un `.xlsx`) nella Cash Book, una volta. Il file resta nel tuo browser: nulla viene caricato, e nulla viene scritto finché non premi **Import**. Legge il foglio **Saldo** e un foglio per mese, e salta il foglio **Verifica** perché l'app rifà le somme. La finestra mostra cosa c'è nel file, poi **What Import will do**: ogni riga diventa ciò che l'app registra (costi, finanziamenti, movimenti, fatture segnate pagate). Le righe che si sovrappongono a costi o finanziamenti già nell'app sono elencate da decidere, e il rapporto si può scaricare prima di importare. Un file che non si legge come cartella `.xlsx` viene rifiutato citando foglio, riga e colonna, mai il contenuto di una cella. **Undo Import** lo annulla: le righe cambiate dopo l'importazione restano, salvo che tu spunti la casella.
+**Import Excel** legge la tua cartella di lavoro della prima nota (un `.xlsx`) nella Cash Book, una volta; è offerto anche quando non hai ancora un conto. Il file resta nel tuo browser: nulla viene caricato, e nulla viene scritto finché non premi **Import**. Legge il foglio **Saldo** e un foglio per mese, e salta il foglio **Verifica** perché l'app rifà le somme. Crea ogni conto bancario della cartella, a €0 il 1° del primo mese, oppure usa un tuo conto vuoto con lo stesso nome. La finestra mostra cosa c'è nel file, poi **What Import will do**: ogni riga diventa ciò che l'app registra (costi, finanziamenti, movimenti, fatture segnate pagate), e il saldo di ogni conto è confrontato con il foglio Saldo. **Import** resta spento finché ogni saldo non coincide e ogni riga che l'app non sa risolvere da sola è decisa. I costi e i finanziamenti già nell'app senza conto, con lo stesso importo entro un mese da una riga della cartella, sono elencati sotto **Already in the App**: di base la riga dell'app viene eliminata e quella della cartella tenuta, così nulla conta due volte, e il rapporto con le righe eliminate è salvato nei download prima di scrivere qualsiasi cosa. Un file che non è una cartella `.xlsx` leggibile lo dice; un errore nella sua struttura cita foglio, riga e colonna, mai il contenuto di una cella. **Undo Import** lo annulla: le righe cambiate dopo l'importazione restano, salvo che tu spunti la casella.
 
 ## Costi
 
@@ -33,7 +33,7 @@ La pagina ha cinque viste:
 - **Add Recurring Cost** è una stima che il Plan conta a ogni periodo. **Record Payment** registra ogni pagamento reale: il Plan conta poi il pagamento al posto della stima di quel mese. Le variazioni di prezzo sono datate, e una non può cadere fuori dalle date del costo.
 - Un costo di un collaboratore indica il mese di lavoro che paga.
 - Un costo può avere fino a 4 file di fattura (vedi [Invoices](/it/docs/guide/invoicing)).
-- I **finanziamenti soci** hanno una sezione propria: il titolare presta denaro alla SRL, o la SRL lo restituisce. Un rimborso oltre quanto la SRL deve è segnalato, e lo stesso finanziamento due volte nello stesso giorno è rifiutato.
+- I **finanziamenti soci** hanno una sezione propria: il titolare presta denaro alla SRL, o la SRL lo restituisce. Un rimborso oltre quanto la SRL deve è segnalato. `record_loan` del connettore rifiuta anche lo stesso finanziamento due volte nello stesso giorno, a meno che non gli si dica di forzarlo.
 
 ## Month End
 
@@ -41,7 +41,7 @@ La pagina ha cinque viste:
 
 | Passo | Blocca la chiusura |
 |---|---|
-| Hours | Sì: ogni contratto pianificato nel mese ha le sue ore e nessuna è fuori dai mesi di un contratto |
+| Hours | Sì: ogni contratto pianificato nel mese ha le sue ore e il piano le contiene (nessun **Use** in attesa, nessun mese oltre 31 giorni), e nessuna è fuori dai mesi di un contratto |
 | Invoices | Sì: nessun cliente ha ore da fatturare nel mese o prima |
 | Waiting for Payment | No, un promemoria: fatture scadute, fatture senza scadenza, note di credito aperte |
 | Supplier Invoices Owed | No, un promemoria |

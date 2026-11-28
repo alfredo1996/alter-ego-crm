@@ -5,15 +5,15 @@ description: Inquilini, contratti annuali e gli incassi collegati al mese che co
 
 **Rent** è un plugin a sé; richiede Accounting. Risponde a chi vive dove, a che affitto, e chi ha pagato.
 
-## Inquilini e contratti
+## Inquilini e Contratti
 
-- **New Tenant** aggiunge una persona che affitta una stanza. Un inquilino non è un cliente: non compare mai nei ricavi né nella pipeline. Nome e cognome insieme sono unici, maiuscole comprese. Codice fiscale e indirizzo sono facoltativi; una fattura all'inquilino elenca ciò che manca.
-- **New Lease** assegna una stanza a un inquilino per un periodo, un anno. Indica la stanza, l'affitto e un contributo facoltativo in euro al mese, il primo e l'ultimo giorno (entrambi inclusi) e, quando i soldi li manda qualcuno diverso dall'inquilino, chi. L'immobile è il nome del centro di costo. Un contratto si può salvare prima di conoscere la stanza. Un contratto è rifiutato se la stanza dell'inquilino è già affittata in quei giorni.
+- **New Tenant** aggiunge una persona che affitta una stanza. Un inquilino non è un cliente: non compare mai nei ricavi né nella pipeline. Il connettore rifiuta un secondo inquilino con lo stesso nome e cognome, senza distinguere maiuscole e minuscole. Codice fiscale e indirizzo sono facoltativi; una fattura all'inquilino elenca ciò che manca.
+- **New Lease** assegna una stanza a un inquilino per un periodo, un anno. Indica la stanza, l'affitto e un contributo facoltativo in euro al mese, il primo e l'ultimo giorno (entrambi inclusi) e, quando i soldi li manda qualcuno diverso dall'inquilino, chi. L'immobile è il nome del centro di costo. Un contratto si può salvare prima di conoscere la stanza. Il connettore rifiuta un contratto che condivide giorni con un altro dello stesso inquilino nella stessa stanza.
 - Un **rinnovo** parte il giorno dopo la fine del contratto, lungo un anno, con stesso immobile, stanza e affitto salvo modifiche. Un inquilino che se ne va è una data di fine modificata: l'ultimo giorno.
 - Un mese può avere un **importo concordato** al posto di affitto e contributo, con una nota come «moved in on 26 Sep».
 
 ## Incassi
 
-Clicca un mese per registrare un incasso o impostare un importo concordato; clicca un inquilino per modificare, rinnovare o terminare il contratto. Gli incassi sono collegati al **mese che coprono**, non a quello in cui arrivano, e un incasso può essere una parte del mese. Ogni stanza e mese risulta **Paid**, **Partial**, **Missing**, **Not yet** o **Due later**. **Owed** è l'ammanco dei mesi conclusi, con i mesi indicati. La pagina elenca anche gli incassi senza numero di fattura e il deposito trattenuto.
+Clicca un mese per registrare un incasso o impostare un importo concordato; clicca un inquilino per modificare, rinnovare o terminare il contratto. Gli incassi sono collegati al **mese che coprono**, non a quello in cui arrivano, e un incasso può essere una parte del mese. Ogni stanza e mese risulta **Paid**, **€x short** (pagato in parte), **Missing**, **Not yet** o **€x due later**. **Owed** è l'ammanco dei mesi conclusi, con i mesi indicati. La pagina elenca anche gli incassi senza numero di fattura e il deposito trattenuto.
 
 Strumenti: `get_rent`, `get_tenant`, `create_tenant`, `update_tenant`, `create_lease`, `update_lease`. Un incasso si registra con `add_movement`, indicando il contratto, il mese che copre e la parte.
