@@ -1,0 +1,29 @@
+---
+title: Solutions
+description: The catalog of what was built for each client, its road of steps and its data model graph.
+---
+
+**Solutions** (Consulting) documents what you built, or proposed, for each client, so that pre-sales can reuse it. A solution is the work itself: not its contract and not its calls.
+
+## The catalog
+
+The list shows where each client is going and how far along its road is, with search and a filter by technology. A solution has:
+
+- a **name**, unique per client; a name the client already has is refused;
+- a **status** of its own: proposed, building, delivered or retired;
+- a **kind**: a *product* (something built; seven sections) or *advisory* (help given, such as tuning queries; three: purpose, KPIs and results);
+- a **target**, the end state the work leads to (up to 500 characters), and the **road** of steps to it, each marked done, now, next or later;
+- an optional **domain** (one word to group by) and a **stack** of lowercase technology tags;
+- an optional link to one of the client's **contracts**; with none, it is in pre-sales, and the page says that days and tasks follow once the opportunity is won.
+
+A new solution starts with every section empty and asks for them one at a time, as an end-of-project interview.
+
+## The page
+
+Nine sections hold the text: purpose, requirements, KPIs, sources, model, architecture, steps, history and results. A section is replaced by its text, or grows by a new line (history takes one dated line per decision, opening with the date). A section holds at most 20,000 characters, and a longer text is refused, never cut. **Steps** and **History** keep older text; the road replaces the steps.
+
+The **data model graph** is a list of entities (each with its source, the client's system it comes from, and notes) and relations between two entities. A relation naming a missing entity is refused, and saving the model replaces the whole of it.
+
+**Log Work** files a session on the journal: what was done, the decisions (each its own line), links, the next step, against the step that is now. Entries are edited and deleted on the page. Leaving the page with unsaved edits asks first.
+
+Tools: `list_solutions`, `get_solution`, `create_solution`, `update_solution`, `log_work`.

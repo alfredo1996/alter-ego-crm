@@ -1,0 +1,29 @@
+---
+title: Invoices
+description: Invoices and credit notes, what is still to invoice, invoice files and the accountant's package.
+---
+
+**Invoices** (Accounting) keeps the app's copy of the invoices you issue, so that cash questions have an answer. It is never the legal record: invoices are issued in your e-invoicing software.
+
+## Recording an invoice
+
+**Record Invoice** takes a customer, the **number printed on the invoice**, the net amount before VAT, the VAT actually charged, the dates and the months it covers.
+
+- An invoice bills the **client**, not a contract: one invoice a month covers the hours of all the client's contracts, closed ones included.
+- The period is the **accrual month** (the month the days were worked), which is not necessarily the issue month. An invoice may cover several months, at most 12.
+- The amount is the net amount, a positive number. Enter the VAT charged, or 0 for reverse charge or exempt: the app never works it out at 22%.
+- A number already used is refused. The due date is optional: left empty, the invoice never shows as overdue. A number of at most 50 characters.
+- To cancel or reduce an invoice, open it and choose **Issue Credit Note**: a credit note carries its own number and the amount credited, and subtracts.
+- **Mark Paid** stamps the cash date, which can be earlier than today; **Mark Unpaid** removes it and takes the payment off the Cash Book (the bank fee booked with it stays on Costs).
+
+## Ready to invoice
+
+**Ready to Invoice** lists, per client, the hours logged and not yet invoiced, by the month you worked. An invoice covering several months is spread over them by the value logged in each ended month, and the current month and later take an even share. The total to invoice is the balance over ended months since the client's hours were first logged. The page says when every ended month with hours is invoiced.
+
+## Invoice files
+
+An invoice, and a company cost, can carry up to **4 files**, so that one payment holds every invoice and credit note it settles. A file is the FatturaPA XML, the signed `.xml.p7m`, or a PDF where there is no XML, **up to 10 MB**. The same name and size twice is refused. Files can be added and removed on each row. The **accountant's package** is a zip of the month's invoice files with two CSV files, the cash book and its payments: **Download Package** on Month End (see [Books](/en/docs/guide/books)).
+
+## Connector
+
+Tools: `list_invoices`, `get_unbilled`, `create_invoice`, `update_invoice`, `mark_invoice_paid`, `delete_invoice`, and for files `get_file`, `attach_file`, `create_upload_url`, `complete_upload`, `remove_file`. A file over about 10 KB goes through `create_upload_url` and `complete_upload`, so that the assistant does not write its bytes out.

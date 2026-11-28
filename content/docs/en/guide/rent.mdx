@@ -1,0 +1,19 @@
+---
+title: Rent
+description: Tenants, yearly leases and the rent payments linked to the month they cover.
+---
+
+**Rent** is a plugin of its own; it needs Accounting. It answers who lives where, at what rent, and who has paid.
+
+## Tenants and leases
+
+- **New Tenant** adds a person who rents a room. A tenant is not a CRM client: it never appears in revenue or the pipeline. The first name and surname together are unique, in any case. Tax ID and address are optional; an invoice to the tenant lists what is not set.
+- **New Lease** gives a tenant a room for a stretch of time, a year. Fill in which room, the rent and an optional contribution in euros a month, the first and last day (both inclusive) and, when someone other than the tenant sends the money, who. The property is the cost centre's name. A lease can be saved before the room is known. A lease is refused when the tenant's room is already leased on those days.
+- A **renewal** starts the day after the lease ends, a year long, with the same property, room and rent unless you change them. A tenant who leaves is an edited end date: the last day.
+- A month can have an **agreed amount** in place of the rent and contribution, with a note such as "moved in on 26 Sep".
+
+## Payments
+
+Click a month to record a payment or set an agreed amount; click a tenant to edit, renew or end the lease. Payments are linked to the **month they cover**, not the month they arrive in, and a payment can be a part of the month. Each room and month reads **Paid**, **Partial**, **Missing**, **Not yet** or **Due later**. **Owed** is the shortfall of months that have ended, with the months named. The page also lists payments with no invoice number and the deposit held.
+
+Tools: `get_rent`, `get_tenant`, `create_tenant`, `update_tenant`, `create_lease`, `update_lease`. A payment is recorded with `add_movement`, giving the lease, the month it covers and the part.

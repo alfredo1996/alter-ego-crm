@@ -1,0 +1,136 @@
+---
+title: Connector
+description: Connect an AI assistant over OAuth, an API key or stdio, and every tool it gets.
+---
+
+Alter Ego serves an MCP server, so an AI assistant can read and write the same data you see in the app. The app works fully without it: AI is optional.
+
+## Connecting
+
+Pick one of three ways.
+
+- **OAuth**: add `/api/mcp` of your deployment as a remote connector in your assistant. It finds the sign-in and the scopes by itself (OAuth 2.1 with PKCE), you sign in as the owner and approve what it may do. **Settings, Data, Connectors** lists the connected apps and **Disconnect All Connectors** takes access away from all of them at once.
+- **API key**: for a client that sends a fixed header. Create one in **Settings, Data, API Keys** with **Generate New API Key**: the key is shown once. Send it as `Authorization: Bearer <key>` to `/api/mcp`. A key carries both scopes. Revoking it cuts off anything using it at once, and cannot be undone.
+- **stdio**: the assistant starts the server as a local process with `pnpm mcp:stdio`, with no sign-in: the process is the trust boundary, so there are no scopes. `ALTER_EGO_USER_ID` names whose data it serves and is required; the server exits at once without it. See the self-hosting guide in the repository for a client configuration.
+
+## Scopes
+
+OAuth grants two scopes, which the consent screen shows:
+
+| Scope | What it allows |
+|---|---|
+| `data:read` | The read tools |
+| `data:write` | The write tools; it does not include reading |
+
+A token without `data:write` gets a clear refusal on a write tool, and a client can ask again for the missing scope. The consent screen shows the read scope next to write because a write-only token reads too, but it never adds one to the grant. Which tools exist also depends on the plugins the deployment lists in `NEXT_PUBLIC_PLUGINS`: the tools of a plugin that is not listed are not offered. `get_quarters` is offered only when Accounting is on as well.
+
+Some write tools **preview first**: called without `confirm` they change nothing and say exactly what would change, and the assistant should show that to you; only a second call with `confirm: true` writes.
+
+## Tools
+
+### Every plugin
+
+| Tool | Scope | What it does |
+|---|---|---|
+| `ping` | read | Checks that the connection works. |
+
+### Personal Finance
+
+| Tool | Scope | What it does |
+|---|---|---|
+| `list_categories` | read | The categories a transaction can be filed under. |
+| `list_accounts` | read | Your personal accounts with their balance, split into assets and liabilities, and the net worth. |
+| `list_tags` | read | The tags you have created. |
+| `list_transactions` | read | Your personal transactions, newest first, with search and filters. |
+| `get_spending` | read | Personal spending and income for a window of months, by category or by month. |
+| `get_budget_status` | read | Every personal budget for its current period: spent, remaining and status. |
+| `add_transaction` | write | Records a personal expense, income or transfer. |
+| `update_transaction` | write | Corrects a personal transaction; balances follow. |
+| `delete_transaction` | write | Deletes a personal transaction and restores the balance. |
+| `create_account` | write | Opens a personal wallet, bank account, card or loan. |
+| `archive_account` | write | Closes (archives) or reopens a personal account. |
+
+### Consulting
+
+| Tool | Scope | What it does |
+|---|---|---|
+| `list_clients` | read | Clients with their monthly contract value and open opportunities. |
+| `get_client` | read | One client whole: contracts, amendments, open deals, status and recent days. |
+| `get_pipeline` | read | The pipeline by stage with monthly and probability-weighted values. |
+| `get_revenue` | read | Revenue for a window of months, by month, quarter or client, accrued, invoiced or paid. |
+| `list_deadlines` | read | The deadlines you stored, soonest first, with an overdue flag. |
+| `get_plan` | read | The next months' plan as the Plan page shows it: days, revenue, costs and net. |
+| `get_quarters` | read | Revenue, costs and net per quarter and month (needs Accounting). |
+| `get_capacity` | read | Available against allocated days per month, with time off and overbooked months. |
+| `list_tasks` | read | To-dos by board column, client and contract, with an overdue flag. |
+| `list_time` | read | Hours worked from the timecards, with days at 8 hours each. |
+| `get_hours_left` | read | The room for hours on one contract on one day, before logging. |
+| `list_meetings` | read | The calls, newest first, and the health of each contract. |
+| `list_solutions` | read | The solution catalog, one row per solution, with its road of steps. |
+| `get_solution` | read | One solution whole: sections, road, data model and missing sections. |
+| `log_allocation` | write | Sets or adds the days worked or planned for a client in a month. |
+| `move_opportunity` | write | Moves an opportunity to another stage; lost needs a reason. |
+| `create_opportunity` | write | Creates a pipeline opportunity for a client. |
+| `create_client` | write | Creates a client; a duplicate name is refused. |
+| `block_capacity` | write | Blocks days off in a month before they are sold. |
+| `convert_to_engagement` | write | Turns a won opportunity into an active contract. |
+| `create_contract` | write | Creates a contract for a client directly, with no deal behind it. |
+| `update_engagement` | write | Edits or closes a contract; a new rate or more days is an amendment. |
+| `amend_contract` | write | Records a dated change to a signed contract: rate, days, end. |
+| `add_note` | write | Appends a dated note to a client or opportunity. |
+| `add_task` | write | Adds a to-do for a client, optionally on one contract. |
+| `complete_task` | write | Marks an open to-do as done. |
+| `update_task` | write | Edits a to-do, moves its due date or reopens it. |
+| `delete_task` | write | Deletes a to-do added by mistake. |
+| `add_deadline` | write | Stores a date the app cannot derive on its own. |
+| `complete_deadline` | write | Ticks off a stored deadline, or reopens it. |
+| `schedule_follow_up` | write | Sets or moves the next action on an open opportunity. |
+| `log_time` | write | Records the hours worked on a contract on one day. |
+| `log_meeting` | write | Records the minutes of a call, and optionally the contract's health. |
+| `update_meeting` | write | Corrects a meeting: time, date, health or text. |
+| `create_solution` | write | Adds a solution to the catalog. |
+| `update_solution` | write | Edits one section, the data model, the road or the status of a solution. |
+| `log_work` | write | Files a work session on a solution's journal. |
+| `add_collaborator` | write | Adds a collaborator, with an optional fixed fee. |
+| `update_collaborator` | write | Changes a collaborator or their fee; previews first. |
+| `assign_collaborator` | write | Puts a collaborator on a contract, or edits the assignment; previews first. |
+| `unassign_collaborator` | write | Takes a collaborator off a contract; refused while their days are logged. |
+
+### Accounting
+
+| Tool | Scope | What it does |
+|---|---|---|
+| `get_file` | read | Fetches one invoice file of a cost or an invoice. |
+| `list_invoices` | read | Issued invoices, unpaid first, with overdue flag and the total owed. |
+| `get_unbilled` | read | What is still to invoice from the hours logged, per client and month. |
+| `get_cash_book` | read | The company cash book: balances, money in and out, owed, held and to chase. |
+| `get_month_end` | read | The Month End checklist for a month that has ended, step by step. |
+| `create_invoice` | write | Records an invoice or credit note already issued. |
+| `mark_invoice_paid` | write | Stamps the cash date on an invoice. |
+| `update_invoice` | write | Edits an invoice or credit note; previews first. |
+| `delete_invoice` | write | Deletes an invoice or credit note recorded by mistake. |
+| `add_movement` | write | Records money in or out of a company account that is not an invoice, a cost or a loan. |
+| `add_expense` | write | Records a company cost, a supplier invoice to pay later, or a refund. |
+| `record_loan` | write | Records a shareholder loan or its repayment. |
+| `check_balance` | write | Checks a company account against the bank and saves it as the last check. |
+| `update_movement` | write | Corrects a cash book movement by id. |
+| `delete_movement` | write | Deletes a cash book movement by id. |
+| `update_expense` | write | Corrects a one-off cost by id. |
+| `delete_expense` | write | Deletes a one-off cost by id. |
+| `attach_file` | write | Adds an invoice file to a cost or invoice: up to 4 files of 10 MB a row. |
+| `create_upload_url` | write | Makes a temporary link to upload a larger invoice file. |
+| `complete_upload` | write | Finishes an upload made with create_upload_url and adds the file. |
+| `remove_file` | write | Removes one invoice file and deletes it from storage. |
+| `update_loan` | write | Corrects a shareholder loan or repayment by id. |
+| `delete_loan` | write | Deletes a shareholder loan or repayment recorded by mistake. |
+
+### Rent
+
+| Tool | Scope | What it does |
+|---|---|---|
+| `get_rent` | read | Rent for a month per property and room: paid, partial, missing, owed. |
+| `get_tenant` | read | A tenant's details for an invoice, and their leases. |
+| `create_tenant` | write | Adds a tenant. |
+| `update_tenant` | write | Corrects a tenant's details. |
+| `create_lease` | write | Gives a tenant a room for a year, or renews a lease. |
+| `update_lease` | write | Changes a lease or sets a month's agreed amount; previews first. |

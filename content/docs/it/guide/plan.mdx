@@ -1,0 +1,28 @@
+---
+title: Plan
+description: Capacità, giornate e ore pianificate, ricavi e costi, il runway e i trimestri.
+---
+
+**Plan** (Consulting) proietta i mesi successivi dai tuoi contratti firmati. È solo flusso di cassa: al netto dell'IVA, senza imposte.
+
+## La proiezione
+
+Per ogni mese mostra le giornate pianificate e fatturabili di ogni contratto, il budget rimasto dopo il mese, i ricavi (giornate fatturabili per la tariffa in vigore quel mese; un contratto a ore è in ore) e i costi divisi in **collaboratori** (compensi fissi e giornate pianificate per la loro tariffa) e **altri** (dalla pagina [Costs](/it/docs/guide/books)). Il netto è ricavi meno costi. **With Weighted Pipeline** aggiunge le trattative aperte alla loro probabilità; di base ci sono solo i contratti impegnati.
+
+- Un mese senza giornate registrate conta le giornate predefinite del contratto, finché durano il suo budget e il mese di fine. Le giornate che registri per un mese sostituiscono il valore predefinito; con **set** scrivi il totale del mese, con **add** sommi a un totale già registrato (rifiutato su un mese senza nulla registrato, per non sostituire il predefinito per sbaglio).
+- Ore oltre le giornate di un contratto sono rifiutate; ore oltre il piano del mese sono accettate con un avviso. Le ore non cambiano mai il piano: si pianifica in giornate.
+- Le ferie si bloccano per mese prima di venderle: i giorni disponibili sono i giorni feriali del mese meno i giorni di ferie. Un mese con più giornate pianificate è segnalato come sovraccarico, e la scrittura va comunque a buon fine.
+
+## Contratto rimanente e rischio ricavi
+
+**Contract remaining** mostra, per contratto, le giornate o ore rimaste nel budget. Il pannello sui ricavi dice quando la fatturazione cala: **Before billing stops** e **When billing drops**; segnala anche quando nessun budget si esaurisce nei prossimi 12 mesi.
+
+## Runway
+
+Con Accounting attivo, il Plan mostra il **Runway**: il saldo dei conti aziendali a fine mese, pari al mese prima più il netto del piano. Imposta una **soglia** (0 o più, vuota per nessuna soglia) e viene indicato il primo mese in cui il saldo scende **Under Your Floor**. La soglia è salvata per l'azienda, così telefono e portatile concordano. Senza conti aziendali, la pagina rimanda alla Cash Book.
+
+## Trimestri
+
+**Quarters** dà ricavi, costi e netto per trimestre solare e per mese, con il margine in percentuale intera. Un mese concluso conta ciò che è successo (ricavi fatturati, fatture dei collaboratori per il mese di lavoro che pagano, altri costi per data); il mese corrente e i successivi vengono dal piano. Un trimestre è chiuso, in corso o pianificato. I trimestri richiedono Accounting: senza, i mesi conclusi risulterebbero a zero, quindi non vengono offerti.
+
+Strumenti: `get_plan`, `get_capacity`, `get_quarters`, `get_revenue`, `log_allocation`, `block_capacity`.

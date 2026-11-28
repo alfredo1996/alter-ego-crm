@@ -1,0 +1,29 @@
+---
+title: Invoices
+description: Fatture e note di credito, cosa resta da fatturare, i file delle fatture e il pacchetto per il commercialista.
+---
+
+**Invoices** (Accounting) tiene la copia nell'app delle fatture che emetti, così le domande di cassa hanno una risposta. Non è mai il documento legale: le fatture si emettono nel tuo software di fatturazione elettronica.
+
+## Registrare una fattura
+
+**Record Invoice** richiede un cliente, il **numero stampato sulla fattura**, l'importo netto prima dell'IVA, l'IVA effettivamente addebitata, le date e i mesi coperti.
+
+- Una fattura intesta il **cliente**, non un contratto: una fattura al mese copre le ore di tutti i contratti del cliente, anche chiusi.
+- Il periodo è il **mese di competenza** (il mese in cui sono state lavorate le giornate), che non coincide per forza con il mese di emissione. Una fattura può coprire più mesi, al massimo 12.
+- L'importo è il netto, un numero positivo. Inserisci l'IVA addebitata, o 0 per reverse charge o esente: l'app non la calcola mai al 22%.
+- Un numero già usato è rifiutato. La scadenza è facoltativa: vuota, la fattura non risulta mai in ritardo. Il numero è al massimo di 50 caratteri.
+- Per annullare o ridurre una fattura, aprila e scegli **Issue Credit Note**: la nota di credito ha il suo numero e l'importo stornato, e sottrae.
+- **Mark Paid** imposta la data di incasso, che può essere anche precedente a oggi; **Mark Unpaid** la toglie e toglie l'incasso dalla Cash Book (la commissione bancaria registrata con essa resta nei Costs).
+
+## Da fatturare
+
+**Ready to Invoice** elenca, per cliente, le ore registrate e non ancora fatturate, per mese lavorato. Una fattura che copre più mesi si ripartisce sui mesi in base al valore registrato in ciascun mese concluso, e il mese corrente e i successivi prendono una quota uguale. Il totale da fatturare è il saldo dei mesi conclusi dalla prima registrazione di ore del cliente. La pagina segnala quando ogni mese concluso con ore è fatturato.
+
+## File delle fatture
+
+Una fattura, e un costo aziendale, possono avere fino a **4 file**, così un pagamento porta tutte le fatture e note di credito che salda. Un file è l'XML FatturaPA, l'`.xml.p7m` firmato, o un PDF dove manca l'XML, **fino a 10 MB**. Lo stesso nome e la stessa dimensione due volte è rifiutato. I file si aggiungono e si tolgono su ogni riga. Il **pacchetto per il commercialista** è uno zip con i file delle fatture del mese e due CSV, la prima nota e i suoi pagamenti: **Download Package** in Month End (vedi [Books](/it/docs/guide/books)).
+
+## Connettore
+
+Strumenti: `list_invoices`, `get_unbilled`, `create_invoice`, `update_invoice`, `mark_invoice_paid`, `delete_invoice`, e per i file `get_file`, `attach_file`, `create_upload_url`, `complete_upload`, `remove_file`. Un file oltre circa 10 KB passa da `create_upload_url` e `complete_upload`, così l'assistente non deve scriverne i byte.
